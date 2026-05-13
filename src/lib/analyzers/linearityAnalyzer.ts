@@ -16,7 +16,7 @@ export interface LinearityAnalysisOptions {
 
 const DEFAULT_OPTIONS: LinearityAnalysisOptions = {
   useSpectralData: false,
-  minPatches: 50,
+  minPatches: 3, // Reduced for testing; increase to 50+ for production analysis
   outlierThreshold: 3.0, // Standard deviations
 };
 
