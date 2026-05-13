@@ -5,6 +5,8 @@ node_modules/
 # Build artifacts
 frontend/node_modules/.vite/
 
-# Logs
-*.log
+# Environment
+.env
+.env.local
+*.env.*
 ```
