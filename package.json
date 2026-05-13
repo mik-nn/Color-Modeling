@@ -1,0 +1,13 @@
+{
+  "name": "color-modeling",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "build": "npm run build -w frontend",
+    "dev": "npm run dev -w frontend",
+    "lint": "npm run lint -w frontend"
+  }
+}
