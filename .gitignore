@@ -1,1 +1,10 @@
-Nothing needs to be added to .gitignore since the changes only include source files (.ts, .md) and no build artifacts, dependencies, or temporary files.
+```
+# Dependencies
+node_modules/
+
+# Build artifacts
+frontend/node_modules/.vite/
+
+# Logs
+*.log
+```

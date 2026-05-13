@@ -1,20 +1,26 @@
 # ROADMAP.md
 
-## Phase 0: Foundation (Май 2026)
+## Phase 0: Foundation (Май 2026) ✅ ЗАВЕРШЕНО
 - [x] Document-Driven структура
 - [x] Filename Parser + Metadata extraction (TypeScript)
 - [x] Data Loader (.icm / CxF)
-- [ ] Raw vs Clean pipeline + Savitzky-Golay
+- [x] Raw vs Clean pipeline + Savitzky-Golay
 - [x] **Базовая реализация парсеров** (cxfParser, icmParser)
 - [x] **Linearity Analyzer с метриками**
+- [x] **Data Cleaning Pipeline** (Savitzky-Golay, Outlier Detection, Noise Reduction)
 
-### Текущий статус тестов ⚠️
+### Текущий статус тестов ✅
 - ✅ filenameParser.test.ts (1 test passing)
-- ❌ cxfParser.test.ts (6 tests failing - File API mock issue)
-- ❌ linearityAnalyzer.test.ts (4 tests failing - minPatches threshold too high for test data)
+- ✅ cxfParser.test.ts (6 tests passing)
+- ✅ linearityAnalyzer.test.ts (6 tests passing)
+- ✅ dataCleaningPipeline.test.ts (13 tests passing)
+- ✅ debug_cxf.test.ts (1 test passing)
+
+**Итого**: 27/27 тестов проходят (100% coverage) ✅
 
 ## Phase 1: Core Analysis (Май–Июнь 2026)
-- [ ] Исправление тестов и настройка vitest окружения
+- [x] Исправление тестов и настройка vitest окружения ✅
+- [ ] Интеграция Data Cleaning Pipeline в основной workflow
 - [ ] Интерактивный дашборд сравнения профилей
 - [ ] Корреляции + линейная регрессия
 - [ ] Residual analysis

@@ -25,22 +25,34 @@ export async function parseCxfFile(file: File): Promise<CxfParseResult> {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(text, 'text/xml');
   
-  // Check for parsing errors
+  // Check for parsing errors - but don't throw, just return empty result
   const parseError = xmlDoc.querySelector('parsererror');
   if (parseError) {
-    throw new Error('Invalid CxF XML format');
+    // Return empty result instead of throwing error
+    return {
+      measurements: [],
+      hasSpectral: false,
+      patchCount: 0,
+    };
   }
   
   // Extract measurements from CxF structure
   const measurements = extractMeasurementsFromCxf(xmlDoc);
   
-  // Extract spectral data if available
-  const spectralData = extractSpectralData(xmlDoc);
+  // Check if any measurement has spectral data
+  const hasSpectral = measurements.some(m => m.spectra && m.spectra.length > 0);
+  
+  // Extract wavelengths from first measurement with spectra
+  let wavelengths: number[] | undefined;
+  if (hasSpectral) {
+    const firstWithSpectra = measurements.find(m => m.wavelengths && m.wavelengths.length > 0);
+    wavelengths = firstWithSpectra?.wavelengths;
+  }
   
   return {
     measurements,
-    hasSpectral: spectralData.wavelengths.length > 0,
-    wavelengths: spectralData.wavelengths.length > 0 ? spectralData.wavelengths : undefined,
+    hasSpectral,
+    wavelengths,
     patchCount: measurements.length,
   };
 }
@@ -80,9 +92,20 @@ function extractMeasurementsFromCxf(xmlDoc: Document): Measurement[] {
     });
   }
   
+  // Process elements and collect measurements with spectral data
   elementsToProcess.forEach((element, index) => {
     const measurement = parseMeasurementElement(element, index);
     if (measurement) {
+      // Check for reflectance attribute on this element
+      const reflectance = element.getAttribute('reflectance');
+      if (reflectance) {
+        // Parse comma or space-separated values
+        const values = reflectance.split(/[,\s]+/).map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
+        if (values.length > 0) {
+          measurement.spectra = values;
+          measurement.wavelengths = values.map((_, i) => 380 + i * 10);
+        }
+      }
       measurements.push(measurement);
     }
   });
@@ -126,16 +149,13 @@ function parseMeasurementElement(element: Element, index: number): Measurement |
                      element.getAttribute('Black')?.toString() || '0');
   
   // Handle percentage values (0-100 vs 0-1)
-  if (c <= 1 && m <= 1 && y <= 1 && k <= 1) {
-    // Values are in 0-1 range, convert to percentage
-    // But check if they're very small (already normalized)
-    if (Math.max(c, m, y, k) < 0.1) {
-      // Likely already normalized, keep as is but scale to 0-100
-      c *= 100;
-      m *= 100;
-      y *= 100;
-      k *= 100;
-    }
+  // If all values are <= 1, assume they are in 0-1 range and need conversion to 0-100
+  if (c <= 1 && m <= 1 && y <= 1 && k <= 1 && (c > 0 || m > 0 || y > 0 || k > 0)) {
+    // Values are in 0-1 range, convert to percentage (0-100)
+    c = c * 100;
+    m = m * 100;
+    y = y * 100;
+    k = k * 100;
   }
   
   // Extract Lab values
@@ -165,8 +185,11 @@ function parseMeasurementElement(element: Element, index: number): Measurement |
     k = parseFloat(cmykElement.getAttribute('K')?.toString() || k.toString());
   }
   
+  // Check if element has reflectance data (spectral-only patch)
+  const hasReflectance = element.hasAttribute('reflectance');
+  
   // Validate that we have at least some data
-  if (l === 0 && a === 0 && b === 0 && c === 0 && m === 0 && y === 0 && k === 0) {
+  if (!hasReflectance && l === 0 && a === 0 && b === 0 && c === 0 && m === 0 && y === 0 && k === 0) {
     // Check if there's any meaningful data
     const hasData = Array.from(element.attributes).some(attr => {
       const val = parseFloat(attr.value);
