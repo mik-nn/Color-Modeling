@@ -16,7 +16,7 @@ export interface LinearityAnalysisOptions {
 
 const DEFAULT_OPTIONS: LinearityAnalysisOptions = {
   useSpectralData: false,
-  minPatches: 50,
+  minPatches: 2,
   outlierThreshold: 3.0, // Standard deviations
 };
 
@@ -203,33 +203,31 @@ function calculateRSquared(matchedPatches: MatchedPatch[]): number {
   const n = matchedPatches.length;
   if (n === 0) return 0;
   
+  // Flatten reference and target values for regression
+  const refValues = matchedPatches.flatMap(p => [p.ref.LAB_L, p.ref.LAB_A, p.ref.LAB_B]);
+  const targetValues = matchedPatches.flatMap(p => [p.target.LAB_L, p.target.LAB_A, p.target.LAB_B]);
+  
   // Calculate means
-  const refMean = {
-    L: matchedPatches.reduce((sum, p) => sum + p.ref.LAB_L, 0) / n,
-    a: matchedPatches.reduce((sum, p) => sum + p.ref.LAB_A, 0) / n,
-    b: matchedPatches.reduce((sum, p) => sum + p.ref.LAB_B, 0) / n,
-  };
+  const refMean = refValues.reduce((a, b) => a + b, 0) / refValues.length;
+  const targetMean = targetValues.reduce((a, b) => a + b, 0) / targetValues.length;
   
   // Calculate total sum of squares (SST) and residual sum of squares (SSR)
   let sst = 0;
   let ssr = 0;
   
-  matchedPatches.forEach(p => {
-    const refTotal = Math.pow(p.ref.LAB_L - refMean.L, 2) +
-                     Math.pow(p.ref.LAB_A - refMean.a, 2) +
-                     Math.pow(p.ref.LAB_B - refMean.b, 2);
+  for (let i = 0; i < refValues.length; i++) {
+    const refDev = refValues[i] - refMean;
+    const targetDev = targetValues[i] - targetMean;
     
-    const targetTotal = Math.pow(p.target.LAB_L - refMean.L, 2) +
-                        Math.pow(p.target.LAB_A - refMean.a, 2) +
-                        Math.pow(p.target.LAB_B - refMean.b, 2);
-    
-    sst += refTotal;
-    ssr += Math.pow(targetTotal - refTotal, 2);
-  });
+    sst += refDev * refDev;
+    ssr += Math.pow(targetDev - refDev, 2);
+  }
   
   if (sst === 0) return 1;
   
-  return 1 - (ssr / sst);
+  // R² = 1 - SSR/SST, but clamp to valid range
+  const rSquared = 1 - (ssr / sst);
+  return Math.max(0, Math.min(1, rSquared));
 }
 
 /**
