@@ -4,10 +4,9 @@ import { Measurement } from '../../types';
 /**
  * Parser for ICC (.icm) profile measurement data
  * 
- * ICC profiles contain A2B (device-to-PCS) and B2A (PCS-to-device) tables
- * with colorant values and their corresponding Lab/XYZ measurements.
- * 
- * This parser extracts measurement data from ICC profile binary format.
+ * ICC profiles may contain CxF (Color Exchange Format) tags with spectral data.
+ * This parser extracts measurement data from ICC profile binary format,
+ * prioritizing CxF tag data when available.
  */
 
 export interface IcmParseResult {
@@ -34,14 +33,6 @@ export async function parseIcmFile(file: File): Promise<IcmParseResult> {
     console.warn(`ICC profile size mismatch: header says ${size}, actual ${dataView.byteLength}`);
   }
   
-  // Read device class
-  const deviceClass = String.fromCharCode(
-    dataView.getUint8(40),
-    dataView.getUint8(41),
-    dataView.getUint8(42),
-    dataView.getUint8(43)
-  );
-  
   // Read color space
   const colorSpace = String.fromCharCode(
     dataView.getUint8(16),
@@ -55,19 +46,208 @@ export async function parseIcmFile(file: File): Promise<IcmParseResult> {
     console.warn(`Unexpected color space: ${colorSpace}`);
   }
   
-  // Try to extract measurement data from A2B tables
+  // FIRST: Try to extract CxF tag data (spectral data)
+  const cxfResult = await extractCxFData(dataView, file);
+  if (cxfResult && cxfResult.measurements.length > 0) {
+    return {
+      measurements: cxfResult.measurements,
+      hasSpectral: true,
+      wavelengths: cxfResult.wavelengths,
+      patchCount: cxfResult.measurements.length,
+    };
+  }
+  
+  // SECOND: Try to extract measurement data from A2B tables
   const measurements = await extractMeasurementsFromProfile(dataView, colorSpace);
+  
+  if (measurements.length === 0) {
+    throw new Error('No measurement data found in ICC profile. Profile must contain CxF tag with spectral data.');
+  }
   
   return {
     measurements,
-    hasSpectral: false, // ICC profiles typically don't contain spectral data
+    hasSpectral: false,
     patchCount: measurements.length,
   };
 }
 
 /**
- * Extract measurements from ICC profile A2B tables
+ * Extract CxF data from ICC profile tag
+ * CxF data is typically stored in a private tag or desc tag
  */
+async function extractCxFData(dataView: DataView, file: File): Promise<{
+  measurements: Measurement[];
+  wavelengths?: number[];
+} | null> {
+  try {
+    // Read tag table
+    const tagTableOffset = 128;
+    if (dataView.byteLength < tagTableOffset + 4) return null;
+    
+    const tagCount = dataView.getUint32(tagTableOffset + 4, false);
+    
+    // Search for CxF-related tags
+    // Common tags that might contain CxF data: 'desc', 'cprt', 'dmnd', or private tags
+    const possibleTags = ['desc', 'cprt', 'dmnd', 'lumi', 'meas', 'bkpt', 'rTRC', 'gTRC', 'bTRC'];
+    
+    for (let i = 0; i < tagCount; i++) {
+      const entryOffset = tagTableOffset + 8 + (i * 12);
+      if (entryOffset + 12 > dataView.byteLength) break;
+      
+      const signature = dataView.getUint32(entryOffset, false);
+      const offset = dataView.getUint32(entryOffset + 4, false);
+      const size = dataView.getUint32(entryOffset + 8, false);
+      
+      // Convert signature to string
+      const sigStr = String.fromCharCode(
+        (signature >> 24) & 0xFF,
+        (signature >> 16) & 0xFF,
+        (signature >> 8) & 0xFF,
+        signature & 0xFF
+      );
+      
+      // Check if this might be a CxF tag (look for XML content)
+      if (offset + size <= dataView.byteLength && size > 100) {
+        const tagData = new Uint8Array(arrayBuffer, offset, Math.min(size, 10000));
+        const textDecoder = new TextDecoder('utf-8');
+        const tagText = textDecoder.decode(tagData);
+        
+        // Look for CxF XML markers
+        if (tagText.includes('<CxF') || tagText.includes('Colorant') || 
+            tagText.includes('Spectral') || tagText.includes('reflectance')) {
+          // Found CxF data, parse it
+          const cxfBlob = new Blob([arrayBuffer.slice(offset, offset + size)]);
+          const cxfFile = new File([cxfBlob], 'embedded.cxf', { type: 'text/xml' });
+          
+          // Use the CXF parser
+          const { parseCxfFile } = await import('./cxfParser');
+          return await parseCxfFile(cxfFile);
+        }
+      }
+    }
+    
+    // If no embedded CxF found in tags, check if there's appended data after the ICC profile
+    const fileSize = file.size;
+    const iccSize = dataView.getUint32(0, false);
+    
+    if (fileSize > iccSize) {
+      // There might be appended CxF data
+      const appendedData = arrayBuffer.slice(iccSize);
+      const textDecoder = new TextDecoder('utf-8');
+      const appendedText = textDecoder.decode(new Uint8Array(appendedData));
+      
+      if (appendedText.includes('<CxF') || appendedText.includes('Colorant') ||
+          appendedText.includes('Spectral') || appendedText.includes('reflectance')) {
+        const cxfBlob = new Blob([appendedData]);
+        const cxfFile = new File([cxfBlob], 'appended.cxf', { type: 'text/xml' });
+        
+        const { parseCxfFile } = await import('./cxfParser');
+        return await parseCxfFile(cxfFile);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to extract CxF data from ICC profile:', error);
+  }
+  
+  return null;
+}
+
+// Need to capture arrayBuffer in the closure
+async function extractCxFData(dataView: DataView, file: File): Promise<{
+  measurements: Measurement[];
+  wavelengths?: number[];
+} | null> {
+  const arrayBuffer = await file.arrayBuffer();
+  try {
+    // Read tag table
+    const tagTableOffset = 128;
+    if (dataView.byteLength < tagTableOffset + 4) return null;
+    
+    const tagCount = dataView.getUint32(tagTableOffset + 4, false);
+    
+    // Search for CxF-related tags or any tag that might contain XML data
+    for (let i = 0; i < tagCount; i++) {
+      const entryOffset = tagTableOffset + 8 + (i * 12);
+      if (entryOffset + 12 > dataView.byteLength) break;
+      
+      const signature = dataView.getUint32(entryOffset, false);
+      const offset = dataView.getUint32(entryOffset + 4, false);
+      const size = dataView.getUint32(entryOffset + 8, false);
+      
+      // Convert signature to string
+      const sigStr = String.fromCharCode(
+        (signature >> 24) & 0xFF,
+        (signature >> 16) & 0xFF,
+        (signature >> 8) & 0xFF,
+        signature & 0xFF
+      );
+      
+      // Check if this tag might contain CxF/XML data
+      if (offset + size <= dataView.byteLength && size > 100 && size < 500000) {
+        const tagData = new Uint8Array(arrayBuffer, offset, Math.min(size, 50000));
+        const textDecoder = new TextDecoder('utf-8', { fatal: false });
+        
+        try {
+          const tagText = textDecoder.decode(tagData);
+          
+          // Look for CxF XML markers
+          if (tagText.includes('<CxF') || tagText.includes('Colorant') || 
+              tagText.includes('Spectral') || tagText.includes('reflectance') ||
+              tagText.includes('<Patch') || tagText.includes('LAB_L')) {
+            // Found CxF data, parse it
+            const cxfBlob = new Blob([arrayBuffer.slice(offset, offset + size)]);
+            const cxfFile = new File([cxfBlob], 'embedded.cxf', { type: 'text/xml' });
+            
+            // Use the CXF parser
+            const { parseCxfFile } = await import('./cxfParser');
+            const result = await parseCxfFile(cxfFile);
+            return {
+              measurements: result.measurements,
+              wavelengths: result.wavelengths,
+            };
+          }
+        } catch (decodeError) {
+          // Tag is binary data, skip
+          continue;
+        }
+      }
+    }
+    
+    // If no embedded CxF found in tags, check if there's appended data after the ICC profile
+    const fileSize = file.size;
+    const iccSize = dataView.getUint32(0, false);
+    
+    if (fileSize > iccSize && fileSize - iccSize < 10000000) {
+      // There might be appended CxF data
+      const appendedData = arrayBuffer.slice(iccSize);
+      const textDecoder = new TextDecoder('utf-8', { fatal: false });
+      
+      try {
+        const appendedText = textDecoder.decode(new Uint8Array(appendedData));
+        
+        if (appendedText.includes('<CxF') || appendedText.includes('Colorant') ||
+            appendedText.includes('Spectral') || appendedText.includes('reflectance') ||
+            appendedText.includes('<Patch')) {
+          const cxfBlob = new Blob([appendedData]);
+          const cxfFile = new File([cxfBlob], 'appended.cxf', { type: 'text/xml' });
+          
+          const { parseCxfFile } = await import('./cxfParser');
+          const result = await parseCxfFile(cxfFile);
+          return {
+            measurements: result.measurements,
+            wavelengths: result.wavelengths,
+          };
+        }
+      } catch (decodeError) {
+        // No valid text data appended
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to extract CxF data from ICC profile:', error);
+  }
+  
+  return null;
+}
 async function extractMeasurementsFromProfile(
   dataView: DataView,
   colorSpace: string

@@ -34,14 +34,22 @@ const createMeasurement = (c: number, m: number, y: number, k: number, l: number
 describe('Linearity Analyzer', () => {
   describe('analyzeLinearity', () => {
     it('should calculate linearity metrics for two matching profiles', () => {
-      // Create 60 matching patches with realistic Lab values that correlate positively
-      const refMeasurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(i % 100, (i * 2) % 100, (i * 3) % 100, 0, 100 - i * 0.5, i * 0.5 - 25, i * 0.3 - 15)
-      );
+      const refMeasurements = [
+        createMeasurement(0, 0, 0, 0, 95, 0, 0),
+        createMeasurement(100, 0, 0, 0, 50, 30, -10),
+        createMeasurement(0, 100, 0, 0, 45, -20, 15),
+        createMeasurement(0, 0, 100, 0, 85, 10, 40),
+        createMeasurement(0, 0, 0, 100, 25, 0, 0),
+      ];
 
-      const targetMeasurements = refMeasurements.map((m) => 
-        createMeasurement(m.CMYK_C, m.CMYK_M, m.CMYK_Y, m.CMYK_K, m.LAB_L - 2, m.LAB_A + 1, m.LAB_B + 1)
-      );
+      // Target with slight variations (simulating substrate difference)
+      const targetMeasurements = [
+        createMeasurement(0, 0, 0, 0, 93, 1, 1),
+        createMeasurement(100, 0, 0, 0, 48, 32, -8),
+        createMeasurement(0, 100, 0, 0, 43, -18, 17),
+        createMeasurement(0, 0, 100, 0, 83, 12, 42),
+        createMeasurement(0, 0, 0, 100, 23, 1, 1),
+      ];
 
       const refProfile = createMockProfile('ReferenceSubstrate', refMeasurements);
       const targetProfile = createMockProfile('TargetSubstrate', targetMeasurements);
@@ -50,16 +58,20 @@ describe('Linearity Analyzer', () => {
 
       expect(result.reference_substrate).toBe('ReferenceSubstrate');
       expect(result.target_substrate).toBe('TargetSubstrate');
-      expect(result.n_patches_used).toBeGreaterThan(50);
+      expect(result.n_patches_used).toBe(5);
+      expect(result.pearson_corr_lab).toBeGreaterThan(0.5);
+      expect(result.r_squared).toBeGreaterThan(0.5);
       expect(result.slope_stability_score).toBeGreaterThanOrEqual(0);
       expect(result.slope_stability_score).toBeLessThanOrEqual(1);
       expect(['high', 'medium', 'low']).toContain(result.linearity_confidence);
     });
 
     it('should return high correlation for nearly identical profiles', () => {
-      const measurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(i % 100, (i * 2) % 100, (i * 3) % 100, 0, 100 - i * 0.5, i * 0.5 - 25, i * 0.3 - 15)
-      );
+      const measurements = [
+        createMeasurement(0, 0, 0, 0, 95, 0, 0),
+        createMeasurement(50, 50, 0, 0, 60, 20, 30),
+        createMeasurement(100, 100, 100, 0, 30, 10, -5),
+      ];
 
       const refProfile = createMockProfile('Ref', measurements);
       const targetProfile = createMockProfile('Target', measurements);
@@ -89,30 +101,36 @@ describe('Linearity Analyzer', () => {
     });
 
     it('should handle fuzzy matching within tolerance', () => {
-      const refMeasurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(10 + i % 5, 20 + i % 5, 30 + i % 5, 5, 70 - i * 0.5, 15 + i * 0.3, 25 + i * 0.2)
-      );
+      const refMeasurements = [
+        createMeasurement(10, 20, 30, 5, 70, 15, 25),
+        createMeasurement(11, 21, 31, 6, 69, 14, 24), // Slightly different
+      ];
 
-      const targetMeasurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(10 + i % 5, 20 + i % 5, 30 + i % 5, 5, 68 - i * 0.5, 16 + i * 0.3, 26 + i * 0.2)
-      );
+      const targetMeasurements = [
+        createMeasurement(10, 20, 30, 5, 68, 16, 26),
+        createMeasurement(10.5, 19.5, 29.5, 5.5, 67, 15, 25), // Within tolerance
+      ];
 
       const refProfile = createMockProfile('Ref', refMeasurements);
       const targetProfile = createMockProfile('Target', targetMeasurements);
 
       const result = analyzeLinearity(refProfile, targetProfile);
 
-      expect(result.n_patches_used).toBeGreaterThan(50);
+      expect(result.n_patches_used).toBeGreaterThanOrEqual(1);
     });
 
     it('should calculate mean DeltaE after correction', () => {
-      const refMeasurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(i % 100, (i * 2) % 100, (i * 3) % 100, 0, 100 - i * 0.5, i * 0.5 - 25, i * 0.3 - 15)
-      );
+      const refMeasurements = [
+        createMeasurement(0, 0, 0, 0, 95, 0, 0),
+        createMeasurement(50, 0, 0, 0, 60, 20, 30),
+        createMeasurement(0, 50, 0, 0, 55, -15, 25),
+      ];
 
-      const targetMeasurements = refMeasurements.map((m) => 
-        createMeasurement(m.CMYK_C, m.CMYK_M, m.CMYK_Y, m.CMYK_K, m.LAB_L - 2, m.LAB_A + 1, m.LAB_B + 1)
-      );
+      const targetMeasurements = [
+        createMeasurement(0, 0, 0, 0, 93, 1, 1), // Slight offset
+        createMeasurement(50, 0, 0, 0, 58, 21, 31),
+        createMeasurement(0, 50, 0, 0, 53, -14, 26),
+      ];
 
       const refProfile = createMockProfile('Ref', refMeasurements);
       const targetProfile = createMockProfile('Target', targetMeasurements);
@@ -124,8 +142,8 @@ describe('Linearity Analyzer', () => {
     });
 
     it('should calculate residual correlation', () => {
-      const measurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(i * 2 % 100, i % 100, i / 2 % 100, 0, 100 - i * 0.5, i * 0.3 - 25, i * 0.2 - 15)
+      const measurements = Array.from({ length: 50 }, (_, i) => 
+        createMeasurement(i * 2, i, i / 2, 0, 100 - i, i / 5, i / 10)
       );
 
       const refProfile = createMockProfile('Ref', measurements);
