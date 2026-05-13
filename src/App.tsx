@@ -1,5 +1,6 @@
 // src/App.tsx
 import { useProfileStore } from './store/useProfileStore';
+import { LinearityResult } from './types';
 import ProfileUploader from './components/ProfileUploader';
 import ProfileList from './components/ProfileList';
 import ComparisonView from './components/ComparisonView';
@@ -9,9 +10,11 @@ function App() {
     profiles,
     selectedProfiles,
     isLoading,
+    linearityResult,
     addProfiles,
     removeProfile,
     selectProfile,
+    setLinearityResult,
   } = useProfileStore();
 
   const handleFilesSelected = async (files: FileList) => {
@@ -25,6 +28,10 @@ function App() {
       console.error(err);
       alert('Ошибка загрузки профилей');
     }
+  };
+
+  const handleAnalysisComplete = (result: LinearityResult) => {
+    setLinearityResult(result);
   };
 
   return (
@@ -67,6 +74,7 @@ function App() {
             <ComparisonView 
               profiles={selectedProfiles} 
               onRemove={removeProfile}
+              onAnalysisComplete={handleAnalysisComplete}
             />
           </div>
         </div>

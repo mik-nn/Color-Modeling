@@ -1,14 +1,43 @@
 // src/components/ComparisonView.tsx
-import { ProfileData } from '../types';
+import { useEffect, useState } from 'react';
+import { ProfileData, LinearityResult } from '../types';
+import { analyzeLinearity } from '../lib/analyzers/linearityAnalyzer';
 import LabScatterPlot from './LabScatterPlot';
 import SpectralCurves from './SpectralCurves';
 
 interface ComparisonViewProps {
   profiles: ProfileData[];
   onRemove: (fullName: string) => void;
+  onAnalysisComplete?: (result: LinearityResult) => void;
 }
 
-export default function ComparisonView({ profiles, onRemove }: ComparisonViewProps) {
+export default function ComparisonView({ 
+  profiles, 
+  onRemove,
+  onAnalysisComplete 
+}: ComparisonViewProps) {
+  const [analysisResult, setAnalysisResult] = useState<LinearityResult | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  
+  // Automatically run linearity analysis when 2 profiles are selected
+  useEffect(() => {
+    if (profiles.length === 2) {
+      try {
+        const result = analyzeLinearity(profiles[0], profiles[1]);
+        setAnalysisResult(result);
+        setAnalysisError(null);
+        onAnalysisComplete?.(result);
+      } catch (error) {
+        console.error('Linearity analysis failed:', error);
+        setAnalysisError(error instanceof Error ? error.message : 'Analysis failed');
+        setAnalysisResult(null);
+      }
+    } else {
+      setAnalysisResult(null);
+      setAnalysisError(null);
+    }
+  }, [profiles, onAnalysisComplete]);
+  
   if (profiles.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-center">
@@ -104,34 +133,89 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
         <SpectralCurves profiles={profiles} width={820} height={520} />
       </div>
 
-      {/* Блок анализа (заготовка) */}
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8">
-        <h3 className="text-lg font-semibold mb-6">Анализ линейности переноса</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gray-950 border border-gray-800 rounded-xl p-5">
-            <p className="text-gray-400 text-sm">Корреляция LAB</p>
-            <p className="text-4xl font-semibold text-white mt-2">—</p>
-            <p className="text-xs text-gray-500 mt-1">Pearson</p>
-          </div>
+      {/* Linearity Analysis Results */}
+      {profiles.length === 2 && (
+        <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8">
+          <h3 className="text-lg font-semibold mb-6">Анализ линейности переноса</h3>
           
-          <div className="bg-gray-950 border border-gray-800 rounded-xl p-5">
-            <p className="text-gray-400 text-sm">R² Residuals</p>
-            <p className="text-4xl font-semibold text-white mt-2">—</p>
-            <p className="text-xs text-gray-500 mt-1">Линейность остатков</p>
-          </div>
-          
-          <div className="bg-gray-950 border border-gray-800 rounded-xl p-5">
-            <p className="text-gray-400 text-sm">Стабильность</p>
-            <p className="text-4xl font-semibold text-white mt-2">—</p>
-            <p className="text-xs text-gray-500 mt-1">Относительного растаскивания</p>
-          </div>
-        </div>
+          {analysisError ? (
+            <div className="bg-red-900/20 border border-red-800 rounded-xl p-6 text-center">
+              <p className="text-red-400 font-medium">Ошибка анализа</p>
+              <p className="text-red-500 text-sm mt-2">{analysisError}</p>
+            </div>
+          ) : analysisResult ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <MetricCard
+                label="Корреляция LAB"
+                value={analysisResult.pearson_corr_lab.toFixed(4)}
+                subtitle={`Pearson (${analysisResult.n_patches_used} патчей)`}
+                color={analysisResult.pearson_corr_lab > 0.9 ? 'text-emerald-400' : analysisResult.pearson_corr_lab > 0.7 ? 'text-yellow-400' : 'text-red-400'}
+              />
+              
+              <MetricCard
+                label="R²"
+                value={analysisResult.r_squared.toFixed(4)}
+                subtitle="Коэф. детерминации"
+                color={analysisResult.r_squared > 0.9 ? 'text-emerald-400' : analysisResult.r_squared > 0.7 ? 'text-yellow-400' : 'text-red-400'}
+              />
+              
+              <MetricCard
+                label="Стабильность"
+                value={analysisResult.slope_stability_score.toFixed(4)}
+                subtitle="Относительного растаскивания"
+                color={analysisResult.slope_stability_score > 0.85 ? 'text-emerald-400' : analysisResult.slope_stability_score > 0.65 ? 'text-yellow-400' : 'text-red-400'}
+              />
 
-        <p className="text-center text-sm text-gray-500 mt-8">
-          Функционал расчёта линейности будет добавлен на следующем этапе
-        </p>
-      </div>
+              <MetricCard
+                label="ΔE после коррекции"
+                value={analysisResult.mean_deltaE_after_correction?.toFixed(2) ?? '—'}
+                subtitle="Среднее отклонение"
+                color={analysisResult.mean_deltaE_after_correction && analysisResult.mean_deltaE_after_correction < 2 ? 'text-emerald-400' : 'text-yellow-400'}
+              />
+
+              <MetricCard
+                label="Уверенность"
+                value={analysisResult.linearity_confidence === 'high' ? 'Высокая' : analysisResult.linearity_confidence === 'medium' ? 'Средняя' : 'Низкая'}
+                subtitle="Общая оценка"
+                color={analysisResult.linearity_confidence === 'high' ? 'text-emerald-400' : analysisResult.linearity_confidence === 'medium' ? 'text-yellow-400' : 'text-red-400'}
+              />
+
+              <MetricCard
+                label="Корреляция остатков"
+                value={(analysisResult.pearson_corr_residuals ?? 0).toFixed(4)}
+                subtitle="Линейность ошибок"
+                color={(analysisResult.pearson_corr_residuals ?? 0) > 0.8 ? 'text-emerald-400' : 'text-yellow-400'}
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <MetricCard label="Корреляция LAB" value="—" subtitle="Pearson" loading />
+              <MetricCard label="R²" value="—" subtitle="Коэф. детерминации" loading />
+              <MetricCard label="Стабильность" value="—" subtitle="Относительного растаскивания" loading />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface MetricCardProps {
+  label: string;
+  value: string | number;
+  subtitle: string;
+  loading?: boolean;
+  color?: string;
+}
+
+function MetricCard({ label, value, subtitle, loading, color = 'text-white' }: MetricCardProps) {
+  return (
+    <div className="bg-gray-950 border border-gray-800 rounded-xl p-5">
+      <p className="text-gray-400 text-sm">{label}</p>
+      <p className={`text-4xl font-semibold mt-2 ${loading ? 'animate-pulse text-gray-600' : color}`}>
+        {value}
+      </p>
+      <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
     </div>
   );
 }
