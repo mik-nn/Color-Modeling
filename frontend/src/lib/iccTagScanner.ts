@@ -1,8 +1,19 @@
+import { inflate } from 'pako';
+import type { IccTagHit, IccScanResult } from './types'
+
 /**
  * Very small ICC tag directory scanner (debug-only).
  *
  * Goal: locate where in a binary .icc/.icm file there are embedded strings
  * like "@data" / "CxF".
+ *
+ * CxF Embedding Specifications:
+ * - ICC.1 v4 (ISO 15076-1:2022) supports private tags for CxF
+ * - iccMAX (ICC.2) supports CxF format for spectral measurement data
+ * - CxF/X3 (ISO 17972-3) is the standard for output target data
+ * - CxF data can be embedded in: desc, dmnd, dmdd, cprt, and private tags
+ * - Tag signatures are 4-char ASCII codes (e.g., 'CxF ', 'spec', 'xrdb')
+ * - ZXML (0x5a584d4c) - ZIP-compressed XML format used by X-Rite for CxF tags
  *
  * NOTE: This is NOT a full ICC parser. It only reads the ICC header + tag table
  * and then tries to decode tag values as text.
@@ -131,11 +142,14 @@ export function scanIccForCxFMarkers(buffer: ArrayBuffer): IccScanResult {
     const decodedText = decodeAsciiish(valueBytes);
     if (decodedText) textDecodes++;
 
-    const hasAtData = decodedText ? decodedText.includes('@data') : false;
-    const hasCxF = decodedText ? decodedText.toLowerCase().includes('cxf') : false;
-    const hasAtHeader = decodedText ? decodedText.includes('@header') : false;
+    const content = decodedText || '';
+    const hasAtData = content.includes('@data');
+    const hasCxF = content.toLowerCase().includes('cxf');
+    const hasAtHeader = content.includes('@header');
+    // Also look for spectral measurement patterns
+    const hasSpectral = /\b\d{3}\s+0\.\d+/.test(content); // wavelength reflectance pattern
 
-    if (hasAtData || hasCxF || hasAtHeader) {
+    if (hasAtData || hasCxF || hasAtHeader || hasSpectral) {
       hits.push({
         tagSignature,
         offset: valueOffset,
@@ -150,6 +164,54 @@ export function scanIccForCxFMarkers(buffer: ArrayBuffer): IccScanResult {
     hits,
     summary: { totalTags: tagCount, scannedTags, textDecodes },
   };
+}
+
+/**
+ * Find the ZXML tag in an ICC profile and return the decompressed XML string.
+ * ZXML = X-Rite private tag type for zlib-compressed CxF3 XML.
+ * Layout: 4 bytes tag type ('ZXML') + 4 bytes reserved + 4 bytes unknown + zlib stream.
+ */
+export function extractZxmlCxfXml(buffer: ArrayBuffer): string | null {
+  const view = new DataView(buffer);
+  const totalSize = buffer.byteLength;
+
+  if (totalSize < ICC_HEADER_SIZE + 4) return null;
+
+  const tagCount = readU32BE(view, ICC_HEADER_SIZE);
+  const tagsStart = ICC_HEADER_SIZE + 4;
+
+  if (tagsStart + tagCount * TAG_RECORD_SIZE > totalSize) return null;
+
+  const bytes = new Uint8Array(buffer);
+
+  for (let i = 0; i < tagCount; i++) {
+    const recOffset = tagsStart + i * TAG_RECORD_SIZE;
+    const valueOffset = readU32BE(view, recOffset + 4);
+    const size = readU32BE(view, recOffset + 8);
+
+    if (size < 12 || valueOffset + size > totalSize) continue;
+
+    // ZXML is a data-type signature at the start of tag content (not in tag directory)
+    const dataType =
+      String.fromCharCode(bytes[valueOffset]) +
+      String.fromCharCode(bytes[valueOffset + 1]) +
+      String.fromCharCode(bytes[valueOffset + 2]) +
+      String.fromCharCode(bytes[valueOffset + 3]);
+
+    if (dataType !== 'ZXML') continue;
+
+    // ZXML layout: 4 bytes data-type + 4 bytes reserved + 4 bytes unknown + zlib stream
+    const compressedData = bytes.slice(valueOffset + 12, valueOffset + size);
+
+    try {
+      const decompressed = inflate(compressedData);
+      return new TextDecoder('utf-8').decode(decompressed);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 /**

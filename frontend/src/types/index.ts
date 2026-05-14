@@ -21,6 +21,11 @@ export interface Measurement {
   LAB_A: number;
   LAB_B: number;
 
+  // Device values — RGB (0–255) for RGB profiles, or CMYK (0–100) for CMYK profiles
+  RGB_R?: number;
+  RGB_G?: number;
+  RGB_B?: number;
+
   // Спектральные данные — нормализованный формат
   spectra?: number[];           // значения отражения
   wavelengths?: number[];       // [380, 390, ..., 730]

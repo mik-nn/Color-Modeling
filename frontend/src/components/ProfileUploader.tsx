@@ -2,7 +2,7 @@
 import { useRef } from 'react';
 
 interface ProfileUploaderProps {
-  onFilesSelected: (files: FileList) => void;
+  onFilesSelected: (files: File[]) => void;
   isLoading: boolean;
 }
 
@@ -10,23 +10,19 @@ export default function ProfileUploader({ onFilesSelected, isLoading }: ProfileU
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    // Сначала передаём файлы в обработчик, потом сбрасываем input.
-    // Иначе некоторые браузеры успевают “обнулить” FileList к моменту чтения.
-    onFilesSelected(files);
-
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    // Snapshot to array immediately — FileList is live and clears when input resets
+    const files = Array.from(fileList);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    onFilesSelected(files);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-
-    const files = e.dataTransfer.files;
-    if (!files || files.length === 0) return;
-
-    onFilesSelected(files);
+    const fileList = e.dataTransfer.files;
+    if (!fileList || fileList.length === 0) return;
+    onFilesSelected(Array.from(fileList));
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {

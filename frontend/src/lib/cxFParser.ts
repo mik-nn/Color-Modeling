@@ -1,3 +1,12 @@
+/**
+ * CxF Parser - supports multiple CxF formats per ISO 17972
+ * 
+ * Supported formats:
+ * - CxF/X3 (ISO 17972-3): Output target data with @data blocks
+ * - CxF/X4 (ISO 17972-4): Spot color characterization
+ * - CxF3 XML: Full XML format with <ColorMeasurements>
+ */
+
 export interface ParsedAtData {
   wavelengths: number[]
   spectra: number[]
@@ -96,6 +105,16 @@ function parseSingleColumnSpectrum(block: string): ParsedAtData | null {
 
 export function extractAtDataBlock(text: string): string | null {
   return extractSection(text, '@data')
+}
+
+export function extractCxfMeasurements(text: string): string | null {
+  // Try XML ColorMeasurements extraction (CxF3 format)
+  // <ColorMeasurements>...</ColorMeasurements> blocks
+  const cmMatch = text.match(/<ColorMeasurements[^>]*>([\s\S]*?)<\/ColorMeasurements>/i)
+  if (cmMatch) return cmMatch[1]
+  
+  // Also try @data block for CxF/X3 format
+  return extractAtDataBlock(text)
 }
 
 export function parseAtDataToSpectra(block: string): ParsedAtData | null {

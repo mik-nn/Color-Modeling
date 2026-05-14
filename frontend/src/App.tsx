@@ -14,8 +14,8 @@ function App() {
     selectProfile,
   } = useProfileStore();
 
-  const handleFilesSelected = async (files: FileList) => {
-    console.log('Selected files:', Array.from(files).map((f) => f.name));
+  const handleFilesSelected = async (files: File[]) => {
+    console.log('Selected files:', files.map((f) => f.name));
 
     const { loadMultipleProfiles } = await import('./lib/dataLoader');
 

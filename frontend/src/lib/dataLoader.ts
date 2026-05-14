@@ -97,8 +97,8 @@ function calculateAverageDeltaE(raw: Measurement[], clean: Measurement[]): numbe
 /**
  * Load multiple profile files
  */
-export async function loadMultipleProfiles(files: FileList): Promise<ProfileData[]> {
-  const promises = Array.from(files).map(file => loadProfile(file));
+export async function loadMultipleProfiles(files: File[]): Promise<ProfileData[]> {
+  const promises = files.map(file => loadProfile(file));
   const results = await Promise.allSettled(promises);
   
   const successfulProfiles: ProfileData[] = [];

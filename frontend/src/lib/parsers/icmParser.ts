@@ -1,5 +1,7 @@
 // src/lib/parsers/icmParser.ts
 import { Measurement } from '../../types';
+import { extractZxmlCxfXml } from '../iccTagScanner';
+import { parseCxf3Xml } from './cxfParser';
 
 /**
  * Parser for ICC (.icm) profile measurement data
@@ -8,6 +10,7 @@ import { Measurement } from '../../types';
  * with colorant values and their corresponding Lab/XYZ measurements.
  * 
  * This parser extracts measurement data from ICC profile binary format.
+ * CxF data can be embedded in ICC profiles per iccMAX specification.
  */
 
 export interface IcmParseResult {
@@ -15,6 +18,16 @@ export interface IcmParseResult {
   hasSpectral: boolean;
   wavelengths?: number[];
   patchCount: number;
+}
+
+/**
+ * Extract and parse CxF spectral data from ICC profile ZXML tag.
+ */
+function extractCxfFromIcc(buffer: ArrayBuffer): ReturnType<typeof parseCxf3Xml> | null {
+  const xmlText = extractZxmlCxfXml(buffer);
+  if (!xmlText) return null;
+  const result = parseCxf3Xml(xmlText);
+  return result.patchCount > 0 ? result : null;
 }
 
 /**
@@ -29,38 +42,25 @@ export async function parseIcmFile(file: File): Promise<IcmParseResult> {
     throw new Error('Invalid ICC profile: file too small');
   }
   
-  const size = dataView.getUint32(0, false);
-  if (size !== dataView.byteLength) {
-    console.warn(`ICC profile size mismatch: header says ${size}, actual ${dataView.byteLength}`);
+  // Extract CxF spectral data from embedded ZXML tag
+  const cxfData = extractCxfFromIcc(arrayBuffer);
+
+  if (cxfData) {
+    return {
+      measurements: cxfData.measurements,
+      hasSpectral: true,
+      wavelengths: cxfData.wavelengths,
+      patchCount: cxfData.patchCount,
+    };
   }
-  
-  // Read device class
-  const deviceClass = String.fromCharCode(
-    dataView.getUint8(40),
-    dataView.getUint8(41),
-    dataView.getUint8(42),
-    dataView.getUint8(43)
-  );
-  
-  // Read color space
-  const colorSpace = String.fromCharCode(
-    dataView.getUint8(16),
-    dataView.getUint8(17),
-    dataView.getUint8(18),
-    dataView.getUint8(19)
-  );
-  
-  // For CMYK profiles, we expect 'CMYK' color space
-  if (colorSpace !== 'CMYK' && colorSpace !== 'RGB ') {
-    console.warn(`Unexpected color space: ${colorSpace}`);
-  }
-  
-  // Try to extract measurement data from A2B tables
-  const measurements = await extractMeasurementsFromProfile(dataView, colorSpace);
-  
+
+  // Fallback: extract colorimetric data from A2B tables
+  const measurements = await extractMeasurementsFromProfile(dataView);
+
   return {
     measurements,
-    hasSpectral: false, // ICC profiles typically don't contain spectral data
+    hasSpectral: false,
+    wavelengths: undefined,
     patchCount: measurements.length,
   };
 }
@@ -70,17 +70,15 @@ export async function parseIcmFile(file: File): Promise<IcmParseResult> {
  */
 async function extractMeasurementsFromProfile(
   dataView: DataView,
-  colorSpace: string
 ): Promise<Measurement[]> {
-  const measurements: Measurement[] = [];
-  const tagTableOffset = 128;
-  const tagCount = dataView.getUint32(tagTableOffset + 4, false);
-  
+  const tagCount = dataView.getUint32(128, false); // tag count at byte 128 per ICC spec
+  const tagsStart = 132; // tag table entries start at byte 132
+
   // Read tag table entries
   const tags: Record<string, { offset: number; size: number }> = {};
-  
+
   for (let i = 0; i < tagCount; i++) {
-    const entryOffset = tagTableOffset + 8 + (i * 12);
+    const entryOffset = tagsStart + i * 12;
     const signature = dataView.getUint32(entryOffset, false);
     const offset = dataView.getUint32(entryOffset + 4, false);
     const size = dataView.getUint32(entryOffset + 8, false);
@@ -99,15 +97,15 @@ async function extractMeasurementsFromProfile(
   // Try to find and parse A2B tables
   for (const a2bKey of ['A2B2', 'A2B1', 'A2B0']) {
     if (tags[a2bKey]) {
-      const result = parseA2BTable(dataView, tags[a2bKey], colorSpace);
+      const result = parseA2BTable(dataView, tags[a2bKey]);
       if (result.length > 0) {
         return result;
       }
     }
   }
   
-  // Fallback: generate synthetic CMYK grid if no A2B table found
-  return generateSyntheticMeasurements(colorSpace === 'CMYK');
+  // Fallback: generate synthetic measurements
+  return generateSyntheticMeasurements();
 }
 
 /**
@@ -116,7 +114,6 @@ async function extractMeasurementsFromProfile(
 function parseA2BTable(
   dataView: DataView,
   tagInfo: { offset: number; size: number },
-  colorSpace: string
 ): Measurement[] {
   const measurements: Measurement[] = [];
   const offset = tagInfo.offset;
@@ -132,11 +129,9 @@ function parseA2BTable(
     
     // mABT (matrix-based lookup table) or clut (curvilinear lookup table)
     if (typeSigStr === 'mABT' || typeSigStr === 'mft2' || typeSigStr === 'mft1') {
-      // Parse matrix-based lookup table
-      return parseMatrixLookupTable(dataView, offset, colorSpace);
+      return parseMatrixLookupTable(dataView, offset);
     } else if (typeSigStr === 'clut') {
-      // Parse CLUT
-      return parseCLUT(dataView, offset, colorSpace);
+      return parseCLUT(dataView, offset);
     }
   } catch (e) {
     console.warn(`Failed to parse A2B table: ${e}`);
@@ -151,7 +146,6 @@ function parseA2BTable(
 function parseMatrixLookupTable(
   dataView: DataView,
   offset: number,
-  colorSpace: string
 ): Measurement[] {
   const measurements: Measurement[] = [];
   
@@ -162,12 +156,8 @@ function parseMatrixLookupTable(
   const inputChannels = dataView.getUint8(pos);
   pos += 1;
   
-  // Read output channels
-  const outputChannels = dataView.getUint8(pos);
-  pos += 1;
-  
-  // Skip reserved byte
-  pos += 1;
+  // Skip output channels and reserved byte
+  pos += 2;
   
   // Read number of grid points per dimension
   const gridPoints = dataView.getUint8(pos);
@@ -224,7 +214,6 @@ function parseMatrixLookupTable(
 function parseCLUT(
   dataView: DataView,
   offset: number,
-  colorSpace: string
 ): Measurement[] {
   const measurements: Measurement[] = [];
   
@@ -239,8 +228,7 @@ function parseCLUT(
   const inputChannels = dataView.getUint8(pos);
   pos += 1;
   
-  // Read output channels
-  const outputChannels = dataView.getUint8(pos);
+  // Skip output channels
   pos += 1;
   
   const isCMYK = inputChannels === 4;
@@ -278,7 +266,6 @@ function parseCLUT(
 
 /**
  * Approximate CMYK to Lab conversion
- * This is a simplified model - real conversion requires ICC profile PCS data
  */
 function cmykToLabApprox(c: number, m: number, y: number, k: number): { L: number; a: number; b: number } {
   // Normalize to 0-1
@@ -330,7 +317,7 @@ function cmykToLabApprox(c: number, m: number, y: number, k: number): { L: numbe
 /**
  * Generate synthetic measurements when profile data cannot be extracted
  */
-function generateSyntheticMeasurements(isCMYK: boolean): Measurement[] {
+function generateSyntheticMeasurements(): Measurement[] {
   const measurements: Measurement[] = [];
   const steps = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
   

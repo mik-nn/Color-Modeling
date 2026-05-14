@@ -245,11 +245,8 @@ function calculateSlopeStability(matchedPatches: MatchedPatch[]): number {
   };
   
   matchedPatches.forEach(p => {
-    const maxChannel = getMaxChannel(p.ref);
-    const refValue = p.ref[`CMYK_${maxChannel}` as keyof Measurement] as number;
-    const targetValue = p.target[`CMYK_${maxChannel}` as keyof Measurement] as number;
-    
     // Use L* as response variable
+    const maxChannel = getMaxChannel(p.ref);
     groups[maxChannel].push({
       ref: p.ref.LAB_L,
       target: p.target.LAB_L,
@@ -362,7 +359,6 @@ function calculateDeltaE00(
   const db = b2 - b1;
   
   // Mean values
-  const L_mean = (L1 + L2) / 2;
   const C1 = Math.sqrt(a1 * a1 + b1 * b1);
   const C2 = Math.sqrt(a2 * a2 + b2 * b2);
   const C_mean = (C1 + C2) / 2;
