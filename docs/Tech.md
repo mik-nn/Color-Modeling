@@ -26,3 +26,10 @@
 - ESLint + Prettier + Husky
 - Feature-based структура папок
 - Компоненты с хорошей типизацией
+
+## Local tooling (frontend)
+- Dev: `npm run dev` (в папке `frontend`)
+- Build: `npm run build` (frontend)
+- Lint: `npm run lint` (frontend)
+- Tests (Vitest): `npm test` / `npm run test:watch` (frontend)
+- Format: `npx prettier . --check` / `npx prettier . --write` (frontend)
