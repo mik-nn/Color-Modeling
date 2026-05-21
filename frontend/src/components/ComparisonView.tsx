@@ -421,9 +421,18 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
             ].map(({ label, result }) =>
               result ? (
                 <div key={label} className="bg-gray-950 border border-gray-800 rounded-xl p-5">
-                  <p className="text-sm font-medium text-gray-300 mb-4">{label}</p>
-                  <p className="text-xs text-gray-500 mb-3">
+                  <p className="text-sm font-medium text-gray-300 mb-2">{label}</p>
+                  <p className="text-xs text-gray-500 mb-1">
                     cal: {result.n_cal} / test: {result.n_test} patches (50/50 split)
+                  </p>
+                  <p className="text-xs mb-3">
+                    Primaries:{' '}
+                    <span className={result.primaries_matched === 8 ? 'text-emerald-400' : result.primaries_matched >= 5 ? 'text-yellow-400' : 'text-red-400'}>
+                      {result.primaries_matched}/8 matched
+                    </span>
+                    {result.primaries_matched < 8 && (
+                      <span className="text-gray-500"> · worst corner d={result.primary_max_dist.toFixed(3)}</span>
+                    )}
                   </p>
                   <table className="w-full text-sm">
                     <thead>

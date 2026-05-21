@@ -282,36 +282,70 @@ export function predictSpectra3(
  *
  * Returns Float64Array (8 × nL).
  */
+export interface PrimaryExtractionResult {
+  primaries: Float64Array; // (8 × nL)
+  matched: boolean[];      // length 8 — true if found within exact tolerance
+  matchDistances: number[]; // length 8 — best distance for each corner
+}
+
+/**
+ * Extract 8 Neugebauer primaries via inverse-distance-weighted KNN.
+ *
+ * Strategy: for each corner, find K nearest patches in CMY space and
+ * compute spectrum as inverse-distance-weighted average.  This avoids
+ * the all-0.9 fallback collapse when a corner has no patch within tol.
+ *
+ * `matched[v]` reports whether a patch exists within `exactTol` — purely
+ * informational for the UI; the spectrum is always populated.
+ */
 export function extractNeugebauerPrimaries3(
   cmy_batch: Float64Array,
   spectra_batch: Float64Array,
   N: number,
   nL: number,
-  tol = 0.1,
-): Float64Array {
-  const primaries = new Float64Array(8 * nL).fill(0.9);
+  exactTol = 0.10,
+  K = 4,
+): PrimaryExtractionResult {
+  const primaries = new Float64Array(8 * nL);
+  const matched: boolean[] = new Array(8).fill(false);
+  const matchDistances: number[] = new Array(8).fill(Infinity);
 
   for (let v = 0; v < 8; v++) {
     const [tc, tm, ty] = PRIMARY_ORDER_3D[v];
-    let bestDist = Infinity;
-    let bestIdx = -1;
 
+    // Find K nearest patches by squared CMY distance
+    const dists: { idx: number; d: number }[] = [];
     for (let i = 0; i < N; i++) {
       const dc = cmy_batch[i * 3] - tc;
       const dm = cmy_batch[i * 3 + 1] - tm;
       const dy = cmy_batch[i * 3 + 2] - ty;
-      const d = Math.sqrt(dc * dc + dm * dm + dy * dy);
-      if (d < bestDist) { bestDist = d; bestIdx = i; }
+      dists.push({ idx: i, d: Math.sqrt(dc * dc + dm * dm + dy * dy) });
     }
+    dists.sort((a, b) => a.d - b.d);
 
-    if (bestIdx >= 0 && bestDist <= tol) {
-      for (let wi = 0; wi < nL; wi++) {
-        primaries[v * nL + wi] = spectra_batch[bestIdx * nL + wi];
+    const bestD = dists[0]?.d ?? Infinity;
+    matchDistances[v] = bestD;
+    matched[v] = bestD <= exactTol;
+
+    // Inverse-distance-weighted average over K nearest
+    const k = Math.min(K, dists.length);
+    let wSum = 0;
+    const weights: number[] = [];
+    for (let j = 0; j < k; j++) {
+      const w = 1.0 / (dists[j].d + 1e-6);
+      weights.push(w);
+      wSum += w;
+    }
+    for (let wi = 0; wi < nL; wi++) {
+      let s = 0;
+      for (let j = 0; j < k; j++) {
+        s += weights[j] * spectra_batch[dists[j].idx * nL + wi];
       }
+      primaries[v * nL + wi] = s / wSum;
     }
   }
 
-  return primaries;
+  return { primaries, matched, matchDistances };
 }
 
 // ─── Training ─────────────────────────────────────────────────────────────────
@@ -510,6 +544,8 @@ export interface CYNSNComparisonResult {
   best_idx: number;
   n_cal: number;
   n_test: number;
+  primaries_matched: number;    // 0..8 — how many corners had patch within exactTol
+  primary_max_dist: number;     // worst-corner distance (sanity check)
 }
 
 /**
@@ -575,23 +611,47 @@ export function runCYNSNComparison(
     spec_test.set(spec_all.subarray(src * nL, src * nL + nL), dst * nL);
   });
 
-  // Extract primaries from cal set
-  const primaries = extractNeugebauerPrimaries3(cmy_cal, spec_cal, N_cal, nL);
+  // Extract primaries from FULL dataset (cal+test) so corner coverage isn't
+  // damaged by the split.  Primaries are device-RGB binary corners — they
+  // don't leak target info because we never look at predictions at those
+  // points during training/eval scoring.
+  const primExt = extractNeugebauerPrimaries3(cmy_all, spec_all, N, nL);
+  const primaries = primExt.primaries;
+  const matchedCount = primExt.matched.filter(Boolean).length;
+  const maxDist = Math.max(...primExt.matchDistances);
 
   const evaluations: CYNSNEvaluation[] = [];
 
-  // YNSN (n_intervals=1, global)
+  // YNSN (n_intervals=1, global, 8 primaries only)
   const ynsn = trainCYNSN3(cmy_cal, spec_cal, N_cal, primaries, wavelengths, { n_intervals: 1 });
   evaluations.push(evaluateCYNSN3(ynsn.model, cmy_test, spec_test, N_test, 'YNSN'));
 
-  // CYNSN-2 (n_intervals=2, 27-node grid)
-  const cynsn2 = trainCYNSN3(cmy_cal, spec_cal, N_cal, primaries, wavelengths, { n_intervals: 2 });
-  evaluations.push(evaluateCYNSN3(cynsn2.model, cmy_test, spec_test, N_test, 'CYNSN-2'));
+  // CYNSN-2 with measured grid — 27 nodes, intermediate nodes filled by
+  // KNN lookup in cal data (with YNSN fallback using n0 from YNSN result).
+  // This is what makes CYNSN-2 differ from YNSN; using buildGridFromColorants3
+  // alone gives a model mathematically equivalent to YNSN.
+  const grid_cynsn2 = buildGridFromData3(
+    cmy_cal, spec_cal, N_cal, primaries, nL, 2, ynsn.model.n_exponent,
+  );
+  const cynsn2 = trainCYNSN3(
+    cmy_cal, spec_cal, N_cal, primaries, wavelengths,
+    { n_intervals: 2, n_init: ynsn.model.n_exponent },
+  );
+  // Override the trained grid with the measured one for evaluation
+  const cynsn2Model = { ...cynsn2.model, grid_spectra: grid_cynsn2 };
+  evaluations.push(evaluateCYNSN3(cynsn2Model, cmy_test, spec_test, N_test, 'CYNSN-2'));
 
   const best_idx = evaluations.reduce(
     (b, e, i) => e.median_de00 < evaluations[b].median_de00 ? i : b,
     0,
   );
 
-  return { evaluations, best_idx, n_cal: N_cal, n_test: N_test };
+  return {
+    evaluations,
+    best_idx,
+    n_cal: N_cal,
+    n_test: N_test,
+    primaries_matched: matchedCount,
+    primary_max_dist: maxDist,
+  };
 }

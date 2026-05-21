@@ -198,9 +198,25 @@ describe('extractNeugebauerPrimaries3', () => {
       cmy[v * 3] = c; cmy[v * 3 + 1] = m; cmy[v * 3 + 2] = y;
       for (let wi = 0; wi < nL; wi++) spec[v * nL + wi] = 0.1 * (v + 1);
     });
-    const p = extractNeugebauerPrimaries3(cmy, spec, N, nL);
+    const { primaries, matched, matchDistances } = extractNeugebauerPrimaries3(cmy, spec, N, nL);
     for (let v = 0; v < 8; v++) {
-      expect(p[v * nL]).toBeCloseTo(0.1 * (v + 1), 6);
+      // KNN-weighted: nearest is exact match, others are far away.
+      // Inverse-distance weight makes nearest dominant → ≈ exact value.
+      expect(primaries[v * nL]).toBeCloseTo(0.1 * (v + 1), 1);
+      expect(matched[v]).toBe(true);
+      expect(matchDistances[v]).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('reports unmatched corners when no patch within tolerance', () => {
+    // Only one patch present, far from all corners
+    const cmy = new Float64Array([0.5, 0.5, 0.5]);
+    const spec = new Float64Array([0.5, 0.5, 0.5, 0.5]);
+    const { matched, matchDistances } = extractNeugebauerPrimaries3(cmy, spec, 1, 4);
+    // All 8 corners are sqrt(0.75) ≈ 0.866 away, > exactTol=0.1
+    for (let v = 0; v < 8; v++) {
+      expect(matched[v]).toBe(false);
+      expect(matchDistances[v]).toBeGreaterThan(0.1);
     }
   });
 });
