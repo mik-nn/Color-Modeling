@@ -1,4 +1,5 @@
 // src/App.tsx
+import { useState } from 'react';
 import { useProfileStore } from './store/useProfileStore';
 import ProfileUploader from './components/ProfileUploader';
 import ProfileList from './components/ProfileList';
@@ -14,24 +15,20 @@ function App() {
     selectProfile,
   } = useProfileStore();
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const handleFilesSelected = async (files: File[]) => {
-    console.log('Selected files:', files.map((f) => f.name));
-
+    setLoadError(null);
     const { loadMultipleProfiles } = await import('./lib/dataLoader');
-
     try {
       const loaded = await loadMultipleProfiles(files);
-      console.log('Loaded profiles:', loaded.map((p) => p.metadata.full_name));
-
       if (loaded.length === 0) {
-        alert('Файлы обработаны, но ни один профиль не загрузился (возможно, не поддержан формат).');
+        setLoadError('Files processed but no profiles loaded — unsupported format or parse error.');
         return;
       }
-
       addProfiles(loaded);
     } catch (err) {
-      console.error('loadMultipleProfiles failed:', err);
-      alert('Ошибка загрузки профилей');
+      setLoadError(err instanceof Error ? err.message : 'Failed to load profiles.');
     }
   };
 
@@ -42,7 +39,7 @@ function App() {
           <div className="px-8">
             <h1 className="text-4xl font-bold tracking-tight">Color Modeling</h1>
             <p className="text-gray-400 mt-2">
-              Анализ линейной переносимости цветовых профилей
+              Cross-substrate color profile linearity analysis
             </p>
           </div>
         </header>
@@ -51,16 +48,22 @@ function App() {
           {/* Sidebar */}
           <div className="w-96 border-r border-gray-800 bg-gray-900 overflow-auto">
             <div className="p-6">
-              <ProfileUploader 
-                onFilesSelected={handleFilesSelected} 
-                isLoading={isLoading} 
+              <ProfileUploader
+                onFilesSelected={handleFilesSelected}
+                isLoading={isLoading}
               />
+
+              {loadError && (
+                <div className="mt-4 p-3 rounded-lg bg-red-950 border border-red-800 text-red-300 text-sm">
+                  {loadError}
+                </div>
+              )}
 
               <div className="mt-8">
                 <h2 className="text-lg font-semibold mb-4">
-                  Профили ({profiles.length})
+                  Profiles ({profiles.length})
                 </h2>
-                <ProfileList 
+                <ProfileList
                   profiles={profiles}
                   selectedProfiles={selectedProfiles}
                   onSelect={selectProfile}
@@ -72,8 +75,8 @@ function App() {
 
           {/* Main Area */}
           <div className="flex-1 overflow-auto p-8">
-            <ComparisonView 
-              profiles={selectedProfiles} 
+            <ComparisonView
+              profiles={selectedProfiles}
               onRemove={removeProfile}
             />
           </div>

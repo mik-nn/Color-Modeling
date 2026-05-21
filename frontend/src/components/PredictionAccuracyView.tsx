@@ -1,5 +1,5 @@
 // src/components/PredictionAccuracyView.tsx
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import { SpectralModelComparison, SpectralPredictionEvaluation, PredictionModelType } from '../types';
 
@@ -235,7 +235,6 @@ function ComparisonTable({
   comp: SpectralModelComparison;
   isXYZ?: boolean;
 }) {
-  const [, setSelected] = useState(comp.best_idx);
   const { rows, best_idx } = comp;
 
   return (
@@ -259,8 +258,7 @@ function ComparisonTable({
             return (
               <tr
                 key={i}
-                className={`border-b border-gray-800/50 cursor-pointer transition-colors ${isBest ? 'bg-blue-950/30' : 'hover:bg-gray-800/30'}`}
-                onClick={() => setSelected(i)}
+                className={`border-b border-gray-800/50 transition-colors ${isBest ? 'bg-blue-950/30' : 'hover:bg-gray-800/30'}`}
               >
                 <td className="py-2 pr-3 font-mono text-xs">
                   <span className={isBest ? 'text-blue-300 font-semibold' : 'text-gray-300'}>

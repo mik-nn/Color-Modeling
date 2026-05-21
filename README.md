@@ -64,4 +64,4 @@ npx vitest run
 - Residual Correlation
 - Confidence Level
 
-**Репозиторий:** https://github.com/mik-nn/Color_Modeling.git
+**Repository:** <https://github.com/mik-nn/Color-Modeling.git>

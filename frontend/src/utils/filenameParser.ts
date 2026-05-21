@@ -51,17 +51,3 @@ export function parseProfileFilename(filename: string): ProfileMetadata {
   return metadata;
 }
 
-// Тестовые примеры
-export function testParser() {
-  const tests = [
-    "BC_Lyve_P9000_mk_CanvasMatte.icm",
-    "BC_VibranceLuster_P9000_PLPP260.icm",
-    "BC_600MT_P9000_mk_WCRW.icm"
-  ];
-
-  tests.forEach(file => {
-    console.log(file);
-    console.dir(parseProfileFilename(file), { depth: null });
-    console.log('---');
-  });
-}

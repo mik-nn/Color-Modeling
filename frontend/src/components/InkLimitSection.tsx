@@ -500,16 +500,6 @@ export default function InkLimitSection({ profiles, matchedPatches }: Props) {
         if (r === 255 && g === b) sets.MY.add(255 - g);   // R ramp (MY overprint)
       });
 
-      // Log what was found so browser console shows the breakdown
-      const dbg = (_label: string, cond: (ms: typeof primaries[0]) => boolean) =>
-        primaries.filter(cond).map(ms => `(${ms.RGB_R},${ms.RGB_G},${ms.RGB_B})`);
-      console.log('[InkLimit snap] primaries:', primaries.length,
-        '\n  R-ramp (MY):', dbg('MY', ms => ms.RGB_R === 255 && ms.RGB_G === ms.RGB_B),
-        '\n  B-ramp (CM):', dbg('CM', ms => ms.RGB_B === 255 && ms.RGB_R === ms.RGB_G),
-        '\n  G-ramp (CY):', dbg('CY', ms => ms.RGB_G === 255 && ms.RGB_R === ms.RGB_B),
-        '\n  snap sizes before fallback: CM', sets.CM.size, 'CY', sets.CY.size, 'MY', sets.MY.size,
-      );
-
       // Fallback: if secondary ramp has ≤3 snap values (sentinel + ≤2 patches),
       // use the matching primary ramp steps — same ink scale, meaningful AND-logic thresholds.
       //   MY (R ramp: M=Y co-vary) → M primary steps (r=255, b=255, g varies)
@@ -525,7 +515,6 @@ export default function InkLimitSection({ profiles, matchedPatches }: Props) {
         primaries.filter(ms => ms.RGB_G === 255 && ms.RGB_B === 255)
           .forEach(ms => { if (ms.RGB_R !== undefined) sets.CM.add(255 - ms.RGB_R); });
 
-      console.log('[InkLimit snap] final sizes:', { C: sets.C.size, M: sets.M.size, Y: sets.Y.size, CM: sets.CM.size, CY: sets.CY.size, MY: sets.MY.size });
     });
     const sort = (s: Set<number>) => Array.from(s).sort((a, b) => a - b);
     return { C: sort(sets.C), M: sort(sets.M), Y: sort(sets.Y), CM: sort(sets.CM), CY: sort(sets.CY), MY: sort(sets.MY) };

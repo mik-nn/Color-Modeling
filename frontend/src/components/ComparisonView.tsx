@@ -1,5 +1,5 @@
 // src/components/ComparisonView.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ProfileData, LinearityResult } from '../types';
 import LabScatterPlot from './LabScatterPlot';
 import SpectralCurves from './SpectralCurves';
@@ -12,6 +12,7 @@ import { analyzeLinearity } from '../lib/analyzers/linearityAnalyzer';
 import { analyzeByGroups } from '../lib/analyzers/groupAnalyzer';
 import { analyzeInkRatios } from '../lib/analyzers/inkRatioAnalyzer';
 import { runModelComparison, runXYZModelComparison } from '../lib/analyzers/spectralPredictor';
+import { useProfileStore } from '../store/useProfileStore';
 
 interface ComparisonViewProps {
   profiles: ProfileData[];
@@ -42,6 +43,7 @@ function MetricCard({
 
 export default function ComparisonView({ profiles, onRemove }: ComparisonViewProps) {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const setLinearityResult = useProfileStore(state => state.setLinearityResult);
 
   const analysis = useMemo((): LinearityResult | null => {
     if (profiles.length !== 2) return null;
@@ -53,6 +55,10 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
       return null;
     }
   }, [profiles]);
+
+  useEffect(() => {
+    setLinearityResult(analysis);
+  }, [analysis, setLinearityResult]);
 
   const groupBreakdown = useMemo(() => {
     if (!analysis?.matched_patches || analysis.matched_patches.length === 0) return null;
@@ -80,11 +86,11 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
         <div>
           <div className="text-6xl mb-6 opacity-20">📊</div>
           <h3 className="text-2xl font-medium text-gray-400 mb-3">
-            Выберите профили для сравнения
+            Select profiles to compare
           </h3>
           <p className="text-gray-500 max-w-md">
-            Загрузите .icm профили и выберите от 1 до 2 для анализа
-            линейности, распределения цветов и спектральных свойств
+            Load .icm profiles and select 1–2 to run linearity analysis,
+            color distribution, and spectral inspection.
           </p>
         </div>
       </div>
@@ -94,9 +100,9 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
   return (
     <div className="space-y-10 pb-12">
       <div>
-        <h2 className="text-3xl font-semibold mb-2">Сравнение профилей</h2>
+        <h2 className="text-3xl font-semibold mb-2">Profile Comparison</h2>
         <p className="text-gray-400">
-          {profiles.length} профиль{profiles.length > 1 ? 'я' : ''} выбрано для анализа
+          {profiles.length} profile{profiles.length > 1 ? 's' : ''} selected for analysis
         </p>
       </div>
 
@@ -127,23 +133,23 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
 
             <div className="grid grid-cols-2 gap-y-4 text-sm">
               <div>
-                <span className="text-gray-500 block">Патчей</span>
+                <span className="text-gray-500 block">Patches</span>
                 <p className="text-lg font-semibold text-white">{profile.patch_count}</p>
               </div>
               <div>
-                <span className="text-gray-500 block">Спектральные данные</span>
+                <span className="text-gray-500 block">Spectral data</span>
                 <p className={`text-lg font-semibold ${profile.has_spectral ? 'text-emerald-400' : 'text-gray-500'}`}>
-                  {profile.has_spectral ? 'Присутствуют' : 'Отсутствуют'}
+                  {profile.has_spectral ? 'Present' : 'Absent'}
                 </p>
               </div>
               <div>
-                <span className="text-gray-500 block">Серия</span>
+                <span className="text-gray-500 block">Series</span>
                 <p className="text-white">{profile.metadata.series}</p>
               </div>
               <div>
-                <span className="text-gray-500 block">Принтер / Режим</span>
+                <span className="text-gray-500 block">Printer / Mode</span>
                 <p className="text-white">
-                  {profile.metadata.printer} • {profile.metadata.ink}
+                  {profile.metadata.printer} · {profile.metadata.ink}
                 </p>
               </div>
             </div>
@@ -154,7 +160,7 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
       {/* Linearity analysis */}
       {profiles.length === 2 && (
         <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8">
-          <h3 className="text-lg font-semibold mb-2">Анализ линейности переноса</h3>
+          <h3 className="text-lg font-semibold mb-2">Transfer linearity analysis</h3>
           {analysis ? (
             <>
               <p className="text-xs text-gray-500 mb-6">
@@ -256,7 +262,7 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
               {analysisError ? (
                 <p className="text-red-400 text-sm">{analysisError}</p>
               ) : (
-                <p className="text-gray-500 text-sm">Вычисление...</p>
+                <p className="text-gray-500 text-sm">Computing…</p>
               )}
             </div>
           )}
@@ -311,16 +317,10 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
       )}
 
       {/* LAB Scatter Plot */}
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Распределение цветов в CIELAB</h3>
-        <LabScatterPlot profiles={profiles} width={820} height={620} />
-      </div>
+      <LabScatterPlot profiles={profiles} />
 
       {/* Spectral Curves */}
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Спектральные кривые отражения</h3>
-        <SpectralCurves profiles={profiles} width={820} height={520} />
-      </div>
+      <SpectralCurves profiles={profiles} />
     </div>
   );
 }
