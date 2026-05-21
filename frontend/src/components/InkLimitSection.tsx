@@ -1,5 +1,5 @@
 // src/components/InkLimitSection.tsx
-import { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import { ProfileData, MatchedPatchPair } from '../types';
 import { runXYZModelComparison } from '../lib/analyzers/spectralPredictor';
@@ -21,10 +21,10 @@ export interface InkLimits {
   C: number; M: number; Y: number;    // primary ramp limits
   CM: number; CY: number; MY: number; // overprint (secondary) ramp limits
 }
-const NO_LIMIT: InkLimits = { C: 255, M: 255, Y: 255, CM: 255, CY: 255, MY: 255 };
+export const NO_LIMIT: InkLimits = { C: 255, M: 255, Y: 255, CM: 255, CY: 255, MY: 255 };
 
 // Domain predicate matching isOutOfDomain() in RGB-Calibration/domain.ts
-function isOutOfDomain(C: number, M: number, Y: number, l: InkLimits): boolean {
+export function isOutOfDomain(C: number, M: number, Y: number, l: InkLimits): boolean {
   return C > l.C || M > l.M || Y > l.Y ||
     (C > l.CM && M > l.CM) ||   // CM overprint (= B ramp)
     (C > l.CY && Y > l.CY) ||   // CY overprint (= G ramp)
@@ -407,14 +407,25 @@ function RampErrorTable({
 interface Props {
   profiles: ProfileData[];
   matchedPatches: MatchedPatchPair[];
+  limitsRef: InkLimits;
+  setLimitsRef: React.Dispatch<React.SetStateAction<InkLimits>>;
+  limitsTarget: InkLimits;
+  setLimitsTarget: React.Dispatch<React.SetStateAction<InkLimits>>;
+  deThreshold: number;
+  setDeThreshold: React.Dispatch<React.SetStateAction<number>>;
 }
 
-export default function InkLimitSection({ profiles, matchedPatches }: Props) {
-  const [limitsRef,    setLimitsRef]    = useState<InkLimits>(NO_LIMIT);
-  const [limitsTarget, setLimitsTarget] = useState<InkLimits>(NO_LIMIT);
-
-  const [deThreshold, setDeThreshold] = useState(2.0);
-  const [rampErrors, setRampErrors]   = useState<{ ref?: RampErrors; target?: RampErrors }>({});
+export default function InkLimitSection({
+  profiles,
+  matchedPatches,
+  limitsRef,
+  setLimitsRef,
+  limitsTarget,
+  setLimitsTarget,
+  deThreshold,
+  setDeThreshold,
+}: Props) {
+  const [rampErrors, setRampErrors] = useState<{ ref?: RampErrors; target?: RampErrors }>({});
 
   const inkLimitsList = profiles.length >= 2
     ? [limitsRef, limitsTarget]

@@ -7,8 +7,8 @@ import PatchCorrelationScatter from './PatchCorrelationScatter';
 import GroupBreakdownTable from './GroupBreakdownTable';
 import InkRatioTable from './InkRatioTable';
 import PredictionAccuracyView from './PredictionAccuracyView';
-import InkLimitSection from './InkLimitSection';
-import { analyzeLinearity } from '../lib/analyzers/linearityAnalyzer';
+import InkLimitSection, { InkLimits, NO_LIMIT, isOutOfDomain } from './InkLimitSection';
+import { analyzeLinearity, analyzeLinearityFromPatches } from '../lib/analyzers/linearityAnalyzer';
 import { analyzeByGroups } from '../lib/analyzers/groupAnalyzer';
 import { analyzeInkRatios } from '../lib/analyzers/inkRatioAnalyzer';
 import { runModelComparison, runXYZModelComparison } from '../lib/analyzers/spectralPredictor';
@@ -45,6 +45,18 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const setLinearityResult = useProfileStore(state => state.setLinearityResult);
 
+  // ── Ink limit state (lifted from InkLimitSection) ──────────────────────────
+  const [limitsRef,    setLimitsRef]    = useState<InkLimits>(NO_LIMIT);
+  const [limitsTarget, setLimitsTarget] = useState<InkLimits>(NO_LIMIT);
+  const [deThreshold,  setDeThreshold]  = useState(2.0);
+
+  // Reset limits when profiles change to avoid stale limits on a new pair
+  useEffect(() => {
+    setLimitsRef(NO_LIMIT);
+    setLimitsTarget(NO_LIMIT);
+  }, [profiles[0]?.metadata.full_name, profiles[1]?.metadata.full_name]);
+
+  // ── Full match (used by InkLimitSection a*b* plot + CGATS export) ──────────
   const analysis = useMemo((): LinearityResult | null => {
     if (profiles.length !== 2) return null;
     setAnalysisError(null);
@@ -56,29 +68,69 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
     }
   }, [profiles]);
 
+  // ── Filter matched patches by current ink limits ───────────────────────────
+  const filteredMatchedPatches = useMemo(() => {
+    const all = analysis?.matched_patches ?? [];
+    if (all.length === 0) return all;
+    return all.filter(p => {
+      const rC = 255 - (p.ref.RGB_R ?? 255);
+      const rM = 255 - (p.ref.RGB_G ?? 255);
+      const rY = 255 - (p.ref.RGB_B ?? 255);
+      const tC = 255 - (p.target.RGB_R ?? 255);
+      const tM = 255 - (p.target.RGB_G ?? 255);
+      const tY = 255 - (p.target.RGB_B ?? 255);
+      return !isOutOfDomain(rC, rM, rY, limitsRef) && !isOutOfDomain(tC, tM, tY, limitsTarget);
+    });
+  }, [analysis, limitsRef, limitsTarget]);
+
+  // ── All downstream metrics computed on filtered patches ────────────────────
+  const filteredAnalysis = useMemo((): LinearityResult | null => {
+    if (profiles.length !== 2 || filteredMatchedPatches.length < 10) return null;
+    try {
+      return analyzeLinearityFromPatches(
+        filteredMatchedPatches,
+        profiles[0].metadata.substrate,
+        profiles[1].metadata.substrate
+      );
+    } catch {
+      return null;
+    }
+  }, [filteredMatchedPatches, profiles]);
+
   useEffect(() => {
-    setLinearityResult(analysis);
-  }, [analysis, setLinearityResult]);
+    setLinearityResult(filteredAnalysis);
+  }, [filteredAnalysis, setLinearityResult]);
 
   const groupBreakdown = useMemo(() => {
-    if (!analysis?.matched_patches || analysis.matched_patches.length === 0) return null;
-    return analyzeByGroups(analysis.matched_patches);
-  }, [analysis]);
+    if (filteredMatchedPatches.length === 0) return null;
+    return analyzeByGroups(filteredMatchedPatches);
+  }, [filteredMatchedPatches]);
 
   const inkRatios = useMemo(() => {
-    if (!analysis?.matched_patches || analysis.matched_patches.length === 0) return null;
-    return analyzeInkRatios(analysis.matched_patches);
-  }, [analysis]);
+    if (filteredMatchedPatches.length === 0) return null;
+    return analyzeInkRatios(filteredMatchedPatches);
+  }, [filteredMatchedPatches]);
 
   const modelComparison = useMemo(() => {
-    if (!analysis?.matched_patches || analysis.matched_patches.length === 0) return null;
-    return runModelComparison(analysis.matched_patches);
-  }, [analysis]);
+    if (filteredMatchedPatches.length === 0) return null;
+    return runModelComparison(filteredMatchedPatches);
+  }, [filteredMatchedPatches]);
 
   const xyzComparison = useMemo(() => {
-    if (!analysis?.matched_patches || analysis.matched_patches.length === 0) return null;
-    return runXYZModelComparison(analysis.matched_patches);
-  }, [analysis]);
+    if (filteredMatchedPatches.length === 0) return null;
+    return runXYZModelComparison(filteredMatchedPatches);
+  }, [filteredMatchedPatches]);
+
+  const isFiltered =
+    limitsRef.C < 255 || limitsRef.M < 255 || limitsRef.Y < 255 ||
+    limitsRef.CM < 255 || limitsRef.CY < 255 || limitsRef.MY < 255 ||
+    (profiles.length >= 2 && (
+      limitsTarget.C < 255 || limitsTarget.M < 255 || limitsTarget.Y < 255 ||
+      limitsTarget.CM < 255 || limitsTarget.CY < 255 || limitsTarget.MY < 255
+    ));
+
+  // Alias: filtered analysis for display (falls back to full analysis if not enough filtered patches)
+  const displayAnalysis = filteredAnalysis ?? (isFiltered ? null : analysis);
 
   if (profiles.length === 0) {
     return (
@@ -157,59 +209,89 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
         ))}
       </div>
 
-      {/* Linearity analysis */}
+      {/* ── Ink limit section — TOP: set domain before all analysis ─────────── */}
+      {profiles.length >= 1 && (
+        <InkLimitSection
+          profiles={profiles}
+          matchedPatches={analysis?.matched_patches ?? []}
+          limitsRef={limitsRef}
+          setLimitsRef={setLimitsRef}
+          limitsTarget={limitsTarget}
+          setLimitsTarget={setLimitsTarget}
+          deThreshold={deThreshold}
+          setDeThreshold={setDeThreshold}
+        />
+      )}
+
+      {/* ── Patch count within limits ─────────────────────────────────────── */}
+      {isFiltered && analysis?.matched_patches && (
+        <div className="px-1 text-xs text-gray-500">
+          Analysis scope:{' '}
+          <span className="text-gray-300 font-medium">{filteredMatchedPatches.length}</span>
+          {' '}/ {analysis.matched_patches.length} matched patches within ink limits
+          {filteredMatchedPatches.length < 10 && (
+            <span className="ml-2 text-red-400">— too few for analysis, loosen limits</span>
+          )}
+        </div>
+      )}
+
+      {/* ── Linearity analysis — all metrics on filtered patches ─────────── */}
       {profiles.length === 2 && (
         <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8">
           <h3 className="text-lg font-semibold mb-2">Transfer linearity analysis</h3>
-          {analysis ? (
+          {displayAnalysis ? (
             <>
               <p className="text-xs text-gray-500 mb-6">
-                {analysis.n_patches_used} matched patches •{' '}
+                {displayAnalysis.n_patches_used} patches
+                {isFiltered && (
+                  <span className="ml-1 text-blue-400">· within ink limits</span>
+                )}
+                {' '}•{' '}
                 <span
                   className={
-                    analysis.linearity_confidence === 'high'
+                    displayAnalysis.linearity_confidence === 'high'
                       ? 'text-emerald-400'
-                      : analysis.linearity_confidence === 'medium'
+                      : displayAnalysis.linearity_confidence === 'medium'
                       ? 'text-yellow-400'
                       : 'text-red-400'
                   }
                 >
-                  {analysis.linearity_confidence.toUpperCase()} confidence
+                  {displayAnalysis.linearity_confidence.toUpperCase()} confidence
                 </span>
               </p>
 
               {/* Primary: linear spaces */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {analysis.spectral_pearson_corr !== undefined && (
+                {displayAnalysis.spectral_pearson_corr !== undefined && (
                   <MetricCard
                     label="Spectral r"
-                    value={analysis.spectral_pearson_corr.toFixed(4)}
+                    value={displayAnalysis.spectral_pearson_corr.toFixed(4)}
                     sub="Pearson r — all patches × all λ (linear)"
-                    good={analysis.spectral_pearson_corr > 0.97}
+                    good={displayAnalysis.spectral_pearson_corr > 0.97}
                   />
                 )}
-                {analysis.xyz_pearson_corr !== undefined && (
+                {displayAnalysis.xyz_pearson_corr !== undefined && (
                   <MetricCard
                     label="XYZ r"
-                    value={analysis.xyz_pearson_corr.toFixed(4)}
+                    value={displayAnalysis.xyz_pearson_corr.toFixed(4)}
                     sub="Pearson r in XYZ tristimulus (linear)"
-                    good={analysis.xyz_pearson_corr > 0.97}
+                    good={displayAnalysis.xyz_pearson_corr > 0.97}
                   />
                 )}
-                {analysis.mean_spectral_r2 !== undefined && (
+                {displayAnalysis.mean_spectral_r2 !== undefined && (
                   <MetricCard
                     label="Per-patch spec R²"
-                    value={analysis.mean_spectral_r2.toFixed(4)}
+                    value={displayAnalysis.mean_spectral_r2.toFixed(4)}
                     sub="Mean R² of R_target = f(R_ref) per patch"
-                    good={analysis.mean_spectral_r2 > 0.98}
+                    good={displayAnalysis.mean_spectral_r2 > 0.98}
                   />
                 )}
-                {analysis.spectral_slope_cv !== undefined && (
+                {displayAnalysis.spectral_slope_cv !== undefined && (
                   <MetricCard
                     label="Slope CV λ"
-                    value={(analysis.spectral_slope_cv * 100).toFixed(1) + '%'}
+                    value={(displayAnalysis.spectral_slope_cv * 100).toFixed(1) + '%'}
                     sub="CV of a(λ) across wavelengths — low = flat substrate effect"
-                    good={analysis.spectral_slope_cv < 0.05}
+                    good={displayAnalysis.spectral_slope_cv < 0.05}
                   />
                 )}
               </div>
@@ -222,16 +304,16 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-3">
                   <MetricCard
                     label="Lab Pearson r"
-                    value={analysis.pearson_corr_lab.toFixed(4)}
+                    value={displayAnalysis.pearson_corr_lab.toFixed(4)}
                     sub="Non-linear space — for reference only"
                     good={null}
                   />
-                  {analysis.mean_deltaE_after_correction !== undefined && isFinite(analysis.mean_deltaE_after_correction) && (
+                  {displayAnalysis.mean_deltaE_after_correction !== undefined && isFinite(displayAnalysis.mean_deltaE_after_correction) && (
                     <MetricCard
                       label="ΔE after offset"
-                      value={analysis.mean_deltaE_after_correction.toFixed(2)}
+                      value={displayAnalysis.mean_deltaE_after_correction.toFixed(2)}
                       sub="Mean ΔE after global Lab offset correction"
-                      good={analysis.mean_deltaE_after_correction < 3}
+                      good={displayAnalysis.mean_deltaE_after_correction < 3}
                     />
                   )}
                 </div>
@@ -241,9 +323,8 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
                 <p className="text-gray-400">
                   <span className="text-gray-300 font-medium">Hypothesis check (linear spaces): </span>
                   {(() => {
-                    const r = analysis.spectral_pearson_corr ?? analysis.xyz_pearson_corr ?? 0;
-                    const r2 = analysis.mean_spectral_r2 ?? 0;
-                    const cv = analysis.spectral_slope_cv;
+                    const r = displayAnalysis.spectral_pearson_corr ?? displayAnalysis.xyz_pearson_corr ?? 0;
+                    const r2 = displayAnalysis.mean_spectral_r2 ?? 0;
                     if (r > 0.97 && r2 > 0.98)
                       return `✓ Strong: spectral r=${r.toFixed(4)}, per-patch R²=${r2.toFixed(4)} — affine device/substrate separation is plausible.`;
                     if (r > 0.90)
@@ -252,8 +333,8 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
                       return `✗ Weak: r=${r.toFixed(4)} — affine model insufficient for this substrate pair.`;
                     return 'No spectral data — load ICM profiles with embedded CxF/ZXML to enable spectral analysis.';
                   })()}
-                  {analysis.spectral_slope_cv !== undefined &&
-                    ` Slope CV ${(analysis.spectral_slope_cv * 100).toFixed(1)}% — ${analysis.spectral_slope_cv < 0.05 ? 'substrate acts as near-uniform spectral multiplier (simplest model works).' : analysis.spectral_slope_cv < 0.15 ? 'moderate wavelength variation in substrate effect.' : 'strong spectral shape change — per-wavelength model needed.'}`}
+                  {displayAnalysis.spectral_slope_cv !== undefined &&
+                    ` Slope CV ${(displayAnalysis.spectral_slope_cv * 100).toFixed(1)}% — ${displayAnalysis.spectral_slope_cv < 0.05 ? 'substrate acts as near-uniform spectral multiplier (simplest model works).' : displayAnalysis.spectral_slope_cv < 0.15 ? 'moderate wavelength variation in substrate effect.' : 'strong spectral shape change — per-wavelength model needed.'}`}
                 </p>
               </div>
             </>
@@ -261,6 +342,10 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
             <div className="text-center py-6">
               {analysisError ? (
                 <p className="text-red-400 text-sm">{analysisError}</p>
+              ) : isFiltered && filteredMatchedPatches.length < 10 ? (
+                <p className="text-yellow-400 text-sm">
+                  Only {filteredMatchedPatches.length} patches within current ink limits — loosen limits to enable analysis.
+                </p>
               ) : (
                 <p className="text-gray-500 text-sm">Computing…</p>
               )}
@@ -269,17 +354,17 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
         </div>
       )}
 
-      {/* Patch correlation scatter — primary hypothesis visualization */}
-      {analysis?.matched_patches && analysis.matched_patches.length > 0 && (
+      {/* Patch correlation scatter */}
+      {filteredMatchedPatches.length > 0 && profiles.length === 2 && (
         <PatchCorrelationScatter
-          matchedPatches={analysis.matched_patches}
+          matchedPatches={filteredMatchedPatches}
           refLabel={profiles[0].metadata.substrate}
           targetLabel={profiles[1].metadata.substrate}
         />
       )}
 
-      {/* Group breakdown — where does affine hold / break? */}
-      {groupBreakdown && analysis && (
+      {/* Group breakdown */}
+      {groupBreakdown && filteredAnalysis && (
         <GroupBreakdownTable
           groups={groupBreakdown}
           globalSlopeL={(() => {
@@ -289,7 +374,7 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
         />
       )}
 
-      {/* Ink ratio invariance — core separability test */}
+      {/* Ink ratio invariance */}
       {inkRatios && profiles.length === 2 && (
         <InkRatioTable
           results={inkRatios}
@@ -298,15 +383,7 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
         />
       )}
 
-      {/* Ink limit analysis — a*b* ramps + overflow detection */}
-      {profiles.length >= 1 && (
-        <InkLimitSection
-          profiles={profiles}
-          matchedPatches={analysis?.matched_patches ?? []}
-        />
-      )}
-
-      {/* Neugebauer-Yule spectral prediction — model comparison */}
+      {/* Neugebauer-Yule spectral prediction */}
       {(modelComparison || xyzComparison) && profiles.length === 2 && (
         <PredictionAccuracyView
           comparison={modelComparison ?? undefined}

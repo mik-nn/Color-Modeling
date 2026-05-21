@@ -73,6 +73,65 @@ export function analyzeLinearity(
   };
 }
 
+// Compute all linearity metrics directly from pre-matched (and optionally pre-filtered) pairs.
+// Used when patches are already filtered by ink limits before analysis.
+export function analyzeLinearityFromPatches(
+  pairs: MatchedPatchPair[],
+  refSubstrate: string,
+  targetSubstrate: string,
+  options: LinearityAnalysisOptions = {}
+): LinearityResult {
+  const opts = { minPatches: 10, ...options };
+  const patches = pairs as MatchedPatch[];
+
+  if (patches.length < opts.minPatches!) {
+    throw new Error(`Insufficient matching patches: ${patches.length} < ${opts.minPatches}`);
+  }
+
+  const labCorrelation = calculatePearsonCorrelation(
+    patches.flatMap(p => [p.ref.LAB_L, p.ref.LAB_A, p.ref.LAB_B]),
+    patches.flatMap(p => [p.target.LAB_L, p.target.LAB_A, p.target.LAB_B])
+  );
+
+  const spectralCorrelation = calculateSpectralCorrelation(patches);
+  const xyzCorrelation = calculateXYZCorrelation(patches);
+  const meanSpectralR2 = calculateMeanPerPatchSpectralR2(patches);
+  const spectralSlopeCV = calculateSpectralSlopeCV(patches);
+
+  const residuals = patches.map(p => ({
+    L: p.target.LAB_L - p.ref.LAB_L,
+    a: p.target.LAB_A - p.ref.LAB_A,
+    b: p.target.LAB_B - p.ref.LAB_B,
+  }));
+  const residualCorrelation = calculateResidualCorrelation(residuals);
+
+  const rSquared = calculateRSquared(patches);
+  const slopeStabilityScore = calculateSlopeStability(patches);
+  const meanDeltaEAfterCorrection = calculateMeanDeltaEAfterCorrection(patches);
+  const linearityConfidence = determineConfidenceLevel(
+    spectralCorrelation > 0 ? spectralCorrelation : labCorrelation,
+    rSquared,
+    slopeStabilityScore
+  );
+
+  return {
+    reference_substrate: refSubstrate,
+    target_substrate: targetSubstrate,
+    pearson_corr_lab: labCorrelation,
+    pearson_corr_residuals: residualCorrelation,
+    spectral_pearson_corr: spectralCorrelation > 0 ? spectralCorrelation : undefined,
+    xyz_pearson_corr: xyzCorrelation > 0 ? xyzCorrelation : undefined,
+    mean_spectral_r2: meanSpectralR2,
+    spectral_slope_cv: spectralSlopeCV,
+    r_squared: rSquared,
+    slope_stability_score: slopeStabilityScore,
+    mean_deltaE_after_correction: meanDeltaEAfterCorrection,
+    n_patches_used: patches.length,
+    linearity_confidence: linearityConfidence,
+    matched_patches: pairs,
+  };
+}
+
 interface MatchedPatch {
   ref: Measurement;
   target: Measurement;
