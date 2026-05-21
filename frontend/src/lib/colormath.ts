@@ -161,7 +161,7 @@ export function deltaE00(L1: number, a1: number, b1: number, L2: number, a2: num
 
   const avgCp7 = avgCp ** 7;
   const RC = 2 * Math.sqrt(avgCp7 / (avgCp7 + 25 ** 7));
-  const dTheta = 30 * Math.exp(-((avgHp - 275) / 25) ** 2);
+  const dTheta = 30 * Math.exp(-(((avgHp - 275) / 25) ** 2));
   const RT = -Math.sin(2 * dTheta * rad) * RC;
 
   return Math.sqrt(
