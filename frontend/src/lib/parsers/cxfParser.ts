@@ -27,50 +27,39 @@ const D50 = [
   97.434, 96.785, 97.010, 95.785, 95.694, 95.688, 92.949, 89.937, 88.200, 87.244,
   84.374, 82.831, 80.019, 80.460, 79.174, 79.048,
 ];
-// D50 white point for ICC PCS
-const D50_Xn = 96.422;
-const D50_Yn = 100.000;
-const D50_Zn = 82.521;
+// D50 white (raw sums, no normalization) — used as fallback when no paper patch found.
+// Media-relative approach: normalize by actual paper-white patch XYZ instead of
+// illuminant model, so paper → Lab=(100,0,0) and neutrals → a=0,b=0 like i1Profiler.
+const _D50_Xn_raw = D50.reduce((s, d, i) => s + d * CMF_X[i], 0);
+const _D50_Yn_raw = D50.reduce((s, d, i) => s + d * CMF_Y[i], 0);
+const _D50_Zn_raw = D50.reduce((s, d, i) => s + d * CMF_Z[i], 0);
+
+// Raw XYZ (no normalization — just the weighted sum).
+function spectraToXYZ_raw(reflectance: number[], startWL = 380): [number, number, number] {
+  let X = 0, Y = 0, Z = 0;
+  for (let ci = 0; ci < 36; ci++) {
+    const wl = 380 + ci * 10;
+    const ri = (wl - startWL) / 10;
+    if (ri < 0 || ri >= reflectance.length) continue;
+    const R = reflectance[ri];
+    X += R * D50[ci] * CMF_X[ci];
+    Y += R * D50[ci] * CMF_Y[ci];
+    Z += R * D50[ci] * CMF_Z[ci];
+  }
+  return [X, Y, Z];
+}
 
 function labF(t: number): number {
   return t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
 }
 
-/**
- * Convert reflectance spectrum to CIE Lab under D50/2° using standard integration.
- * @param reflectance values 0–1 at 10nm step starting at startWL
- * @param startWL start wavelength (default 380)
- */
-function spectraToLab(
-  reflectance: number[],
-  startWL = 380,
-): { L: number; a: number; b: number } {
-  // Map CMF index to reflectance index based on wavelength alignment
-  const cmfStartWL = 380;
-  let X = 0, Y = 0, Z = 0, k = 0;
-
-  for (let ci = 0; ci < 36; ci++) {
-    const wl = cmfStartWL + ci * 10;
-    const ri = (wl - startWL) / 10;
-    if (ri < 0 || ri >= reflectance.length) continue;
-    const R = reflectance[ri];
-    const d50 = D50[ci];
-    X += R * d50 * CMF_X[ci];
-    Y += R * d50 * CMF_Y[ci];
-    Z += R * d50 * CMF_Z[ci];
-    k += d50 * CMF_Y[ci];
-  }
-
-  const scale = 100 / k;
-  const Xr = (X * scale) / D50_Xn;
-  const Yr = (Y * scale) / D50_Yn;
-  const Zr = (Z * scale) / D50_Zn;
-
-  const L = Math.round((116 * labF(Yr) - 16) * 100) / 100;
-  const a = Math.round(500 * (labF(Xr) - labF(Yr)) * 100) / 100;
-  const b = Math.round(200 * (labF(Yr) - labF(Zr)) * 100) / 100;
-
-  return { L, a, b };
+function xyzToLab(X: number, Y: number, Z: number, Xn: number, Yn: number, Zn: number): { L: number; a: number; b: number } {
+  const Xr = X / Xn, Yr = Y / Yn, Zr = Z / Zn;
+  return {
+    L: Math.round((116 * labF(Yr) - 16) * 100) / 100,
+    a: Math.round(500 * (labF(Xr) - labF(Yr)) * 100) / 100,
+    b: Math.round(200 * (labF(Yr) - labF(Zr)) * 100) / 100,
+  };
 }
 
 /**
@@ -148,12 +137,18 @@ export function parseCxf3Xml(xmlText: string): CxfParseResult {
 
   const measureObjects = m0Objects.length > 0 ? m0Objects : m2Objects;
 
-  const measurements: Measurement[] = [];
+  // ── Collect raw data (spectra + location + RGB) ──
+  interface RawItem {
+    spectra: number[];
+    startWL: number;
+    sampleId: string;
+    rgb?: { r: number; g: number; b: number };
+  }
+  const rawItems: RawItem[] = [];
   let sharedWavelengths: number[] | undefined;
 
   for (let i = 0; i < measureObjects.length; i++) {
     const obj = measureObjects[i];
-
     const spectrumEls = obj.getElementsByTagNameNS('*', 'ReflectanceSpectrum');
     if (spectrumEls.length === 0) continue;
 
@@ -161,35 +156,50 @@ export function parseCxf3Xml(xmlText: string): CxfParseResult {
     const startWL = parseInt(spectrumEl.getAttribute('StartWL') ?? '380', 10);
     const spectraText = spectrumEl.textContent?.trim() ?? '';
     const spectra = spectraText.split(/\s+/).map(Number).filter((v) => !isNaN(v));
-
     if (spectra.length === 0) continue;
 
-    const wavelengths = spectra.map((_, j) => startWL + j * 10);
-    if (!sharedWavelengths) sharedWavelengths = wavelengths;
+    if (!sharedWavelengths) sharedWavelengths = spectra.map((_, j) => startWL + j * 10);
 
     const { row, col, page, sampleId } = extractLocation(obj);
     const posKey = `${row}:${col}:${page}`;
-    const rgb = rgbByKey.get(posKey);
+    rawItems.push({
+      spectra,
+      startWL,
+      sampleId: sampleId || `P${String(i + 1).padStart(4, '0')}`,
+      rgb: rgbByKey.get(posKey),
+    });
+  }
 
-    const lab = spectraToLab(spectra, startWL);
-    const id = sampleId || `P${String(i + 1).padStart(4, '0')}`;
+  // ── XYZ for all measurements (raw sums, same scale) ──
+  const xyzList = rawItems.map(item => spectraToXYZ_raw(item.spectra, item.startWL));
 
-    measurements.push({
-      SAMPLE_ID: id,
-      CMYK_C: 0,
-      CMYK_M: 0,
-      CMYK_Y: 0,
-      CMYK_K: 0,
-      RGB_R: rgb?.r,
-      RGB_G: rgb?.g,
-      RGB_B: rgb?.b,
+  // ── Media-relative white point: paper white patch (RGB=255,255,255) ──
+  // Normalising by actual paper XYZ (not illuminant model) matches what i1Profiler /
+  // ColourThink show: paper → Lab=(100,0,0), neutrals → a=0,b=0.
+  const paperIdx = rawItems.findIndex(item =>
+    item.rgb?.r === 255 && item.rgb?.g === 255 && item.rgb?.b === 255
+  );
+  const [wpX, wpY, wpZ] = paperIdx >= 0
+    ? xyzList[paperIdx]
+    : [_D50_Xn_raw, _D50_Yn_raw, _D50_Zn_raw]; // fallback: self-consistent D50
+
+  // ── Build final measurements ──
+  const measurements: Measurement[] = rawItems.map((item, i) => {
+    const [X, Y, Z] = xyzList[i];
+    const lab = xyzToLab(X, Y, Z, wpX, wpY, wpZ);
+    return {
+      SAMPLE_ID: item.sampleId,
+      CMYK_C: 0, CMYK_M: 0, CMYK_Y: 0, CMYK_K: 0,
+      RGB_R: item.rgb?.r,
+      RGB_G: item.rgb?.g,
+      RGB_B: item.rgb?.b,
       LAB_L: lab.L,
       LAB_A: lab.a,
       LAB_B: lab.b,
-      spectra,
-      wavelengths,
-    });
-  }
+      spectra: item.spectra,
+      wavelengths: item.spectra.map((_, j) => item.startWL + j * 10),
+    };
+  });
 
   return {
     measurements,

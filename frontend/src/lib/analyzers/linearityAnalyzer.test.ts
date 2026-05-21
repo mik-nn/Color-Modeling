@@ -20,8 +20,12 @@ const createMockProfile = (substrate: string, measurements: Measurement[]): Prof
   wavelengths: undefined,
 });
 
-const createMeasurement = (c: number, m: number, y: number, k: number, l: number, a: number, b: number): Measurement => ({
-  SAMPLE_ID: `P${Math.random().toString(36).substring(7)}`,
+const createMeasurement = (
+  sampleId: string,
+  c: number, m: number, y: number, k: number,
+  l: number, a: number, b: number
+): Measurement => ({
+  SAMPLE_ID: sampleId,
   CMYK_C: c,
   CMYK_M: m,
   CMYK_Y: y,
@@ -34,13 +38,16 @@ const createMeasurement = (c: number, m: number, y: number, k: number, l: number
 describe('Linearity Analyzer', () => {
   describe('analyzeLinearity', () => {
     it('should calculate linearity metrics for two matching profiles', () => {
-      // Create 60 matching patches with realistic Lab values that correlate positively
-      const refMeasurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(i % 100, (i * 2) % 100, (i * 3) % 100, 0, 100 - i * 0.5, i * 0.5 - 25, i * 0.3 - 15)
+      const refMeasurements = Array.from({ length: 60 }, (_, i) =>
+        createMeasurement(
+          `R${i}C0P1`,
+          i % 100, (i * 2) % 100, (i * 3) % 100, 0,
+          100 - i * 0.5, i * 0.5 - 25, i * 0.3 - 15
+        )
       );
 
-      const targetMeasurements = refMeasurements.map((m) => 
-        createMeasurement(m.CMYK_C, m.CMYK_M, m.CMYK_Y, m.CMYK_K, m.LAB_L - 2, m.LAB_A + 1, m.LAB_B + 1)
+      const targetMeasurements = refMeasurements.map(m =>
+        createMeasurement(m.SAMPLE_ID, m.CMYK_C, m.CMYK_M, m.CMYK_Y, m.CMYK_K, m.LAB_L - 2, m.LAB_A + 1, m.LAB_B + 1)
       );
 
       const refProfile = createMockProfile('ReferenceSubstrate', refMeasurements);
@@ -57,8 +64,12 @@ describe('Linearity Analyzer', () => {
     });
 
     it('should return high correlation for nearly identical profiles', () => {
-      const measurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(i % 100, (i * 2) % 100, (i * 3) % 100, 0, 100 - i * 0.5, i * 0.5 - 25, i * 0.3 - 15)
+      const measurements = Array.from({ length: 60 }, (_, i) =>
+        createMeasurement(
+          `R${i}C0P1`,
+          i % 100, (i * 2) % 100, (i * 3) % 100, 0,
+          100 - i * 0.5, i * 0.5 - 25, i * 0.3 - 15
+        )
       );
 
       const refProfile = createMockProfile('Ref', measurements);
@@ -73,13 +84,13 @@ describe('Linearity Analyzer', () => {
 
     it('should throw error when insufficient patches match', () => {
       const refMeasurements = [
-        createMeasurement(0, 0, 0, 0, 95, 0, 0),
-        createMeasurement(10, 10, 10, 10, 80, 5, 5),
+        createMeasurement('R0C0P1', 0, 0, 0, 0, 95, 0, 0),
+        createMeasurement('R1C0P1', 10, 10, 10, 10, 80, 5, 5),
       ];
 
       const targetMeasurements = [
-        createMeasurement(50, 50, 50, 50, 40, -5, -5),
-        createMeasurement(60, 60, 60, 60, 35, -10, -10),
+        createMeasurement('R2C0P1', 50, 50, 50, 50, 40, -5, -5),
+        createMeasurement('R3C0P1', 60, 60, 60, 60, 35, -10, -10),
       ];
 
       const refProfile = createMockProfile('Ref', refMeasurements);
@@ -88,13 +99,14 @@ describe('Linearity Analyzer', () => {
       expect(() => analyzeLinearity(refProfile, targetProfile)).toThrow('Insufficient matching patches');
     });
 
-    it('should handle fuzzy matching within tolerance', () => {
-      const refMeasurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(10 + i % 5, 20 + i % 5, 30 + i % 5, 5, 70 - i * 0.5, 15 + i * 0.3, 25 + i * 0.2)
+    it('should match patches by SAMPLE_ID', () => {
+      const refMeasurements = Array.from({ length: 60 }, (_, i) =>
+        createMeasurement(`R${i}C0P1`, i % 100, 0, 0, 0, 100 - i, i * 0.5, i * 0.3)
       );
 
-      const targetMeasurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(10 + i % 5, 20 + i % 5, 30 + i % 5, 5, 68 - i * 0.5, 16 + i * 0.3, 26 + i * 0.2)
+      // Target has same SAMPLE_IDs but different Lab values
+      const targetMeasurements = refMeasurements.map(m =>
+        createMeasurement(m.SAMPLE_ID, 0, 0, 0, 0, m.LAB_L - 5, m.LAB_A + 2, m.LAB_B + 2)
       );
 
       const refProfile = createMockProfile('Ref', refMeasurements);
@@ -102,16 +114,21 @@ describe('Linearity Analyzer', () => {
 
       const result = analyzeLinearity(refProfile, targetProfile);
 
-      expect(result.n_patches_used).toBeGreaterThan(50);
+      expect(result.n_patches_used).toBe(60);
+      expect(result.matched_patches).toHaveLength(60);
     });
 
     it('should calculate mean DeltaE after correction', () => {
-      const refMeasurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(i % 100, (i * 2) % 100, (i * 3) % 100, 0, 100 - i * 0.5, i * 0.5 - 25, i * 0.3 - 15)
+      const refMeasurements = Array.from({ length: 60 }, (_, i) =>
+        createMeasurement(
+          `R${i}C0P1`,
+          i % 100, (i * 2) % 100, (i * 3) % 100, 0,
+          100 - i * 0.5, i * 0.5 - 25, i * 0.3 - 15
+        )
       );
 
-      const targetMeasurements = refMeasurements.map((m) => 
-        createMeasurement(m.CMYK_C, m.CMYK_M, m.CMYK_Y, m.CMYK_K, m.LAB_L - 2, m.LAB_A + 1, m.LAB_B + 1)
+      const targetMeasurements = refMeasurements.map(m =>
+        createMeasurement(m.SAMPLE_ID, m.CMYK_C, m.CMYK_M, m.CMYK_Y, m.CMYK_K, m.LAB_L - 2, m.LAB_A + 1, m.LAB_B + 1)
       );
 
       const refProfile = createMockProfile('Ref', refMeasurements);
@@ -124,8 +141,12 @@ describe('Linearity Analyzer', () => {
     });
 
     it('should calculate residual correlation', () => {
-      const measurements = Array.from({ length: 60 }, (_, i) => 
-        createMeasurement(i * 2 % 100, i % 100, i / 2 % 100, 0, 100 - i * 0.5, i * 0.3 - 25, i * 0.2 - 15)
+      const measurements = Array.from({ length: 60 }, (_, i) =>
+        createMeasurement(
+          `R${i}C0P1`,
+          i * 2 % 100, i % 100, i / 2 % 100, 0,
+          100 - i * 0.5, i * 0.3 - 25, i * 0.2 - 15
+        )
       );
 
       const refProfile = createMockProfile('Ref', measurements);
