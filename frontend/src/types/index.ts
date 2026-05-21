@@ -128,6 +128,9 @@ export interface SpectralModelComparison {
   best_evaluation: SpectralPredictionEvaluation;
 }
 
+// ─── CYNSN types live in lib/analyzers/cynsn.ts (re-exported below for convenience) ─
+// CYNSNEvaluation, CYNSNComparisonResult — import directly from cynsn.ts
+
 export interface LinearityResult {
   reference_substrate: string;
   target_substrate: string;

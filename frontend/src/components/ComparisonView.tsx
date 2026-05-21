@@ -12,6 +12,7 @@ import { analyzeLinearity, analyzeLinearityFromPatches } from '../lib/analyzers/
 import { analyzeByGroups } from '../lib/analyzers/groupAnalyzer';
 import { analyzeInkRatios } from '../lib/analyzers/inkRatioAnalyzer';
 import { runModelComparison, runXYZModelComparison } from '../lib/analyzers/spectralPredictor';
+import { runCYNSNComparison, CYNSNComparisonResult } from '../lib/analyzers/cynsn';
 import { useProfileStore } from '../store/useProfileStore';
 
 interface ComparisonViewProps {
@@ -120,6 +121,17 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
     if (filteredMatchedPatches.length === 0) return null;
     return runXYZModelComparison(filteredMatchedPatches);
   }, [filteredMatchedPatches]);
+
+  // CYNSN: within-profile model — fit ref, then fit target
+  const cysnRef = useMemo((): CYNSNComparisonResult | null => {
+    if (profiles.length < 2 || filteredMatchedPatches.length < 16) return null;
+    return runCYNSNComparison(filteredMatchedPatches, false);
+  }, [filteredMatchedPatches, profiles.length]);
+
+  const cysnTarget = useMemo((): CYNSNComparisonResult | null => {
+    if (profiles.length < 2 || filteredMatchedPatches.length < 16) return null;
+    return runCYNSNComparison(filteredMatchedPatches, true);
+  }, [filteredMatchedPatches, profiles.length]);
 
   const isFiltered =
     limitsRef.C < 255 || limitsRef.M < 255 || limitsRef.Y < 255 ||
@@ -391,6 +403,75 @@ export default function ComparisonView({ profiles, onRemove }: ComparisonViewPro
           refLabel={profiles[0].metadata.substrate}
           targetLabel={profiles[1].metadata.substrate}
         />
+      )}
+
+      {/* CYNSN within-profile model */}
+      {profiles.length === 2 && (cysnRef || cysnTarget) && (
+        <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8">
+          <h3 className="text-lg font-semibold mb-1">Within-profile CYNSN prediction</h3>
+          <p className="text-xs text-gray-500 mb-6">
+            YNSN / CYNSN-2 fitted independently per profile.
+            Confirms whether the physics model can predict spectra from device RGB codes within a single profile.
+            Threshold: median ΔE00 &lt; 2.0 → good, &lt; 3.0 → acceptable.
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {[
+              { label: profiles[0].metadata.substrate, result: cysnRef },
+              { label: profiles[1].metadata.substrate, result: cysnTarget },
+            ].map(({ label, result }) =>
+              result ? (
+                <div key={label} className="bg-gray-950 border border-gray-800 rounded-xl p-5">
+                  <p className="text-sm font-medium text-gray-300 mb-4">{label}</p>
+                  <p className="text-xs text-gray-500 mb-3">
+                    cal: {result.n_cal} / test: {result.n_test} patches (50/50 split)
+                  </p>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-gray-500 border-b border-gray-800">
+                        <th className="text-left pb-2">Model</th>
+                        <th className="text-right pb-2">n</th>
+                        <th className="text-right pb-2">Median ΔE00</th>
+                        <th className="text-right pb-2">P95 ΔE00</th>
+                        <th className="text-right pb-2">RMS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.evaluations.map((ev, i) => {
+                        const isBest = i === result.best_idx;
+                        const good = ev.median_de00 < 2.0;
+                        const ok = ev.median_de00 < 3.0;
+                        const deColor = good ? 'text-emerald-400' : ok ? 'text-yellow-400' : 'text-red-400';
+                        return (
+                          <tr
+                            key={ev.model_label}
+                            className={`border-b border-gray-800/50 ${isBest ? 'bg-blue-950/30' : ''}`}
+                          >
+                            <td className="py-2 pr-3">
+                              <span className="font-mono text-xs">{ev.model_label}</span>
+                              {isBest && (
+                                <span className="ml-2 text-[10px] text-blue-400 bg-blue-900/40 px-1 rounded">best</span>
+                              )}
+                            </td>
+                            <td className="text-right py-2 text-gray-300 font-mono text-xs">{ev.n_exponent.toFixed(2)}</td>
+                            <td className={`text-right py-2 font-mono text-xs font-semibold ${deColor}`}>
+                              {ev.median_de00.toFixed(2)}
+                            </td>
+                            <td className={`text-right py-2 font-mono text-xs ${ok ? 'text-gray-300' : 'text-red-400'}`}>
+                              {ev.p95_de00.toFixed(2)}
+                            </td>
+                            <td className="text-right py-2 text-gray-400 font-mono text-xs">
+                              {ev.rms_mean.toFixed(4)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null
+            )}
+          </div>
+        </div>
       )}
 
       {/* LAB Scatter Plot */}

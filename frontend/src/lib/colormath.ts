@@ -75,3 +75,99 @@ export function labToXYZ(L: number, a: number, b: number): [number, number, numb
     labF_inv(fy - b / 200) * D50_WP[2] * 100,
   ];
 }
+
+// Forward Lab function (XYZ → Lab)
+function labF(t: number): number {
+  const delta = 6 / 29;
+  return t > delta * delta * delta ? Math.cbrt(t) : t / (3 * delta * delta) + 4 / 29;
+}
+
+/**
+ * CIE XYZ (D50/2°, Y=100 scale) → CIE Lab.
+ */
+export function xyzToLab(X: number, Y: number, Z: number): [number, number, number] {
+  const fx = labF(X / (D50_WP[0] * 100));
+  const fy = labF(Y / 100);
+  const fz = labF(Z / (D50_WP[2] * 100));
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+/**
+ * Reflectance spectrum → CIE Lab (D50/2°).
+ */
+export function spectraToLab(reflectance: number[], startWL = 380): [number, number, number] {
+  return xyzToLab(...spectraToXYZ(reflectance, startWL));
+}
+
+/**
+ * CIEDE2000 color difference between two CIE Lab colors.
+ */
+export function deltaE00(L1: number, a1: number, b1: number, L2: number, a2: number, b2: number): number {
+  const C1ab = Math.sqrt(a1 * a1 + b1 * b1);
+  const C2ab = Math.sqrt(a2 * a2 + b2 * b2);
+  const avgCab = (C1ab + C2ab) / 2;
+  const avgCab7 = avgCab ** 7;
+  const G = 0.5 * (1 - Math.sqrt(avgCab7 / (avgCab7 + 25 ** 7)));
+
+  const a1p = a1 * (1 + G);
+  const a2p = a2 * (1 + G);
+  const C1p = Math.sqrt(a1p * a1p + b1 * b1);
+  const C2p = Math.sqrt(a2p * a2p + b2 * b2);
+
+  const deg = 180 / Math.PI;
+  let h1p = Math.atan2(b1, a1p) * deg;
+  if (h1p < 0) h1p += 360;
+  let h2p = Math.atan2(b2, a2p) * deg;
+  if (h2p < 0) h2p += 360;
+
+  const dLp = L2 - L1;
+  const dCp = C2p - C1p;
+
+  let dhp: number;
+  if (C1p * C2p === 0) {
+    dhp = 0;
+  } else {
+    const diff = h2p - h1p;
+    if (Math.abs(diff) <= 180) dhp = diff;
+    else if (diff > 180) dhp = diff - 360;
+    else dhp = diff + 360;
+  }
+  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin((dhp / 2) * Math.PI / 180);
+
+  const avgLp = (L1 + L2) / 2;
+  const avgCp = (C1p + C2p) / 2;
+
+  let avgHp: number;
+  if (C1p * C2p === 0) {
+    avgHp = h1p + h2p;
+  } else if (Math.abs(h1p - h2p) <= 180) {
+    avgHp = (h1p + h2p) / 2;
+  } else if (h1p + h2p < 360) {
+    avgHp = (h1p + h2p + 360) / 2;
+  } else {
+    avgHp = (h1p + h2p - 360) / 2;
+  }
+
+  const rad = Math.PI / 180;
+  const T = 1
+    - 0.17 * Math.cos((avgHp - 30) * rad)
+    + 0.24 * Math.cos(2 * avgHp * rad)
+    + 0.32 * Math.cos((3 * avgHp + 6) * rad)
+    - 0.20 * Math.cos((4 * avgHp - 63) * rad);
+
+  const SL = 1 + 0.015 * (avgLp - 50) ** 2 / Math.sqrt(20 + (avgLp - 50) ** 2);
+  const SC = 1 + 0.045 * avgCp;
+  const SH = 1 + 0.015 * avgCp * T;
+
+  const avgCp7 = avgCp ** 7;
+  const RC = 2 * Math.sqrt(avgCp7 / (avgCp7 + 25 ** 7));
+  const dTheta = 30 * Math.exp(-((avgHp - 275) / 25) ** 2);
+  const RT = -Math.sin(2 * dTheta * rad) * RC;
+
+  return Math.sqrt(
+    (dLp / SL) ** 2 +
+    (dCp / SC) ** 2 +
+    (dHp / SH) ** 2 +
+    RT * (dCp / SC) * (dHp / SH),
+  );
+}
