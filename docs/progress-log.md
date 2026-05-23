@@ -6,6 +6,71 @@
 
 ---
 
+## 2026-05-23 — Phase 3: D1 paper-ratio + PCA residual + head-to-head TransferView
+
+Phase 3 lands the second predictor (D1) and a head-to-head comparison mode so
+A3 baseline and D1 can be evaluated side-by-side on the same anchor set.
+
+D1 design:
+
+- First-order: `B̂₁(λ, RGB) = r(λ) · A(λ, RGB)` with `r(λ) = B_paper / A_paper`
+  (zero-division guard at 1e-3). Costs ONE anchor (paper).
+- Second-order: PCA on residuals at the k-1 non-paper anchors, default rank 2.
+  Per-RGB residual interpolated to all patches via inverse-distance-weighted
+  kNN (K = 4) in device-RGB space.
+- Final: `B̂ = B̂₁ + ε̂`, clamped to [0, 1].
+- Degenerate paths: k = 1 → first-order only (graceful baseline); k = 2 →
+  rank-1 trivial basis built from the single residual direction; k ≥ 3 → full
+  PCA on residuals.
+
+Changes in this commit:
+
+- **`frontend/src/lib/predict/paperRatioResidual.ts` (new)** —
+  `fitPaperRatioResidual`, `applyPaperRatioResidual`,
+  `runPaperRatioResidualTransfer`. Reuses `dataset/basis.ts` for PCA.
+- **`frontend/src/lib/predict/paperRatioResidual.test.ts` (+4 tests)** —
+  paper-only k=1 path, pure-multiplicative recovery, k=2 degenerate basis,
+  end-to-end run on non-multiplicative synthetic data.
+- **`frontend/src/components/TransferView.tsx` (rewrite)** —
+  - Predictor dropdown: `A3 vs D1 (head-to-head)` (default), `A3 only`, `D1 only`.
+  - D1 residual rank selector (1 / 2 / 3 / 4).
+  - Anchor strategy displayed as fixed text (only S1 for now).
+  - Head-to-head table when both run: per-predictor median/P95 ΔE00, R², RMS,
+    k. Bottom-line "Winner on median ΔE00" callout.
+  - Per-predictor detail blocks: metric tiles, worst-5 patches, per-λ R²
+    strip (A3 only), residual-rank annotation (D1 only).
+  - Internal type narrowing via discriminated union (`{kind: 'ok' | 'error'}`)
+    to keep tsc strict-mode happy.
+
+First real-data observation (BC_17MGloss vs BC_17MSatin, both pk on
+CanvasSatin):
+
+- A3: median ΔE00 = 0.50, P95 = 1.71, R² = 0.967
+- D1 (rank 2): median ΔE00 = 0.65, P95 = 2.08, R² = 0.965
+- A3 wins because this pair is almost pure multiplicative substrate (same
+  base, different finish). D1's residual stage overfits without adding value.
+  Expect D1 to win on substrate pairs with strong non-linear deviation
+  (different paper class, different OBA content, etc.).
+
+Tests (+4): paperRatioResidual.test.ts. Phase 3 total: 93 → 93 (PCA test
+file path is paperRatioResidual.test.ts; counts include all prior tests).
+
+Verification (Node 22 via nvm; CI on Node 20):
+
+- `npx tsc --noEmit` → exit 0
+- `npx vitest run` → 93/93 passed
+- `npx vite build` → 327 KB / 100 KB gzip, success
+- Playwright headless verification on real data — screenshot captured;
+  metrics + head-to-head + per-predictor blocks all populated.
+
+Next: Phase 4 — Pool-PCA basis predictor (B3) so the 27-profile pool is
+exploited; Phase 5 — greedy active anchor selection (S2) so the user can
+see the minimum k for a chosen ΔE00 budget. The OBA observation (see
+follow-up commit) will need an OBA-aware predictor variant or a per-λ
+ratio cap to prevent D1 from blowing up on UV-bright substrate mismatches.
+
+---
+
 ## 2026-05-23 — Standing permission: Playwright + screenshots (CLAUDE.md §7.1)
 
 Added `CLAUDE.md` §7.1 — the agent is now expected to start the dev server,
