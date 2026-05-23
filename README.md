@@ -1,67 +1,96 @@
-# Color Modeling Project
+# Color Modeling
 
-**Document-Driven Development**
+**Document-Driven Development** — research repo for cross-substrate ICC profile linearity.
 
-Исследование и подтверждение гипотезы линейной переносимости поведения красок между разными субстратами для быстрой адаптации ICC-профилей с минимальными измерениями.
+We test whether **device behaviour** (ink mixing, dot gain, Yule-Nielsen optics) can be
+separated from the **substrate effect** via a low-parameter affine transform in spectral or
+model-parameter space. If true, an existing ICC profile can be adapted to a new substrate
+from a handful of measured patches (white point + solids + a few ramps) rather than a full
+multi-thousand-patch print run.
 
-### Цель проекта
-Разработать метод, позволяющий строить качественные цветовые профили на новых материалах, используя существующий профиль + минимальный набор измерений (white point + solids + 50% ramps).
+Start here: **[CLAUDE.md](CLAUDE.md)** — operating manual, DDD loop, and hard rules.
 
-### Статус реализации ✅
+## Status (May 2026)
 
-Все основные компоненты реализованы и протестированы:
+- ✅ ICC `.icm` parser with embedded CxF3 / ZXML extraction (`iccTagScanner`, `parsers/icmParser`).
+- ✅ CxF3 (`cc:CxF` namespace) XML parser → `Measurement[]` with 36-band spectra.
+- ✅ Spectral → XYZ (D50 / 2°) → Lab pipeline, CIEDE2000 ΔE00 (`lib/colormath.ts`).
+- ✅ Cross-substrate patch matching by `Row:Col:Page` key.
+- ✅ Ink-limit detection per channel (C / M / Y) and 2-ink combos (CY / MY / CM) using
+  Yule-Nielsen interpolation (n = 2), ΔE76 threshold.
+- ✅ Group breakdown table, ink-ratio T(λ) analyser, per-wavelength polynomial / YN /
+  XYZ-affine spectral predictor.
+- ✅ 3D CYNSN (Cellular Yule-Nielsen Spectral Neugebauer) ported to TypeScript:
+  Nelder-Mead training, 8-primary KNN extraction, 27-node measured grid for CYNSN-2.
+- 🟡 DeviceSpace abstraction — legacy CMYK fields coexist with RGB fields; refactor in
+  progress.
+- 🟡 CYNSN-2 grid/spreading optimisation mismatch — documented in
+  [`docs/cynsn-pipeline.md`](docs/cynsn-pipeline.md).
+- ⏳ Substrate transfer model (Phase 3) — not started.
 
-- ✅ **CXF Parser** - Парсер файлов Color Exchange Format с поддержкой спектральных данных
-- ✅ **ICM Parser** - Парсер бинарных ICC профилей с извлечением A2B таблиц
-- ✅ **Linearity Analyzer** - Полный набор метрик для анализа линейности переноса
-- ✅ **DeltaE00 Calculation** - Расчёт цветовых различий CIEDE2000
-- ✅ **Fuzzy Matching** - Сопоставление патчей с допуском 2%
-- ✅ **Confidence Scoring** - Автоматическая оценка качества (high/medium/low)
-- ✅ **Visual Dashboard** - Интерфейс для отображения результатов анализа
-- ✅ **Unit Tests** - Тесты для парсеров и анализаторов
+## Dataset
 
-### Быстрый старт
+27 Epson P9000 RGB ICM profiles (each with embedded CxF3 spectral data) + 1 standalone CxF
+reference. Stored outside the repo at `/mnt/e/PET/LinkedInPosts/surecolor-p9000/`. All
+profiles are **RGB** — the CMY model uses `c = (255 - R)/255` and assumes K = 0.
+
+## Architecture (frontend-only, no backend yet)
+
+- React 18 + TypeScript (strict) + Vite 8
+- TailwindCSS + D3 v7 + Zustand
+- Vitest for unit tests, GitHub Actions (Node 20) for CI
+
+```text
+frontend/src/
+├── App.tsx, store/useProfileStore.ts
+├── lib/
+│   ├── colormath.ts            spectra → XYZ → Lab, CIEDE2000
+│   ├── iccTagScanner.ts        ZXML tag locator + pako inflate
+│   ├── parsers/{cxfParser,icmParser}.ts
+│   ├── analyzers/{limitsAnalyzer,cynsn,spreading,optimizer,…}.ts
+│   └── cgatsExport.ts
+└── components/                  ComparisonView is the UI hub
+```
+
+## Quick start
 
 ```bash
 cd frontend
-npm install
-npm run dev
+npm install      # also installs the git pre-commit hook
+npm run dev      # runs `vitest run` first via `predev`, then `vite`
+npm test         # vitest one-shot
+npm run build    # production build
 ```
 
-### Запуск тестов
+**Node ≥ 18 required** (Node 12 cannot run vitest / vite due to optional chaining in deps).
+Use `nvm use 20` if your local Node is older.
 
-```bash
-npm install --save-dev vitest jsdom
-npx vitest run
-```
+## Documentation map
 
-### Основные документы проекта
-- [AGENTS.md](docs/AGENTS.md) — роли и агенты
-- [workflow.md](docs/workflow.md) — процессы и пайплайны
-- [Tech.md](docs/Tech.md) — технологический стек
-- [SKILLS.md](docs/SKILLS.md) — компетенции
-- [ROADMAP.md](docs/ROADMAP.md) — план развития
-- [RESEARCH_HYPOTHESIS.md](docs/RESEARCH_HYPOTHESIS.md) — научные гипотезы
-- [IMPLEMENTATION.md](docs/IMPLEMENTATION.md) — **полная документация по реализации**
-- [PROMPTS.md](docs/PROMPTS.md) — промпты для LLM
-- [EXPERIMENTS.md](docs/EXPERIMENTS.md) — логи экспериментов
+| File | What it is |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | Operating manual for any AI/contributor. Read first. |
+| [AGENTS.md](AGENTS.md) | Repo guidelines for AI coding agents. |
+| [docs/ONTOLOGY.md](docs/ONTOLOGY.md) | Domain model + mermaid diagram. |
+| [docs/DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md) | TypeScript type reference. |
+| [docs/RESEARCH_HYPOTHESIS.md](docs/RESEARCH_HYPOTHESIS.md) | Falsifiable hypothesis + metrics. |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Phased plan, current state. |
+| [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) | What each module does. |
+| [docs/Tech.md](docs/Tech.md) | Stack, versions, build/test commands. |
+| [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) | Append-only experiment log. |
+| [docs/progress-log.md](docs/progress-log.md) | Per-session changelog. |
+| [docs/cynsn-pipeline.md](docs/cynsn-pipeline.md) | CYNSN flow + known bugs. |
+| [docs/AGENTS.md](docs/AGENTS.md) | Claude Code subagents + skills map. |
+| [docs/workflow.md](docs/workflow.md) | The DDD loop, expanded. |
+| [docs/SKILLS.md](docs/SKILLS.md) | Domain expertise reference. |
+| [docs/PROMPTS.md](docs/PROMPTS.md) | LLM prompt templates used by the team. |
+| [docs/structure.md](docs/structure.md) | Current tree snapshot. |
+| [TODO.md](TODO.md) | Open work. |
 
-### Архитектура
+## Repository
 
-**Frontend:** React 18 + TypeScript + Vite + TailwindCSS + Zustand + D3.js
+<https://github.com/mik-nn/Color-Modeling.git>
 
-**Основные модули:**
-- `/src/lib/parsers/` - Парсеры форматов (.icm, .cxf)
-- `/src/lib/analyzers/` - Анализаторы (linearityAnalyzer)
-- `/src/components/` - UI компоненты
-- `/src/store/` - State management (Zustand)
+## License
 
-**Ключевые метрики анализа:**
-- Pearson Correlation (LAB)
-- R² (Coefficient of Determination)
-- Slope Stability Score
-- Mean ΔE00 After Correction
-- Residual Correlation
-- Confidence Level
-
-**Repository:** <https://github.com/mik-nn/Color-Modeling.git>
+MIT

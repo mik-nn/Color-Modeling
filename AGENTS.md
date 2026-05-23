@@ -1,35 +1,76 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-The project follows a **Document-Driven Development** approach, focused on validating linear ink behavior across substrates for ICC profile adaptation. The codebase is organized as a React-based frontend that contains the core analytical logic.
+> **Read [CLAUDE.md](CLAUDE.md) first.** It is the project operating manual and supersedes
+> anything inferred from this file.
 
-- **`./src/lib/parsers/`**: Parsers for `.icm` (ICC profiles) and `.cxf` (Color Exchange Format) files.
-- **`./src/lib/analyzers/`**: Core statistical analysis, including `linearityAnalyzer` for Pearson correlation, R², and slope stability.
-- **`./src/store/`**: Application state management using **Zustand**.
-- **`./src/components/`**: UI components for visualization, leveraging **D3.js** for interactive charting.
-- **`./docs/`**: Extensive project documentation, including research hypotheses and implementation details.
+This is a **Document-Driven Development** research repository. Every non-trivial change must
+be reflected in `docs/progress-log.md` (and, when an experiment produced the result,
+`docs/EXPERIMENTS.md`) as part of the same commit. The pre-commit hook enforces this.
 
-## Build, Test, and Development Commands
-Commands should be executed from the `./frontend` directory.
+## Project structure
 
-- **`npm install`**: Install dependencies.
-- **`npm run dev`**: Start the Vite development server.
-- **`npm run build`**: Build the production application.
-- **`npm run lint`**: Run ESLint checks (TypeScript-strict).
-- **`npm run test`**: Execute the Vitest suite.
-- **`npx vitest <file_path>`**: Run a specific test file.
+- `frontend/src/lib/parsers/` — `.icm` (ICC profile + embedded ZXML CxF3) and `.cxf` parsers.
+- `frontend/src/lib/analyzers/` — ink limits, linearity, CYNSN, spectral predictor, ink-ratio.
+- `frontend/src/lib/{colormath,cgatsExport,dataLoader,iccTagScanner}.ts` — shared utilities.
+- `frontend/src/store/` — Zustand store (`useProfileStore`).
+- `frontend/src/components/` — UI; `ComparisonView` is the hub.
+- `frontend/src/types/index.ts` — single source of truth for data types.
+- `docs/` — see [README.md](README.md#documentation-map) for the full map.
+- `.githooks/` — pre-commit hook enforcing the DDD loop. Installed via `npm install`.
 
-## Coding Style & Naming Conventions
-- **Language**: TypeScript with strict typing.
-- **Linting/Formatting**: ESLint (standard React/TS rules) and Prettier.
-- **UI Framework**: React 18 with TailwindCSS for styling.
-- **Architecture**: Functional components with hooks and centralized state via Zustand.
+## Build, test, development commands
 
-## Testing Guidelines
-- **Framework**: Vitest with `jsdom`.
-- **Location**: Tests are co-located with implementation (e.g., `*.test.ts`) or in `./frontend/src/test/`.
-- **Focus**: Unit tests are required for all parsers (`./src/lib/parsers/`) and analyzers (`./src/lib/analyzers/`).
+Run from `frontend/`:
 
-## Commit & Pull Request Guidelines
-- **Commit Style**: Concise, imperative messages (e.g., "Add test infrastructure", "Implement parsers").
-- **Workflow**: Document changes in `./README.md` and `./docs/` as part of the implementation cycle.
+| Command | Purpose |
+|---|---|
+| `npm install` | Install deps + auto-install git hooks via `postinstall`. |
+| `npm run dev` | Start Vite dev server. Runs `vitest run` first via `predev`. |
+| `npm run build` | Production build. |
+| `npm run lint` | ESLint (TypeScript strict). |
+| `npm test` | One-shot Vitest run. |
+| `npx vitest <path>` | Single test file. |
+
+Local Node must be ≥ 18. CI uses Node 20.
+
+## Coding style
+
+- TypeScript strict mode. No `any` without `// reason: …`.
+- Functional React with hooks; Zustand for shared state.
+- Pure functions in `lib/`; side effects only in components and `dataLoader.ts`.
+- `camelCase.ts` modules, `PascalCase.tsx` components.
+- Prettier + ESLint (config in `frontend/`). Run `npx prettier . --write` before commit.
+- Comments explain **why**, never **what**. Reserve them for invariants, formula references,
+  and non-obvious limits.
+
+## Testing
+
+- Vitest + jsdom. Test files co-located with sources (`*.test.ts`).
+- Required for every new function in `lib/analyzers/` and `lib/colormath.ts`.
+- Use ISO 11664-6 reference pairs for ΔE / Lab tests; hand-computed numerics elsewhere.
+- Do not mock the spectral pipeline — feed real spectra fixtures.
+
+## Commits & pull requests
+
+- Conventional Commits, imperative, ≤ 70 chars subject (`feat(cynsn): …`, `fix(parser): …`).
+- Body explains **why** when not obvious. Reference an `EXPERIMENTS.md` entry by date if the
+  commit implements an experimental finding.
+- The pre-commit hook blocks `feat:` / `fix:` whose diff touches `frontend/src/lib/` or
+  `frontend/src/components/` without a matching change in `docs/progress-log.md`. Use
+  `--no-verify` only for truly trivial changes (typos, comments, dead-code removal) — and
+  then log it in the next commit.
+- Do not skip pre-commit hooks (`--no-verify`) routinely. Do not skip GPG signing.
+
+## What "done" means
+
+A change is done when **all** of the following hold:
+
+1. Code compiles with `npm run build`.
+2. `npm test` passes (verify on CI if Node ≥ 18 is unavailable locally).
+3. `docs/progress-log.md` has a new entry describing what changed and why.
+4. If the change introduced a new metric or model behaviour on real data:
+   `docs/EXPERIMENTS.md` has an append-only row with date, profiles, metric value,
+   conclusion, next step.
+5. If the change altered the conceptual model, scope, or hypothesis:
+   `docs/ONTOLOGY.md`, `docs/RESEARCH_HYPOTHESIS.md`, or `docs/ROADMAP.md` reflects it.
+6. `TODO.md` no longer lists the item (or links to the experiment that resolved it).

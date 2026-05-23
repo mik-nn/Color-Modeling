@@ -1,50 +1,87 @@
 # TODO
 
-## CYNSN Implementation (active)
+> Open work. Items resolved → move to `docs/progress-log.md` and an `EXPERIMENTS.md` row
+> when applicable, then delete here.
 
-### Core math (DONE)
+---
 
-- [x] `colormath.ts` — add `xyzToLab`, `spectraToLab`, `deltaE00` (CIEDE2000)
-- [x] `spreading.ts` — CMY polynomial spreading, pack/unpack, monotonicity penalty
-- [x] `optimizer.ts` — Nelder-Mead simplex (pure TS, no deps)
-- [x] `cynsn.ts` — 3D CMY port of Python CYNSN:
-  - `demichel3` / `demichel3Batch`
-  - `findCell3`
-  - `buildGridFromColorants3`
-  - `buildGridFromData3` (KNN)
-  - `predictSpectra3`
-  - `extractNeugebauerPrimaries3`
-  - `trainCYNSN3` (Nelder-Mead on ΔE00 loss)
-  - `evaluateCYNSN3`
-  - `runCYNSNComparison`
-- [x] Types: `CYNSNEvaluation`, `CYNSNComparisonResult` in `types/index.ts`
+## P0 — CYNSN correctness (blocks Phase 2 acceptance)
 
-### Integration (next)
+- [ ] **Bug 2 — CYNSN-2 grid/spreading mismatch**
+      `trainCYNSN3` calls `buildGridFromColorants3` inside `loss()`, so the optimiser
+      never sees `grid_cynsn2`. Fix: pass `grid_cynsn2` into `trainCYNSN3` and consume it
+      directly inside `loss()`. For CYNSN-2, only `spreading` (and optionally `n`) should
+      remain free; the grid itself is fixed from measurements.
+      See `docs/cynsn-pipeline.md`.
+- [ ] **Bug 1 — `n` hard cap at 10**
+      Raise to 30 or replace with a soft penalty `max(0, n - 20)²`. Re-validate that
+      training does not blow up on substrates with naturally low `n`.
+- [ ] **Phase 2 acceptance run** — after both fixes, run `runCYNSNComparison` on all 27
+      P9000 profiles; aim for median ΔE00 < 2 on at least 20 of them. Append the result
+      table to `docs/EXPERIMENTS.md`.
 
-- [ ] Wire `runCYNSNComparison` into `ComparisonView.tsx`
-- [ ] Add `CYNSNResultCard` component — show median/P95 ΔE00, n_exponent, spreading params
-- [ ] Add `PredictionModelType` variants: `'ynsn'`, `'cynsn_2'`
-- [ ] Show YNSN vs CYNSN-2 comparison table in UI (model_label, median ΔE00, P95 ΔE00)
+## P1 — DeviceSpace migration (epic)
 
-### Testing
+The `DeviceSpace` discriminator and `device: DeviceValue` field were added to
+`types/index.ts` along with `toCMY`, `toCMYK`, `deriveDevice` helpers. Parsers populate
+`device` alongside legacy fields. Next:
 
-- [ ] Unit tests for `demichel3` (weights sum to 1, corner cases)
-- [ ] Unit tests for `deltaE00` (known reference pairs from ISO 11664-6)
-- [ ] Integration test: synthetic primary dataset → YNSN converges dE < 2
+- [ ] Port `cynsn.ts` to read `m.device` via `toCMY()` instead of direct `RGB_R/G/B`
+      access. Branch when `device.space === 'cmyk'` (treat K accordingly).
+- [ ] Port `limitsAnalyzer.ts` ramp detection to consume `device` (RGB ramps today are
+      hard-coded `R==255 && B==255` patterns).
+- [ ] Port `groupAnalyzer.ts` and `inkRatioAnalyzer.ts` similarly.
+- [ ] Port `linearityAnalyzer.ts` — currently a CMYK-fuzzy-match shell that runs on RGB
+      via `MatchedPatchPair`. Either rewrite for DeviceSpace or delete if redundant with
+      CYNSN.
+- [ ] When every analyser uses `device`, deprecate `RGB_*` / `CMYK_*` fields with a
+      compiler error (remove from `Measurement`).
+- [ ] Add a synthetic-fixture cross-validation test: same data encoded as RGB and as
+      CMYK should produce ΔE00 < 0.5 between CYNSN predictions (H2 acceptance).
 
-### Quality
+## P1 — Cleaning pipeline
 
-- [ ] Benchmark: run on real data, compare with Python reference output
-- [ ] CYNSN-2 with measured grid (`buildGridFromData3`) — check if improves over YNSN
-- [ ] Savitzky-Golay smoothing for spectral cleaning before CYNSN fitting
+- [ ] Implement MAD outlier detection on spectra in `dataLoader.ts` (currently
+      `clean === raw`).
+- [ ] Implement Savitzky-Golay smoothing (window 5–7, order 2) for spectral cleaning.
+- [ ] Compute `average_deltaE_raw_clean` honestly.
 
-## Infrastructure
+## P2 — Engineering
 
-- [ ] `npm test` passes (blocked by Node v12 — needs v14+ for optional chaining in vitest/tsc)
-- [ ] Add GitHub Actions CI with Node v18
+- [ ] Move CYNSN training to a Web Worker (Nelder-Mead blocks the main thread 1–5 s).
+- [ ] Persist last selected profiles + ink limits to `localStorage` so dev iteration
+      doesn't keep re-loading files.
+- [ ] Replace legacy `icmParser` synthetic-fallback path with a hard error.
 
-## Research
+## P3 — Substrate transfer (Phase 3)
 
-- [ ] Verify: within-profile YNSN achieves median ΔE00 < 2 on Epson P9000 data
-- [ ] Cross-substrate: fit affine transform in spectral domain after CYNSN prediction
-- [ ] Document findings in `docs/EXPERIMENTS.md`
+- [ ] Compute per-channel primary deltas between ref and target CYNSN fits.
+- [ ] Test 8-primary calibration on substrate A predicting substrate B (target median
+      ΔE00 < 3).
+- [ ] Few-shot adaptation: minimum patches for ΔE00 < 3.
+
+## P3 — Documentation
+
+- [ ] Per-experiment screenshots saved under `docs/experiments/<date>-<slug>.png`.
+- [ ] Article draft (`docs/article-draft.md`) — Substack post outline.
+
+---
+
+## Done — verify in CI (current branch)
+
+- [x] Document-Driven Development scaffolding: `CLAUDE.md`, `docs/ONTOLOGY.md`,
+      `docs/AGENTS.md` rewritten for subagents, all docs translated to English.
+- [x] `docs/progress-log.md` and `docs/EXPERIMENTS.md` backfilled.
+- [x] `.githooks/pre-commit` enforces progress-log update for `lib/` and `components/`
+      changes; installed via `frontend/scripts/install-hooks.sh` triggered by
+      `npm install` postinstall.
+- [x] `.specify/`, `.kilo/`, `.lingma/` deleted.
+- [x] `DeviceSpace` types + helpers added to `types/index.ts`; parsers populate `device`.
+- [x] Duplicate `lib/cxFParser.ts` and `utils/cxfParser.test.ts` removed.
+
+---
+
+## Known environmental issues (not project bugs)
+
+- **Local Node v12.** Cannot run vitest/vite. Use `nvm use 20` or rely on CI
+  (GitHub Actions, Node 20). The `engines` field enforces `node >= 18`.
