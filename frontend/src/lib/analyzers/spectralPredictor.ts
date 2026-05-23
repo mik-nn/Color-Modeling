@@ -15,7 +15,6 @@ import {
   PatchPredictionResult,
   ModelComparisonRow,
   SpectralModelComparison,
-  PredictionModelType,
 } from '../../types';
 import { spectraToXYZ, labToXYZ } from '../colormath';
 
@@ -154,7 +153,6 @@ function solveLinear(A: number[][], b: number[]): number[] {
 // Returns coefficients [c0, c1, ..., cd]
 function polyOLS(xs: number[], ys: number[], degree: number): number[] {
   const d = degree + 1;
-  const n = xs.length;
 
   // Normal equations: (X^T X) c = X^T y
   const XtX = Array.from({ length: d }, (_, r) =>

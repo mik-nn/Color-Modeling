@@ -1,5 +1,4 @@
 import { inflate } from 'pako';
-import type { IccTagHit, IccScanResult } from './types'
 
 /**
  * Very small ICC tag directory scanner (debug-only).

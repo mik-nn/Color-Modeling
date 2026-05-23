@@ -199,12 +199,13 @@ function parseMatrixLookupTable(
       CMYK_M: Math.round(m * 100) / 100,
       CMYK_Y: Math.round(y * 100) / 100,
       CMYK_K: Math.round(k * 100) / 100,
+      device: { space: 'cmyk', values: [c, m, y, k].map(v => Math.round(v * 100) / 100) },
       LAB_L: lab.L,
       LAB_A: lab.a,
       LAB_B: lab.b,
     });
   }
-  
+
   return measurements;
 }
 
@@ -255,12 +256,13 @@ function parseCLUT(
       CMYK_M: Math.round(m * 100) / 100,
       CMYK_Y: Math.round(y * 100) / 100,
       CMYK_K: Math.round(k * 100) / 100,
+      device: { space: 'cmyk', values: [c, m, y, k].map(v => Math.round(v * 100) / 100) },
       LAB_L: lab.L,
       LAB_A: lab.a,
       LAB_B: lab.b,
     });
   }
-  
+
   return measurements;
 }
 

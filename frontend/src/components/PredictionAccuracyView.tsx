@@ -333,7 +333,7 @@ function XYZCoeffChart({ evaluation }: { evaluation: SpectralPredictionEvaluatio
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export default function PredictionAccuracyView({ comparison, xyzComparison, refLabel, targetLabel }: Props) {
+export default function PredictionAccuracyView({ comparison, xyzComparison }: Props) {
   return (
     <div className="space-y-6">
       {/* ── Spectral section ── */}

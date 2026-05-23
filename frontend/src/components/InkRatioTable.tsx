@@ -27,7 +27,7 @@ function cvColor(cv: number): string {
 
 function fmt(v: number, d = 4): string { return v.toFixed(d); }
 
-export default function InkRatioTable({ results, refLabel, targetLabel }: Props) {
+export default function InkRatioTable({ results }: Props) {
   const valid = results.filter(r => r.n_100 > 0 && r.n_50 > 0 && r.t_pearson_100 !== undefined);
   const noData = results.filter(r => r.n_100 === 0 || r.n_50 === 0 || r.t_pearson_100 === undefined);
 

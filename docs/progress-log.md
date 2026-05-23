@@ -6,6 +6,68 @@
 
 ---
 
+## 2026-05-23 — DeviceSpace abstraction (foundation) + tsc cleanup
+
+Two parallel chunks of code work shipped together because the tsc fixes are
+needed for the build to be green at all — DeviceSpace touches the same files
+indirectly through `types/index.ts`.
+
+### DeviceSpace abstraction (foundation slice)
+
+The codebase had two competing conventions for device-side colorants: legacy
+`CMYK_*` fields (used by `linearityAnalyzer` and the old icmParser synthetic
+path) and direct `RGB_R/G/B` access (used by everything currently producing
+results on the real RGB dataset). Future CMYK datasets cannot be processed
+without a rewrite under either convention. Step 1 of the migration:
+
+- **`types/index.ts`** — introduce `DeviceSpace = 'rgb' | 'cmyk'`,
+  `DeviceValue = { space, values }`, and a new optional `device?: DeviceValue`
+  field on `Measurement`. Add helpers `toCMY()` (RGB inversion / CMYK→CMY with
+  K composited multiplicatively), `toCMYK()`, and `deriveDevice()` to build
+  `device` from legacy fields for transitional code paths.
+- **`parsers/cxfParser.ts`, `parsers/icmParser.ts`** — populate `device`
+  alongside the existing `RGB_*`/`CMYK_*` fields. No analysers consume it yet;
+  per-analyser port is queued under TODO.md P1 epic.
+
+Legacy `RGB_*` / `CMYK_*` fields remain populated so existing analysers keep
+working. They will be removed once every analyser has been ported.
+
+### Duplicate removal
+
+- **Deleted** `frontend/src/lib/cxFParser.ts` (137 LOC) — a vestigial
+  text-format CxF/X3 `@data` parser referenced only by its own test. The real
+  CxF3 path goes through `lib/iccTagScanner.ts` + `lib/parsers/cxfParser.ts`.
+- **Deleted** `frontend/src/utils/cxfParser.test.ts` — the only consumer of
+  the file above.
+
+### tsc cleanup (pre-existing errors, not introduced by this session)
+
+`npx tsc --noEmit` was failing on `main` before this session. Verified the
+errors were not introduced by the DeviceSpace edits, then cleaned them up:
+
+- **`types/index.ts`** — `PatchGroupResult` gained the fields the analyser
+  was already producing and the table was already reading: `pearson_r`,
+  `r_squared_L`, `slope_L`, `intercept_L`. These were referenced from
+  `groupAnalyzer.ts` and `GroupBreakdownTable.tsx` / `ComparisonView.tsx`
+  but absent from the interface.
+- **`lib/iccTagScanner.ts`** — drop broken `import type … from './types'`
+  (no such module; the types are defined inline).
+- **`src/global.d.ts`** — minimal ambient declaration for `pako` (avoids the
+  `@types/pako` dev dep for just `inflate`).
+- **`.gitignore`** — strip stray markdown fence (lines 1, 56 were literal
+  triple-backtick); add `!frontend/src/**/*.d.ts` exception so hand-written
+  ambient declarations are tracked; add `.kilo/` alongside `.specify/` and
+  `.lingma/`.
+- **`spectralPredictor.ts`** — drop unused `PredictionModelType` import and
+  unused `n` local.
+- **`InkRatioTable.tsx`, `PredictionAccuracyView.tsx`** — drop unused
+  destructured props (`refLabel`, `targetLabel`).
+
+Verification: `npx tsc --noEmit` exits 0; `npx vitest run` → 57/57 passed;
+`npx vite build` → success.
+
+---
+
 ## 2026-05-23 — DDD enforcement: pre-commit hook
 
 Wire the DDD loop into git. Without a hook, future commits will drift back to "I'll

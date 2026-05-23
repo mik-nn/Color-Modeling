@@ -187,12 +187,16 @@ export function parseCxf3Xml(xmlText: string): CxfParseResult {
   const measurements: Measurement[] = rawItems.map((item, i) => {
     const [X, Y, Z] = xyzList[i];
     const lab = xyzToLab(X, Y, Z, wpX, wpY, wpZ);
+    const hasRgb = item.rgb?.r !== undefined && item.rgb?.g !== undefined && item.rgb?.b !== undefined;
     return {
       SAMPLE_ID: item.sampleId,
       CMYK_C: 0, CMYK_M: 0, CMYK_Y: 0, CMYK_K: 0,
       RGB_R: item.rgb?.r,
       RGB_G: item.rgb?.g,
       RGB_B: item.rgb?.b,
+      device: hasRgb
+        ? { space: 'rgb', values: [item.rgb!.r!, item.rgb!.g!, item.rgb!.b!] }
+        : undefined,
       LAB_L: lab.L,
       LAB_A: lab.a,
       LAB_B: lab.b,
@@ -388,12 +392,16 @@ function parseMeasurementElement(element: Element, index: number): Measurement |
     }
   }
   
+  const cmykHasValue = c !== 0 || m !== 0 || y !== 0 || k !== 0;
   return {
     SAMPLE_ID: sampleId,
     CMYK_C: Math.round(c * 100) / 100,
     CMYK_M: Math.round(m * 100) / 100,
     CMYK_Y: Math.round(y * 100) / 100,
     CMYK_K: Math.round(k * 100) / 100,
+    device: cmykHasValue
+      ? { space: 'cmyk', values: [c, m, y, k].map(v => Math.round(v * 100) / 100) }
+      : undefined,
     LAB_L: Math.round(l * 100) / 100,
     LAB_A: Math.round(a * 100) / 100,
     LAB_B: Math.round(b * 100) / 100,
