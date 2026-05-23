@@ -6,6 +6,89 @@
 
 ---
 
+## 2026-05-24 — Phase 4: B3 pool-PCA predictor + 3-way head-to-head
+
+Third predictor (B3) lands. Uses a PCA basis built from the *pool* of all
+loaded substrate profiles (target auto-excluded), projects both reference
+and target anchor spectra into that basis, then fits a per-PC diagonal
+affine mapping on the anchors. The mapping is applied to all reference
+scores → reconstruct → predicted target spectra.
+
+Why this design: a single substrate spans a low-D manifold in spectral
+space, and pooling many substrates surfaces the *common* axes of substrate
+variation (OBA loading, ink-paper optical mixing, surface scatter). A new
+substrate is approximately a point on the same manifold; the diagonal map
+absorbs the per-PC scaling and offset.
+
+### Design pivot during implementation
+
+First cut used pure RGB-kNN-interpolation of anchor scores (no reference
+profile). Empirical result on DecorMatte ↔ Lyve: median ΔE00 = 12.6,
+R² = −0.806 — catastrophic. Diagnosis: 13 sparse RGB anchors cannot
+interpolate the score field across 905 patches. Switched to ref-driven
+diagonal mapping (the original "B3" from the plan, not the RGB-only
+variant). Documented as a header comment in `poolPCATransfer.ts`.
+
+### Changes
+
+- **`frontend/src/lib/predict/poolPCATransfer.ts` (new)** — final design:
+  - `fitPoolBasis({matrices, rowCounts, L, p})` — wraps `fitPoolPCA` with
+    a default rank of 6.
+  - `runPoolPCATransfer({basis, X_ref, X_target, sampleIds, anchorIdx, …})`
+    — extract anchor spectra → project ref + target into pool basis → fit
+    per-PC diagonal `Z_B[c] ≈ s[c]·Z_A[c] + b[c]` → apply to all ref
+    scores → reconstruct → clamp [0,1] → evaluate on non-anchor patches.
+  - Reports per-PC slope, intercept, and R² for diagnostics.
+- **`frontend/src/lib/predict/poolPCATransfer.test.ts` (+3 tests)** —
+  pool basis construction, end-to-end synthetic ref+target reconstruction
+  via diagonal mapping, error guards.
+- **`frontend/src/components/TransferView.tsx`** —
+  - Predictor dropdown gains "ALL (3-way)" and "B3" options.
+  - "B3 basis rank" selector (3 / 4 / 6 / 8 / 12).
+  - Pool size computed from `profiles` array, excluding the chosen target.
+  - B3 detail block: pool size + basis rank + honest caveat that pool size
+    < 5 degrades B3 to noise.
+  - Head-to-head winner logic generalised to N predictors (sorts by
+    median ΔE00, reports winner + margin over runner-up).
+
+### First data point (EXPERIMENTS row)
+
+DecorMatte (ref, no OBA) vs Lyve (target, OBA-loaded), both CanvasMatte,
+7-profile pool (8 loaded, target excluded).
+
+| Predictor | median ΔE00 | P95 | R² | RMS |
+|---|---|---|---|---|
+| A3 | 1.54 | 5.94 | 0.428 | 0.0210 |
+| **D1** | **1.45** | **5.36** | **0.846** | **0.0166** |
+| B3 (rank 6) | 2.17 | 14.56 | −0.165 | 0.0292 |
+
+**Honest finding:** B3 with diagonal score mapping underperforms both A3
+and D1 on this pair. P95 = 14.56 reveals catastrophic outliers on a few
+patches (likely saturated ink loads where the 7-profile pool basis under-
+represents the ink-stacking direction). Three remediation paths queued:
+larger pool (all 27 profiles), full M score mapping (B2 variant, 6× param
+cost), or pool-PCA + per-pair residual hybrid.
+
+Screenshot:
+`docs/experiments/2026-05-24-3way-b3-decormatte-lyve.png`.
+
+### Verification
+
+- `npx tsc --noEmit` → exit 0
+- `npx vitest run` → **105/105 passed** (was 102; +3 from poolPCATransfer)
+- `npx vite build` → 335 KB / 102 KB gzip, success
+- Playwright headless: 3-way head-to-head visible; B3 row populated; winner
+  callout shows "D1 by 0.09 over A3".
+
+### Next
+
+H6/H7 batch tests will rerun B3 across all 702 directed pairs to see if
+the median-wins-over-A3 hypothesis still holds despite this single bad
+data point. Phase 5 (S2 greedy adaptive anchors) likely earns more user
+value than fighting B3 further.
+
+---
+
 ## 2026-05-23 — Phase 3.5: OBA-aware D1 (ratio clamp + UI mismatch tile)
 
 User observation triggered this commit: the spectral difference between

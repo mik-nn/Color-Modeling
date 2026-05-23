@@ -25,19 +25,22 @@ import {
 } from '../lib/predict/perLambdaAffine';
 import { runPaperRatioResidualTransfer } from '../lib/predict/paperRatioResidual';
 import { detectOBA, obaMismatch, obaMismatchSeverity, type OBAInfo } from '../lib/predict/oba';
+import { fitPoolBasis, runPoolPCATransfer } from '../lib/predict/poolPCATransfer';
 
-type PredictorKey = 'A3' | 'D1' | 'A3_vs_D1';
+type PredictorKey = 'A3' | 'D1' | 'B3' | 'A3_vs_D1' | 'ALL';
 
 interface Props {
   profiles: ProfileData[];
 }
 
 interface PredictorRun {
-  variant: 'A3' | 'D1';
+  variant: 'A3' | 'D1' | 'B3';
   report: PredictionReport;
   perLambdaR2?: Float64Array;        // A3 only
   residualRank?: number;             // D1 only
   clampedBandCount?: number;         // D1 only
+  poolSize?: number;                 // B3 only
+  basisRank?: number;                // B3 only
 }
 
 type RunResult =
@@ -67,9 +70,26 @@ export default function TransferView({ profiles }: Props) {
   const [targetName, setTargetName] = useState<string>('');
   const [predictor, setPredictor] = useState<PredictorKey>('A3_vs_D1');
   const [residualRank, setResidualRank] = useState<number>(2);
+  const [poolBasisRank, setPoolBasisRank] = useState<number>(6);
 
   const refProfile = profiles.find(p => p.metadata.full_name === refName);
   const targetProfile = profiles.find(p => p.metadata.full_name === targetName);
+
+  // Pool basis cache: rebuild when the set of loaded profiles changes
+  // (excluding the target — pool must be independent of what we predict).
+  const poolMatrices = useMemo(() => {
+    if (profiles.length < 2) return null;
+    return profiles
+      .filter(p => p.metadata.full_name !== targetName)
+      .map(p => {
+        try {
+          return loadProfileMatrix(p);
+        } catch {
+          return null;
+        }
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null && m.channels === 3);
+  }, [profiles, targetName]);
 
   const result = useMemo<RunResult | null>(() => {
     if (!refProfile || !targetProfile || refProfile === targetProfile) return null;
@@ -127,7 +147,7 @@ export default function TransferView({ profiles }: Props) {
 
       const runs: PredictorRun[] = [];
 
-      if (predictor === 'A3' || predictor === 'A3_vs_D1') {
+      if (predictor === 'A3' || predictor === 'A3_vs_D1' || predictor === 'ALL') {
         const a3 = runPerLambdaAffineTransfer({
           X_A, X_B, sampleIds: aligned.sampleIds, anchorIdx, L,
           paperWP,
@@ -137,7 +157,7 @@ export default function TransferView({ profiles }: Props) {
         runs.push({ variant: 'A3', report: a3.report, perLambdaR2: a3.fit.rSquaredPerLambda });
       }
 
-      if (predictor === 'D1' || predictor === 'A3_vs_D1') {
+      if (predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL') {
         const d1 = runPaperRatioResidualTransfer({
           X_A, X_B, D: D_B, sampleIds: aligned.sampleIds, anchorIdx, paperRowIdx, L,
           paperWP,
@@ -153,6 +173,33 @@ export default function TransferView({ profiles }: Props) {
         });
       }
 
+      if ((predictor === 'B3' || predictor === 'ALL') && poolMatrices && poolMatrices.length >= 2) {
+        // Build the pool basis from every other loaded profile (target excluded).
+        // Each pool profile contributes its full N×L spectral matrix.
+        const matrices = poolMatrices.map(m => m.X);
+        const rowCounts = poolMatrices.map(m => m.N);
+        const basis = fitPoolBasis({
+          matrices, rowCounts, L,
+          p: Math.min(poolBasisRank, L),
+        });
+        const b3 = runPoolPCATransfer({
+          basis,
+          X_ref: X_A,
+          X_target: X_B,
+          sampleIds: aligned.sampleIds,
+          anchorIdx, L,
+          paperWP,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+        });
+        runs.push({
+          variant: 'B3',
+          report: b3.report,
+          basisRank: b3.p,
+          poolSize: poolMatrices.length,
+        });
+      }
+
       return {
         kind: 'ok' as const,
         runs, anchors, alignedN: N,
@@ -161,7 +208,7 @@ export default function TransferView({ profiles }: Props) {
     } catch (e) {
       return { kind: 'error' as const, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [refProfile, targetProfile, predictor, residualRank]);
+  }, [refProfile, targetProfile, predictor, residualRank, poolMatrices, poolBasisRank]);
 
   if (profiles.length < 2) {
     return (
@@ -230,7 +277,7 @@ export default function TransferView({ profiles }: Props) {
         </label>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <label className="block">
           <span className="text-xs uppercase tracking-wider text-gray-500">Predictor</span>
           <select
@@ -238,30 +285,46 @@ export default function TransferView({ profiles }: Props) {
             onChange={e => setPredictor(e.target.value as PredictorKey)}
             className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
           >
+            <option value="ALL">A3 vs D1 vs B3 (3-way)</option>
             <option value="A3_vs_D1">A3 vs D1 (head-to-head)</option>
             <option value="A3">A3 — per-λ affine (baseline)</option>
             <option value="D1">D1 — paper-ratio + PCA residual</option>
+            <option value="B3">B3 — pool-PCA (basis from {poolMatrices?.length ?? 0} profiles)</option>
           </select>
         </label>
-        {(predictor === 'D1' || predictor === 'A3_vs_D1') && (
-          <label className="block">
-            <span className="text-xs uppercase tracking-wider text-gray-500">D1 residual rank</span>
-            <select
-              value={residualRank}
-              onChange={e => setResidualRank(Number(e.target.value))}
-              className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-            >
-              <option value={1}>1</option>
-              <option value={2}>2 (default)</option>
-              <option value={3}>3</option>
-              <option value={4}>4</option>
-            </select>
-          </label>
-        )}
+        <label className="block">
+          <span className="text-xs uppercase tracking-wider text-gray-500">D1 residual rank</span>
+          <select
+            value={residualRank}
+            onChange={e => setResidualRank(Number(e.target.value))}
+            disabled={!(predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL')}
+            className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm disabled:opacity-40"
+          >
+            <option value={1}>1</option>
+            <option value={2}>2 (default)</option>
+            <option value={3}>3</option>
+            <option value={4}>4</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-xs uppercase tracking-wider text-gray-500">B3 basis rank</span>
+          <select
+            value={poolBasisRank}
+            onChange={e => setPoolBasisRank(Number(e.target.value))}
+            disabled={!(predictor === 'B3' || predictor === 'ALL')}
+            className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm disabled:opacity-40"
+          >
+            <option value={3}>3</option>
+            <option value={4}>4</option>
+            <option value={6}>6 (default)</option>
+            <option value={8}>8</option>
+            <option value={12}>12</option>
+          </select>
+        </label>
         <label className="block">
           <span className="text-xs uppercase tracking-wider text-gray-500">Anchor strategy</span>
           <div className="mt-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-400">
-            S1 — forced heuristic (paper + corners + 5 neutrals = 13)
+            S1 — forced heuristic (13 anchors)
           </div>
         </label>
       </div>
@@ -316,17 +379,18 @@ export default function TransferView({ profiles }: Props) {
                 </tbody>
               </table>
               {(() => {
-                if (result.runs.length !== 2) return null;
-                const a = result.runs.find(r => r.variant === 'A3');
-                const b = result.runs.find(r => r.variant === 'D1');
-                if (!a || !b) return null;
-                const winner = b.report.medianDE00 < a.report.medianDE00 ? 'D1' : 'A3';
-                const delta = Math.abs(b.report.medianDE00 - a.report.medianDE00);
+                if (result.runs.length < 2) return null;
+                const sorted = [...result.runs].sort(
+                  (u, v) => u.report.medianDE00 - v.report.medianDE00,
+                );
+                const winner = sorted[0];
+                const runnerUp = sorted[1];
+                const delta = runnerUp.report.medianDE00 - winner.report.medianDE00;
                 return (
                   <div className="mt-3 text-xs text-gray-400">
-                    Winner on median ΔE00: <span className="text-emerald-400 font-semibold">{winner}</span>{' '}
-                    by {delta.toFixed(2)} ΔE00.
-                    {winner === 'D1' && b.residualRank !== undefined && ` D1 residual rank used: ${b.residualRank}.`}
+                    Winner on median ΔE00:{' '}
+                    <span className="text-emerald-400 font-semibold">{winner.variant}</span>{' '}
+                    by {delta.toFixed(2)} ΔE00 over {runnerUp.variant}.
                   </div>
                 );
               })()}
@@ -386,6 +450,21 @@ export default function TransferView({ profiles }: Props) {
                       OBA mismatch in 380–410 nm — distrust D1 at those bands.
                     </div>
                   )}
+                </div>
+              )}
+              {run.poolSize !== undefined && (
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-400 space-y-1">
+                  <div>
+                    B3 basis built from{' '}
+                    <span className="text-gray-200 font-mono">{run.poolSize}</span>{' '}
+                    pool profiles (target excluded), truncated to rank{' '}
+                    <span className="text-gray-200 font-mono">{run.basisRank ?? '—'}</span>.
+                  </div>
+                  <div>
+                    B3 does NOT use the reference profile — it captures cross-substrate
+                    structure shared across the pool. With fewer than 5 pool profiles,
+                    or with substrates very unlike the target, B3 degrades to noise.
+                  </div>
                 </div>
               )}
             </div>
