@@ -6,6 +6,73 @@
 
 ---
 
+## 2026-05-23 — Phase 2: A3 per-λ affine predictor + S1 heuristic anchors + TransferView UI
+
+Phase 1 was infra-only — no visible output. This phase lands the first predictor end
+to end so the user can pick two profiles in the UI and see actual ΔE00 numbers.
+
+Why A3 first: trivial (closed-form OLS, 72 free parameters), no surprises, gives a
+baseline that D1 (paper-ratio + PCA residual) and B3 (pool-PCA) must justify their
+complexity against. Why S1 first: deterministic, no hidden hyperparameters, picks
+the patches every reasonable transfer model needs (paper + 8 RGB corners + 5
+neutrals = 13 anchors).
+
+Changes in this commit:
+
+- **`frontend/src/lib/sampling/heuristic.ts` (new)** — `pickHeuristicAnchors`
+  picks the nearest measured patch to each of: paper (255,255,255), 6 RGB
+  primaries, black, and N evenly spaced neutrals. Returns an `AnchorSet` with
+  row indices in `meta.chosenIdx` for downstream predictor consumption.
+- **`frontend/src/lib/predict/perLambdaAffine.ts` (new)** —
+  - `fitPerLambdaAffine(X_A_anchors, X_B_anchors, L)`: closed-form OLS per λ
+    yielding `(a, b)`. Fallback to `a=1, b=mean(B)-mean(A)` when variance at a
+    wavelength is degenerate.
+  - `applyPerLambdaAffine(X_A, L, fit)`: apply with [0,1] clamp.
+  - `runPerLambdaAffineTransfer(input)`: end-to-end Task-2 run. Extracts anchor
+    rows, fits, predicts every patch, evaluates on non-anchor patches.
+  - `paperWPFromBrightestPatch(X, N, L)`: helper to derive paper-relative XYZ
+    when no exact paper anchor exists.
+- **`frontend/src/components/TransferView.tsx` (new)** — Phase 2 UI hub.
+  Dropdowns for ref + target profile. Metric tiles: median ΔE00 (colour-coded
+  green/yellow/red), P95 ΔE00, mean spectral R², mean RMS, anchor count,
+  held-out patch count, shared SAMPLE_IDs. Worst-5 patches by ΔE00. Anchor list
+  with labels (paper, red, …, neutral_0, …). Per-λ R² strip showing where the
+  affine fit is tight vs loose.
+- **`frontend/src/App.tsx`** — new tab strip above the main pane: "Compare
+  (legacy)" → existing `ComparisonView`; "Transfer (Phase 2 — A3 + S1)" → new
+  `TransferView`. Selection persists across tab switches.
+
+Tests (+9, all pass):
+
+- `heuristic.test.ts`: 4 tests — exact corners present, nearest fallback,
+  neutralCount option, CMYK rejection.
+- `perLambdaAffine.test.ts`: 5 tests — exact recovery of known (a, b),
+  degenerate-wavelength fallback, shape guards, [0,1] clamp, end-to-end
+  identity-affine transfer reports low ΔE00.
+
+Verification (Node 22 via nvm; CI uses Node 20):
+
+- `npx tsc --noEmit` → exit 0.
+- `npx vitest run` → **89/89 passed** (was 80/80 pre-Phase 2; +9 new).
+- `npx vite build` → 317 KB / 97 KB gzip, success.
+
+How to see the result: `npm run dev` in `frontend/`, drag-drop two ICM
+profiles (different substrates, same printer/mode), switch to the "Transfer"
+tab, pick reference and target. The report card populates as soon as both are
+chosen. No "Run" button — the prediction is cheap enough to recompute on every
+selection change.
+
+Honest framing in the UI: the panel header explicitly says "predictor: per-λ
+affine, anchor strategy: forced heuristic" so the user knows this is empirical
+regression, not physics. Subsequent phases (D1, B3) will compete on the same
+panel.
+
+Next: Phase 3 — D1 paper-ratio + PCA residual predictor (expected best
+performance at small k); add predictor dropdown to the panel so A3 / D1 / B3
+can be compared head-to-head.
+
+---
+
 ## 2026-05-23 — Phase 1: data-driven track shared infrastructure
 
 Strategic pivot from physics-faithful CYNSN to data-driven profile compression and
