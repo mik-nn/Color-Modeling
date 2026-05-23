@@ -24,6 +24,7 @@ import {
   paperWPFromBrightestPatch,
 } from '../lib/predict/perLambdaAffine';
 import { runPaperRatioResidualTransfer } from '../lib/predict/paperRatioResidual';
+import { detectOBA, obaMismatch, obaMismatchSeverity, type OBAInfo } from '../lib/predict/oba';
 
 type PredictorKey = 'A3' | 'D1' | 'A3_vs_D1';
 
@@ -36,11 +37,20 @@ interface PredictorRun {
   report: PredictionReport;
   perLambdaR2?: Float64Array;        // A3 only
   residualRank?: number;             // D1 only
+  clampedBandCount?: number;         // D1 only
 }
 
 type RunResult =
   | { kind: 'error'; error: string }
-  | { kind: 'ok'; runs: PredictorRun[]; anchors: ReturnType<typeof pickHeuristicAnchors>; alignedN: number };
+  | {
+      kind: 'ok';
+      runs: PredictorRun[];
+      anchors: ReturnType<typeof pickHeuristicAnchors>;
+      alignedN: number;
+      obaRef: OBAInfo;
+      obaTarget: OBAInfo;
+      obaMismatchScore: number;
+    };
 
 function deColor(de: number): string {
   if (de < 1.5) return 'text-emerald-400';
@@ -99,12 +109,21 @@ export default function TransferView({ profiles }: Props) {
       const paperRowIdx = anchorIdx[0];
 
       // Paper-relative WP from the target's paper anchor spectrum.
-      const paperSpec = new Array<number>(L);
-      for (let l = 0; l < L; l++) paperSpec[l] = X_B[paperRowIdx * L + l];
+      const paperSpecB = new Array<number>(L);
+      const paperSpecA = new Array<number>(L);
+      for (let l = 0; l < L; l++) {
+        paperSpecB[l] = X_B[paperRowIdx * L + l];
+        paperSpecA[l] = X_A[paperRowIdx * L + l];
+      }
       const startWL = Baligned.wavelengths[0];
       const paperWP = paperWPFromBrightestPatch(
-        new Float64Array(paperSpec), 1, L, startWL,
+        new Float64Array(paperSpecB), 1, L, startWL,
       );
+
+      // OBA diagnostics for ref + target.
+      const obaRef = detectOBA(paperSpecA, { startWL });
+      const obaTarget = detectOBA(paperSpecB, { startWL });
+      const obaMm = obaMismatch(obaRef, obaTarget);
 
       const runs: PredictorRun[] = [];
 
@@ -126,10 +145,19 @@ export default function TransferView({ profiles }: Props) {
           targetProfile: targetProfile.metadata.full_name,
           residualRank,
         });
-        runs.push({ variant: 'D1', report: d1.report, residualRank: d1.fit.residualRank });
+        runs.push({
+          variant: 'D1',
+          report: d1.report,
+          residualRank: d1.fit.residualRank,
+          clampedBandCount: d1.fit.clampedBands.length,
+        });
       }
 
-      return { kind: 'ok' as const, runs, anchors, alignedN: N };
+      return {
+        kind: 'ok' as const,
+        runs, anchors, alignedN: N,
+        obaRef, obaTarget, obaMismatchScore: obaMm,
+      };
     } catch (e) {
       return { kind: 'error' as const, error: e instanceof Error ? e.message : String(e) };
     }
@@ -142,6 +170,21 @@ export default function TransferView({ profiles }: Props) {
       </div>
     );
   }
+
+  // Per-profile OBA score for dropdown labels — paper patch detection.
+  const profileObaLabel = (p: ProfileData): string => {
+    const paper = p.raw.find(m =>
+      m.RGB_R === 255 && m.RGB_G === 255 && m.RGB_B === 255 && m.spectra,
+    );
+    if (!paper || !paper.spectra) return p.metadata.full_name;
+    try {
+      const startWL = paper.wavelengths?.[0] ?? 380;
+      const info = detectOBA(paper.spectra, { startWL });
+      return `${p.metadata.full_name}  (OBA ${info.score.toFixed(2)})`;
+    } catch {
+      return p.metadata.full_name;
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -165,7 +208,7 @@ export default function TransferView({ profiles }: Props) {
             <option value="">— pick reference —</option>
             {profiles.map(p => (
               <option key={p.metadata.full_name} value={p.metadata.full_name}>
-                {p.metadata.full_name}
+                {profileObaLabel(p)}
               </option>
             ))}
           </select>
@@ -180,7 +223,7 @@ export default function TransferView({ profiles }: Props) {
             <option value="">— pick target —</option>
             {profiles.map(p => (
               <option key={p.metadata.full_name} value={p.metadata.full_name}>
-                {p.metadata.full_name}
+                {profileObaLabel(p)}
               </option>
             ))}
           </select>
@@ -231,6 +274,12 @@ export default function TransferView({ profiles }: Props) {
 
       {result && result.kind === 'ok' && result.runs.length > 0 && (
         <div className="space-y-6">
+          <OBAMismatchTile
+            obaRef={result.obaRef}
+            obaTarget={result.obaTarget}
+            mismatch={result.obaMismatchScore}
+          />
+
           {result.runs.length > 1 && (
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
               <h3 className="text-sm font-semibold text-gray-300 mb-3">Head-to-head</h3>
@@ -321,10 +370,22 @@ export default function TransferView({ profiles }: Props) {
                 </div>
               )}
               {run.residualRank !== undefined && (
-                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-400">
-                  D1 used PCA residual rank <span className="text-gray-200 font-mono">{run.residualRank}</span>{' '}
-                  fit on {run.report.k - 1} non-paper anchors. Lower-rank residual = stronger
-                  smoothness assumption on the substrate transform.
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-400 space-y-1">
+                  <div>
+                    D1 used PCA residual rank <span className="text-gray-200 font-mono">{run.residualRank}</span>{' '}
+                    fit on {run.report.k - 1} non-paper anchors. Lower-rank residual = stronger
+                    smoothness assumption on the substrate transform.
+                  </div>
+                  {run.clampedBandCount !== undefined && run.clampedBandCount > 0 && (
+                    <div>
+                      Paper-ratio clamp activated on{' '}
+                      <span className="text-yellow-300 font-mono">
+                        {run.clampedBandCount} / 36
+                      </span>{' '}
+                      wavelengths (default bounds [0.3, 3.0]). Typically signals
+                      OBA mismatch in 380–410 nm — distrust D1 at those bands.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -356,6 +417,60 @@ function Metric({ label, value, cls }: { label: string; value: string; cls: stri
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
       <div className="text-xs uppercase tracking-wider text-gray-500">{label}</div>
       <div className={`text-2xl font-mono mt-1 ${cls}`}>{value}</div>
+    </div>
+  );
+}
+
+function OBAMismatchTile({
+  obaRef, obaTarget, mismatch,
+}: {
+  obaRef: OBAInfo;
+  obaTarget: OBAInfo;
+  mismatch: number;
+}) {
+  const severity = obaMismatchSeverity(mismatch);
+  const cls = severity === 'low'
+    ? 'border-emerald-700 bg-emerald-950'
+    : severity === 'moderate'
+      ? 'border-yellow-700 bg-yellow-950'
+      : 'border-red-700 bg-red-950';
+  const valueCls = severity === 'low'
+    ? 'text-emerald-300'
+    : severity === 'moderate'
+      ? 'text-yellow-300'
+      : 'text-red-300';
+  const advice = severity === 'low'
+    ? 'Substrates have comparable OBA loading. D1 paper-ratio is reliable across all 36 bands.'
+    : severity === 'moderate'
+      ? 'Moderate OBA mismatch. Expect ratio clamp to activate at 1–3 short-wavelength bands.'
+      : 'Strong OBA mismatch. D1 paper-ratio explodes at 380–410 nm without the clamp; with the clamp, expect a few clamped bands and biased prediction in the UV-blue region. A3 may also be unreliable since its per-λ slope cannot capture the non-linear OBA-vs-ink-coverage interaction.';
+
+  return (
+    <div className={`border rounded-lg p-4 ${cls}`}>
+      <div className="grid grid-cols-3 gap-3 items-end">
+        <div>
+          <div className="text-xs uppercase tracking-wider text-gray-400">OBA mismatch</div>
+          <div className={`text-3xl font-mono mt-1 ${valueCls}`}>
+            {mismatch.toFixed(3)}
+          </div>
+          <div className="text-xs text-gray-400 mt-1">Severity: <span className={valueCls}>{severity}</span></div>
+        </div>
+        <div className="text-xs text-gray-300 space-y-0.5">
+          <div className="text-gray-500 uppercase tracking-wider">Reference</div>
+          <div>OBA score: <span className="text-gray-100 font-mono">{obaRef.score.toFixed(3)}</span></div>
+          <div>R(380): <span className="text-gray-100 font-mono">{obaRef.r380.toFixed(3)}</span></div>
+          <div>R(440): <span className="text-gray-100 font-mono">{obaRef.r440.toFixed(3)}</span></div>
+          <div>R(550): <span className="text-gray-100 font-mono">{obaRef.r550.toFixed(3)}</span></div>
+        </div>
+        <div className="text-xs text-gray-300 space-y-0.5">
+          <div className="text-gray-500 uppercase tracking-wider">Target</div>
+          <div>OBA score: <span className="text-gray-100 font-mono">{obaTarget.score.toFixed(3)}</span></div>
+          <div>R(380): <span className="text-gray-100 font-mono">{obaTarget.r380.toFixed(3)}</span></div>
+          <div>R(440): <span className="text-gray-100 font-mono">{obaTarget.r440.toFixed(3)}</span></div>
+          <div>R(550): <span className="text-gray-100 font-mono">{obaTarget.r550.toFixed(3)}</span></div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-300 mt-3">{advice}</p>
     </div>
   );
 }

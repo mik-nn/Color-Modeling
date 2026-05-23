@@ -29,12 +29,20 @@ import {
 } from '../dataset/basis';
 
 const RATIO_GUARD = 1e-3;
+const DEFAULT_RATIO_MIN = 0.3;
+const DEFAULT_RATIO_MAX = 3.0;
 
 export interface PaperRatioResidualFit {
   /** Row index of the paper anchor in the aligned matrices. */
   paperRowIdx: number;
-  /** Per-λ ratio r(λ) = B_paper(λ) / A_paper(λ). Length L. */
+  /** Per-λ ratio r(λ) = B_paper(λ) / A_paper(λ) AFTER clamping. Length L. */
   r: Float64Array;
+  /** Same r(λ) BEFORE clamping (diagnostic). Length L. */
+  rUnclamped: Float64Array;
+  /** Indices of wavelengths whose ratio was clamped to the [min, max] bound. */
+  clampedBands: Int32Array;
+  /** Lower / upper clamp bound used. */
+  clamp: readonly [number, number];
   /** PCA basis fit on residuals at non-paper anchors. Null if k ≤ 1. */
   residualBasis: PCABasis | null;
   /** Residual anchor row indices (paper excluded). Length k-1. */
@@ -54,20 +62,48 @@ export interface PaperRatioResidualOptions {
   residualRank?: number;
   /** kNN K for residual-score interpolation. Default 4. */
   knnK?: number;
+  /**
+   * Lower / upper bound for the paper-white ratio r(λ) = B_paper / A_paper.
+   * Default `[0.3, 3.0]`. Activates against OBA-disparate substrate pairs
+   * where the legitimate ratio at 380 nm can exceed 5–7×. The clamped value
+   * is honest but biased — the UI should surface `clampedBands.length` so
+   * the user knows where to distrust D1.
+   */
+  ratioClamp?: readonly [number, number];
 }
 
 /**
- * Compute the per-λ paper-white ratio with a guard against zero division.
+ * Compute the per-λ paper-white ratio with a guard against zero division
+ * AND an explicit clamp to the user-configured bounds. Both the raw and
+ * the clamped vectors are returned so the UI can inspect them; the
+ * clamped vector is the one used by the predictor.
  */
-function computeRatio(specA: number[], specB: number[]): Float64Array {
+function computeRatio(
+  specA: number[],
+  specB: number[],
+  clamp: readonly [number, number],
+): { r: Float64Array; rUnclamped: Float64Array; clampedBands: Int32Array } {
   const L = specA.length;
   const r = new Float64Array(L);
+  const rUnclamped = new Float64Array(L);
+  const clampedList: number[] = [];
+  const [lo, hi] = clamp;
   for (let l = 0; l < L; l++) {
     const a = specA[l];
     const b = specB[l];
-    r[l] = a > RATIO_GUARD ? b / a : 1;
+    const raw = a > RATIO_GUARD ? b / a : 1;
+    rUnclamped[l] = raw;
+    if (raw < lo) {
+      r[l] = lo;
+      clampedList.push(l);
+    } else if (raw > hi) {
+      r[l] = hi;
+      clampedList.push(l);
+    } else {
+      r[l] = raw;
+    }
   }
-  return r;
+  return { r, rUnclamped, clampedBands: Int32Array.from(clampedList) };
 }
 
 /**
@@ -154,14 +190,17 @@ export function fitPaperRatioResidual(
   const k = anchorIdx.length;
   if (k < 1) throw new Error(`fitPaperRatioResidual: need k ≥ 1, got ${k}`);
 
-  // Per-λ ratio from paper anchor.
+  const clamp: readonly [number, number] = options.ratioClamp
+    ?? [DEFAULT_RATIO_MIN, DEFAULT_RATIO_MAX];
+
+  // Per-λ ratio from paper anchor (with clamp + diagnostics).
   const paperA = new Array<number>(L);
   const paperB = new Array<number>(L);
   for (let l = 0; l < L; l++) {
     paperA[l] = X_A[paperRowIdx * L + l];
     paperB[l] = X_B[paperRowIdx * L + l];
   }
-  const r = computeRatio(paperA, paperB);
+  const { r, rUnclamped, clampedBands } = computeRatio(paperA, paperB, clamp);
 
   // Residual anchors = anchors minus the paper anchor.
   const residualIdx = anchorIdx.filter(i => i !== paperRowIdx);
@@ -171,6 +210,9 @@ export function fitPaperRatioResidual(
     return {
       paperRowIdx,
       r,
+      rUnclamped,
+      clampedBands,
+      clamp,
       residualBasis: null,
       residualAnchorIdx: [],
       residualAnchorRGB: new Float64Array(0),
@@ -232,6 +274,9 @@ export function fitPaperRatioResidual(
   return {
     paperRowIdx,
     r,
+    rUnclamped,
+    clampedBands,
+    clamp,
     residualBasis,
     residualAnchorIdx: residualIdx,
     residualAnchorRGB: anchorRGB,
@@ -292,6 +337,8 @@ export interface PaperRatioResidualRunInput {
   targetProfile: string;
   residualRank?: number;
   knnK?: number;
+  /** Paper-ratio clamp. Default `[0.3, 3.0]`. See PaperRatioResidualOptions. */
+  ratioClamp?: readonly [number, number];
 }
 
 export interface PaperRatioResidualRunResult {
@@ -317,6 +364,7 @@ export function runPaperRatioResidualTransfer(
   const fit = fitPaperRatioResidual(X_A, X_B, D, L, anchorIdx, paperRowIdx, {
     residualRank: input.residualRank,
     knnK: input.knnK,
+    ratioClamp: input.ratioClamp,
   });
   const X_pred = applyPaperRatioResidual(X_A, D, L, fit, {
     residualRank: input.residualRank,

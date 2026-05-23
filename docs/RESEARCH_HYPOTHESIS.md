@@ -163,6 +163,40 @@ PCA predictor B1 (basis built from A alone) at fixed k = 15.
 
 ---
 
+## H8 — OBA-aware D1 dominance on OBA-mismatched pairs (2026-05, data-driven)
+
+For substrate pairs (A, B) with `oba_mismatch(A, B) ≥ 0.10` (R(440)/R(550)
+score difference, see `lib/predict/oba.ts`), the D1 predictor with the default
+ratio clamp `[0.3, 3.0]` **beats** the A3 per-λ affine predictor in median
+ΔE00 on the held-out subset.
+
+### Why this is non-trivial
+
+A3 has 72 free parameters (2 per λ) and can in principle absorb arbitrary
+per-wavelength offsets, including the OBA fluorescence shift at 380–440 nm.
+D1 has fewer free parameters (36 ratio + low-rank residual) and its first-
+order assumption (pure multiplicative substrate) is structurally wrong when
+OBA differs. The hypothesis bets that D1's *structural* assumption is closer
+to the physical truth than A3's *purely empirical* per-λ fit, **as long as**
+the ratio clamp prevents catastrophic blow-up where the raw ratio exceeds
+3× (typical in 380–390 nm for OBA-disparate pairs).
+
+### Acceptance & falsification
+
+- Pass: among substrate pairs with `oba_mismatch ≥ 0.10`, D1 (rank ≤ 3, clamp
+  default) beats A3 by at least 0.05 in median ΔE00 on **≥ 60 %** of the
+  pairs.
+- Reject: D1 ties or loses on ≥ 50 % of OBA-mismatched pairs.
+
+### Tests
+
+First data point: 2026-05-23 row in `EXPERIMENTS.md`, DecorMatte ↔ Lyve
+(both CanvasMatte, OBA mismatch 0.179). D1 wins by 0.09 ΔE00 and 2× higher
+R². Need batch run over all 27 × 26 = 702 directed pairs (Phase 7) to
+properly test H8.
+
+---
+
 ## Conventions
 
 - All ΔE values are CIEDE2000 unless explicitly tagged ΔE76.

@@ -6,6 +6,13 @@ import ProfileList from './components/ProfileList';
 import ComparisonView from './components/ComparisonView';
 import TransferView from './components/TransferView';
 
+// Dev-only: expose store on window for Playwright introspection and console
+// debugging (e.g. extracting paper spectra to investigate OBA effects).
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__store = useProfileStore;
+}
+
 type Tab = 'compare' | 'transfer';
 
 function App() {

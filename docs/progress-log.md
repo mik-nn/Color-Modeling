@@ -6,6 +6,88 @@
 
 ---
 
+## 2026-05-23 — Phase 3.5: OBA-aware D1 (ratio clamp + UI mismatch tile)
+
+User observation triggered this commit: the spectral difference between
+substrates in 380–390 nm is dominated by optical brighteners (OBA / FWA),
+not by ink-paper optics. Empirical dump (commit 1e73dc6, second EXPERIMENTS
+row) confirmed: R_paper(380 nm) ranges 0.117 → 0.819 across 8 sampled
+substrates — a **7× spread**. Substrate-class name does NOT predict OBA
+content (DecorMatte 0.117 and Lyve 0.663 are both CanvasMatte).
+
+D1's `r(λ) = B_paper / A_paper` predictor blows up at those bands without
+protection. A3's per-λ affine handles the linear part but cannot model the
+non-linear OBA-vs-ink-coverage interaction.
+
+### Changes
+
+- **`frontend/src/lib/predict/oba.ts` (new)** — `detectOBA(spectrum)` returns
+  `{ score = R(440)/R(550), r380, r440, r550, hasOBA }`. `obaMismatch(a, b)`
+  is symmetric, non-negative. `obaMismatchSeverity` buckets into
+  low / moderate / high at 0.05 / 0.15 thresholds.
+- **`frontend/src/lib/predict/oba.test.ts` (+6 tests)** — flat spectrum
+  score ≈ 1; synthetic 440 nm bump score > 1.1; bounds checks; symmetry;
+  severity buckets.
+- **`frontend/src/lib/predict/paperRatioResidual.ts`** — finalised the
+  ratio clamp. New options field `ratioClamp: [number, number]` default
+  `[0.3, 3.0]`. Fit now records `r` (clamped), `rUnclamped` (raw),
+  `clampedBands: Int32Array` (indices where clamp fired), `clamp` (bounds
+  used). Plumbed through `applyPaperRatioResidual` and
+  `runPaperRatioResidualTransfer`.
+- **`frontend/src/lib/predict/paperRatioResidual.test.ts` (+2 tests)** —
+  no clamp in normal range; clamp activates at extreme ratios and bands
+  list matches; custom `ratioClamp` honoured.
+- **`frontend/src/components/TransferView.tsx`** —
+  - Profile dropdowns now show `(OBA x.xx)` suffix per profile.
+  - New `OBAMismatchTile` above head-to-head: shows mismatch score with
+    red/yellow/green severity colouring; per-band table for ref + target
+    (R(380), R(440), R(550), score); short advisory text matching severity.
+  - D1 detail block now shows `clamped bands: N/36` when the ratio clamp
+    fired, with explanatory text.
+- **`frontend/src/App.tsx`** — kept the dev-only `window.__store =
+  useProfileStore` line that landed during OBA dump investigation. Used
+  by Playwright introspection to extract paper spectra for analysis.
+
+### Hypothesis added
+
+- **H8** in `docs/RESEARCH_HYPOTHESIS.md`: for OBA-mismatched pairs
+  (`oba_mismatch ≥ 0.10`), D1 with default clamp beats A3 in median ΔE00
+  on ≥ 60 % of pairs. Falsifiable via Phase 7 batch runner.
+
+### First data point (EXPERIMENTS row)
+
+DecorMatte (no OBA, R(380) = 0.117, score = 1.195) vs Lyve (OBA-loaded,
+R(380) = 0.663, score = 1.017) — both CanvasMatte, OBA mismatch 0.179.
+
+| Predictor | median ΔE00 | P95 ΔE00 | R² | RMS |
+|---|---|---|---|---|
+| A3 | 1.54 | 5.94 | 0.428 | 0.0210 |
+| D1 (rank 2, clamp) | **1.45** | **5.36** | **0.846** | **0.0166** |
+
+D1 wins by 0.09 ΔE00 and 2× higher R². **Meets H4 target (≤ 1.5);** A3
+misses by 0.04. Clamp fired on 2/36 bands (380, 390 nm — raw ratios 5.67×,
+4.82× clamped to 3.0×). Screenshot:
+`docs/experiments/2026-05-23-oba-mismatch-decormatte-lyve.png`.
+
+### Verification
+
+- `npx tsc --noEmit` → exit 0
+- `npx vitest run` → **102/102 passed** (was 93; +6 oba + 2 clamp + 1
+  TransferView wiring)
+- `npx vite build` → 331 KB / 101 KB gzip, success
+- Playwright headless: OBA mismatch tile renders red (0.179 high),
+  clamped-bands count visible in D1 block, A3 vs D1 head-to-head shows
+  D1 winning by 0.09 ΔE00 on the first OBA-disparate pair.
+
+### Next
+
+Phase 4 — B3 pool-PCA predictor (basis from all 27 profiles, expected to
+help on OBA-disparate pairs because OBA pattern is shared across many
+substrates in the pool). Phase 5 — S2 greedy adaptive anchor selection.
+Phase 7 — H4/H8 batch runner over all 702 directed pairs.
+
+---
+
 ## 2026-05-23 — Phase 3: D1 paper-ratio + PCA residual + head-to-head TransferView
 
 Phase 3 lands the second predictor (D1) and a head-to-head comparison mode so
