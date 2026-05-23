@@ -6,6 +6,22 @@
 
 ---
 
+## 2026-05-23 — Standing permission: Playwright + screenshots (CLAUDE.md §7.1)
+
+Added `CLAUDE.md` §7.1 — the agent is now expected to start the dev server,
+drive it with Playwright (headless by default), and capture screenshots
+without asking permission after every non-trivial frontend change. First
+applied while diagnosing the Phase 2 `TransferView` panel: a screenshot
+proved the new tab was rendering and that the empty-state message was the
+expected behaviour when no profiles are loaded. A follow-up screenshot with
+two real P9000 ICMs loaded showed populated metrics (median ΔE00 = 0.50,
+P95 = 1.71, k = 13 anchors out of 905 shared SAMPLE_IDs) — A3 baseline
+clearly meets the H4 acceptance bound on this pair.
+
+Workflow + scope documented in `CLAUDE.md` §7.1.
+
+---
+
 ## 2026-05-23 — Phase 2: A3 per-λ affine predictor + S1 heuristic anchors + TransferView UI
 
 Phase 1 was infra-only — no visible output. This phase lands the first predictor end

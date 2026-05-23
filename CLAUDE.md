@@ -176,6 +176,39 @@ frontend/src/
 
 ---
 
+## 7.1 Standing permission: Playwright + screenshots
+
+You may **always** start the local dev server, drive it with Playwright (the
+`playwright` skill, headless or headed), and capture screenshots **without
+asking first**. The user expects you to verify UI changes visually after every
+non-trivial frontend edit — not to wait for permission.
+
+Workflow:
+
+1. If a dev server is not already running, start `npm run dev` in `frontend/`
+   in the background.
+2. Use the `playwright` skill (`/home/mikz/.claude/skills/playwright`) to
+   detect running servers, navigate, and screenshot.
+3. Save screenshots under `/tmp/` (auto-cleaned) for ephemeral checks, or
+   under `docs/experiments/YYYY-MM-DD-<slug>.png` when the screenshot is
+   evidence for an `EXPERIMENTS.md` row.
+4. Load real sample profiles from
+   `/mnt/e/PET/LinkedInPosts/surecolor-p9000/` when you need populated UI
+   (do NOT copy them into the repo — they are gitignored sample data).
+
+Headless screenshots are fine for verification; switch to `headless: false`
+only when the user explicitly asks to *see* the browser open.
+
+What this permission does NOT cover:
+
+- Pushing screenshots to external services (gist, imgur, etc.) — still asks.
+- Modifying the user's real browser profile / cookies — uses an isolated
+  Playwright context only.
+- Long-running interactive sessions — keep screenshots / runs short and
+  scripted.
+
+---
+
 ## 8. Anti-patterns (do not do)
 
 - Writing code first, "I'll document it later." (No.)
