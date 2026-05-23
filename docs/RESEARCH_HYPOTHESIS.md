@@ -78,6 +78,91 @@ because it gates downstream research on CMYK datasets.
 
 ---
 
+## H3 — Single-profile compression (2026-05, data-driven)
+
+For any RGB profile in the current 27-profile P9000 set, there exists a calibration
+subset K ≤ 80 patches whose measurement enables reconstruction of the remaining
+905 − K patches with **median ΔE00 ≤ 1.5** and **P95 ΔE00 ≤ 3.0** under paper-relative
+D50/2°.
+
+### Acceptance & falsification
+
+- Pass: ≥ 22 of 27 profiles meet the K ≤ 80 bound under at least one of the three
+  Task-1 predictors (A3 per-λ affine baseline, D1 paper-ratio + PCA residual primary,
+  B3 pool-PCA basis backup).
+- Reject: > 5 of 27 profiles require K > 120 under all three predictors.
+
+### Tests
+
+Recorded in `docs/EXPERIMENTS.md` as rows of the form
+`HXX | profile | predictor | strategy | K | medianDE00 | P95DE00 | commit`.
+
+---
+
+## H4 — Cross-substrate transfer (2026-05, data-driven)
+
+Given any directed pair (reference profile A, target profile B) drawn from the 27
+P9000 substrates, k ≤ 15 measurements on B (chosen via the Task-1 greedy ordering)
+suffice to predict the remaining 905 − k patches of B with **median ΔE00 ≤ 1.5** and
+**P95 ΔE00 ≤ 3.0** when A is fully known.
+
+### Acceptance & falsification
+
+- Pass: ≥ 80 % of the 27 × 26 = 702 directed pairs meet the bound under predictor D1
+  (paper-ratio + PCA residual) with anchor strategy S2 (greedy uncertainty reduction).
+- Reject: > 5 % of pairs require k > 30 under D1+S2.
+
+### Tests
+
+Leave-one-out batch under `scripts/experiments/h4_min_k_loo.ts`; results appended to
+`docs/EXPERIMENTS.md` with per-pair k distribution + histogram.
+
+---
+
+## H5 — Low-rankness of the substrate-transform difference (2026-05, data-driven)
+
+Across any two P9000 RGB profiles A and B (joined by common Row:Col:Page), the
+per-patch reflectance difference matrix `(X_B − X_A) ∈ ℝ^{N×L}` has **effective
+rank ≤ 4** — defined as the smallest r such that the rank-r truncated SVD captures
+**≥ 99 % of the Frobenius energy** of `(X_B − X_A)`.
+
+### Why it matters
+
+If H5 holds, predictors D1 (paper-ratio + PCA residual) and B1 (PCA + diagonal
+transform) are well-matched to the data; few free parameters are needed. If H5
+fails, fall back to A3 (per-λ affine, 72 params) or C2/C3 (non-parametric kNN/RBF
+on the ratio).
+
+### Acceptance & falsification
+
+- Pass: ≥ 90 % of the 351 unordered pairs satisfy rank-4 capture ≥ 99 %.
+- Reject: > 10 % of pairs require rank > 6 to capture 99 %.
+
+### Tests
+
+`scripts/experiments/h5_rank_distribution.ts` — SVD over all pairs, output JSON
+histogram of (rank required for 99 % energy) + summary in `docs/EXPERIMENTS.md`.
+
+---
+
+## H6 — Pool-PCA basis vs reference-only PCA basis (2026-05, data-driven)
+
+For substrate pairs (A, B) whose paper-white delta exceeds **5 ΔE76**, the pool-PCA
+predictor B3 (basis built from all 27 profiles) **outperforms** the reference-only
+PCA predictor B1 (basis built from A alone) at fixed k = 15.
+
+### Acceptance & falsification
+
+- Pass: among the 5 pairs with the largest paper-white delta in the dataset, B3
+  beats B1 by at least 0.3 in median ΔE00 on at least 4 of 5.
+- Reject: B1 ≥ B3 on 3+ of 5.
+
+### Tests
+
+`scripts/experiments/h6_pool_vs_ref.ts`.
+
+---
+
 ## Conventions
 
 - All ΔE values are CIEDE2000 unless explicitly tagged ΔE76.

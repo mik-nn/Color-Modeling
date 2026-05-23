@@ -56,12 +56,7 @@ export function nelderMead(
     const iWorst = ord[n];
     const i2nd = ord[n - 1];
 
-    // Convergence check: function range
-    if (fvals[iWorst] - fvals[iBest] < ftol) {
-      return { x: simplex[iBest].slice(), fval: fvals[iBest], nIter: iter, nEval, converged: true };
-    }
-
-    // Convergence check: simplex diameter
+    // Convergence: both function range and simplex diameter must be small
     let maxDiam = 0;
     for (let d = 0; d < n; d++) {
       const bv = simplex[iBest][d];
@@ -70,7 +65,7 @@ export function nelderMead(
         if (dv > maxDiam) maxDiam = dv;
       }
     }
-    if (maxDiam < xtol) {
+    if (fvals[iWorst] - fvals[iBest] < ftol && maxDiam < xtol) {
       return { x: simplex[iBest].slice(), fval: fvals[iBest], nIter: iter, nEval, converged: true };
     }
 

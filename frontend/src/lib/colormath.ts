@@ -1,6 +1,9 @@
 // src/lib/colormath.ts
 // Linear color math: spectral → XYZ, Lab → XYZ under D50/2°
 
+import type { WhitePointXYZ } from '../types';
+export type { WhitePointXYZ };
+
 // CIE 1931 2° standard observer CMFs at 10nm intervals, 380–730nm
 const CMF_X = [
   0.001368, 0.004243, 0.014310, 0.043510, 0.134380, 0.283900, 0.348280, 0.336200, 0.290800,
@@ -83,20 +86,48 @@ function labF(t: number): number {
 }
 
 /**
- * CIE XYZ (D50/2°, Y=100 scale) → CIE Lab.
+ * Default white point on the Y=100 scale — D50 illuminant against a perfect diffuser,
+ * derived from the same SPD + CMF tables as spectraToXYZ (so a perfect reflector
+ * lands at Lab=(100, 0, 0) under this default).
  */
-export function xyzToLab(X: number, Y: number, Z: number): [number, number, number] {
-  const fx = labF(X / (D50_WP[0] * 100));
-  const fy = labF(Y / 100);
-  const fz = labF(Z / (D50_WP[2] * 100));
+export const D50_PERFECT_WHITE: WhitePointXYZ = [
+  D50_WP[0] * 100,
+  100,
+  D50_WP[2] * 100,
+];
+
+/**
+ * CIE XYZ (Y=100 scale) → CIE Lab against an explicit white point.
+ *
+ * Default `wp = D50_PERFECT_WHITE` keeps the historical behaviour: a perfect
+ * diffuser under D50 lands at Lab=(100, 0, 0). Passing a substrate-derived
+ * white point (e.g. the paper patch's XYZ) yields paper-relative Lab where the
+ * paper sample itself sits at (100, 0, 0).
+ */
+export function xyzToLab(
+  X: number,
+  Y: number,
+  Z: number,
+  wp: WhitePointXYZ = D50_PERFECT_WHITE,
+): [number, number, number] {
+  const fx = labF(X / wp[0]);
+  const fy = labF(Y / wp[1]);
+  const fz = labF(Z / wp[2]);
   return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
 }
 
 /**
- * Reflectance spectrum → CIE Lab (D50/2°).
+ * Reflectance spectrum → CIE Lab.
+ *
+ * Pass `wp` to evaluate Lab against a substrate-derived white point. Default is
+ * D50 perfect-white (matches historic xyzToLab(X,Y,Z) behaviour).
  */
-export function spectraToLab(reflectance: number[], startWL = 380): [number, number, number] {
-  return xyzToLab(...spectraToXYZ(reflectance, startWL));
+export function spectraToLab(
+  reflectance: number[],
+  startWL = 380,
+  wp?: WhitePointXYZ,
+): [number, number, number] {
+  return xyzToLab(...spectraToXYZ(reflectance, startWL), wp);
 }
 
 /**
@@ -161,7 +192,7 @@ export function deltaE00(L1: number, a1: number, b1: number, L2: number, a2: num
 
   const avgCp7 = avgCp ** 7;
   const RC = 2 * Math.sqrt(avgCp7 / (avgCp7 + 25 ** 7));
-  const dTheta = 30 * Math.exp(-(((avgHp - 275) / 25) ** 2));
+  const dTheta = 30 * Math.exp(-Math.pow((avgHp - 275) / 25, 2));
   const RT = -Math.sin(2 * dTheta * rad) * RC;
 
   return Math.sqrt(

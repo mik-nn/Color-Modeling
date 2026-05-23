@@ -23,8 +23,9 @@ describe('spectraToXYZ', () => {
 
 describe('xyzToLab', () => {
   it('D50 white point → L≈100, a≈0, b≈0', () => {
-    const [L, a, b] = xyzToLab(95.047, 100.0, 108.883);
-    // Approximate: depends on D50_WP used internally
+    // Use the white XYZ derived from the same SPD tables as the implementation
+    const [Xw, Yw, Zw] = spectraToXYZ(WHITE_SPEC);
+    const [L, a, b] = xyzToLab(Xw, Yw, Zw);
     expect(L).toBeCloseTo(100, 0);
     expect(Math.abs(a)).toBeLessThan(2);
     expect(Math.abs(b)).toBeLessThan(2);
@@ -74,8 +75,8 @@ describe('deltaE00', () => {
     expect(de).toBeCloseTo(2.8615, 2);
   });
 
-  it('ISO 11664-6 pair 17: (50,−1.3802,−84.2814) vs (50,0,−82.7485) ≈ 1.4146', () => {
+  it('Sharma 2005 pair 4: (50,−1.3802,−84.2814) vs (50,0,−82.7485) ≈ 1.0000', () => {
     const de = deltaE00(50, -1.3802, -84.2814, 50, 0, -82.7485);
-    expect(de).toBeCloseTo(1.4146, 2);
+    expect(de).toBeCloseTo(1.0, 2);
   });
 });

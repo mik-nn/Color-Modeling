@@ -6,6 +6,69 @@
 
 ---
 
+## 2026-05-23 — Phase 1: data-driven track shared infrastructure
+
+Strategic pivot from physics-faithful CYNSN to data-driven profile compression and
+cross-substrate transfer (plan: `/home/mikz/.claude/plans/64c2df34-whitepoint-rgb-cmy-bug.md`).
+This commit lands the shared infra used by every predictor and anchor-selection
+method in subsequent phases. No predictors yet — that lands in Phase 2 onward.
+
+Why now: the previous CYNSN track was physics-incorrect for the actual dataset
+(Epson P9000 is a 10-channel printer hiding behind an RGB ICC), and the architecture
+had drifted from any falsifiable hypothesis. Resetting to a data-driven track keeps
+the parser + UI shell + colour math (the parts that work) and rebuilds the analytic
+layer on honest assumptions: empirical regression on RGB → R(λ) with explicit
+acknowledgement that primaries/n/spreading from the old CYNSN had no physical
+meaning on this dataset.
+
+Changes in this commit:
+
+- **`frontend/src/types/index.ts`** — add `WhitePointXYZ`, `SaturationLimits`,
+  `AnchorSet`, `PredictionReport` types. These are the contract between every
+  predictor and the evaluation harness.
+- **`frontend/src/lib/colormath.ts`** — add optional `wp` argument to `xyzToLab` and
+  `spectraToLab`. Default = `D50_PERFECT_WHITE` (matches historic behaviour, no
+  regression). Passing a substrate-derived white point yields paper-relative Lab
+  where the substrate's paper anchor sits at (100, 0, 0).
+- **`frontend/src/lib/dataset/matrix.ts` (new)** — `loadProfileMatrix` builds N×L
+  spectral and N×{3,4} device matrices in stable SAMPLE_ID order so cross-profile
+  joins by `Row:Col:Page` are deterministic. `alignByCommonSampleIds` does the
+  join itself and returns index arrays for the shared subset.
+- **`frontend/src/lib/dataset/split.ts` (new)** — `splitCalTest` with `kfold`,
+  `random`, and `fixed` modes. Deterministic Mulberry32 PRNG under a seed so
+  experiment runs are reproducible across sessions.
+- **`frontend/src/lib/dataset/evaluate.ts` (new)** — `evaluatePrediction` consumes a
+  predicted vs measured spectral matrix and returns the canonical `PredictionReport`:
+  median + P95 ΔE00 (paper-relative WP), mean spectral R², mean RMS, five worst
+  patches by ΔE00.
+- **`frontend/src/lib/dataset/basis.ts` (new)** — minimal PCA: Jacobi
+  eigendecomposition on an L×L covariance matrix (L = 36, plenty fast in pure TS),
+  `fitPCA`/`pcaProject`/`pcaReconstruct`/`varianceExplained`. `fitPoolPCA`
+  concatenates per-profile matrices for hypothesis H6 (pool basis vs ref-only basis).
+- **Pre-existing optimiser flakiness fix (cherry-picked from your uncommitted work)** —
+  `nelderMead` now requires BOTH ftol AND xtol to fire before declaring convergence.
+  The previous behaviour returned the moment one of the two thresholds was hit,
+  which caused the 1D quadratic test to stop at x ≈ 0.3 instead of converging to 0.
+  The rest of your in-progress analyser/component work remains stashed under
+  `stash@{1}` for separate review.
+- **New hypothesis statements: H3, H4, H5, H6** in `docs/RESEARCH_HYPOTHESIS.md`,
+  each with falsifiable acceptance/reject criteria and a pointer to the experiment
+  script that will test it.
+- **New tests:** 4 in `dataset/matrix.test.ts`, 7 in `dataset/split.test.ts`,
+  3 in `dataset/evaluate.test.ts`, 6 in `dataset/basis.test.ts`, 3 in
+  `colormath.wp.test.ts`. Total: 23 new tests covering every Phase 1 module.
+
+Verification (Node 22 via nvm; CI uses Node 20):
+
+- `npx tsc --noEmit` → exit 0.
+- `npx vitest run` → **80/80 passed** (was 57/57 pre-Phase 1; +23 from new tests).
+- `npx vite build` → 304 KB / 93 KB gzip, success.
+
+Next: Phase 2 — A3 per-λ affine predictor + S1 heuristic anchor strategy + minimal
+`TransferView` UI panel. Will compose entirely from the modules landed in this commit.
+
+---
+
 ## 2026-05-23 — DeviceSpace abstraction (foundation) + tsc cleanup
 
 Two parallel chunks of code work shipped together because the tsc fixes are

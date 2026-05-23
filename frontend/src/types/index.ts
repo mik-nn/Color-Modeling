@@ -215,3 +215,56 @@ export interface LinearityResult {
   linearity_confidence: 'high' | 'medium' | 'low';
   matched_patches?: MatchedPatchPair[];
 }
+
+// ─── Data-driven track types (Phase 1 shared infra) ────────────────────────────
+
+/** Tristimulus white point on the Y=100 scale (matches spectraToXYZ output). */
+export type WhitePointXYZ = readonly [number, number, number];
+
+/** Per-channel saturation limits detected by the ink-limit pipeline. */
+export interface SaturationLimits {
+  /** Single-channel limits, 0–1 effective coverage. */
+  perChannel: { C?: number; M?: number; Y?: number; K?: number };
+  /** Optional 2-/3-/4-ink combo limits keyed by channel string ('CY', 'MY', 'CM', 'CMY'). */
+  combos?: Record<string, number>;
+  /** ISO 8601 timestamp of detection run. */
+  detectedAt: string;
+  /** Module identifier + semver so we can invalidate stale runs. */
+  detectorVersion: string;
+}
+
+/** A chosen subset of sample IDs used as anchors / calibration patches. */
+export interface AnchorSet {
+  /** SAMPLE_IDs (e.g. "R3C12P1") of selected anchors. */
+  sampleIds: string[];
+  /** How the set was chosen — must match a strategy in lib/sampling. */
+  strategy: 'forced' | 'random' | 'latinHypercube' | 'dOptimal' | 'greedyUncertainty' | 'fixed';
+  /** Free-form metadata so the strategy can document what it did. */
+  meta?: Record<string, unknown>;
+}
+
+/** Aggregated quality numbers from evaluating a prediction against ground truth. */
+export interface PredictionReport {
+  /** Identifier for the predictor variant (e.g. 'A3_perLambdaAffine'). */
+  variant: string;
+  /** Anchor count actually used (Task 2) or calibration patch count (Task 1). */
+  k: number;
+  /** Median CIEDE2000 across evaluated patches, paper-relative D50/2°. */
+  medianDE00: number;
+  /** 95th percentile CIEDE2000. */
+  p95DE00: number;
+  /** Mean per-patch spectral R² between predicted and measured reflectance. */
+  meanSpectralR2: number;
+  /** Mean per-patch RMS of (R_pred − R_meas), reflectance units 0–1. */
+  meanRMS: number;
+  /** Five worst patches by ΔE00 (sample IDs for inspection). */
+  worstPatchSampleIds: string[];
+  /** Paper-relative white point used for ΔE00. */
+  paperWP: WhitePointXYZ;
+  /** Task 2 only: reference profile filename. */
+  refProfile?: string;
+  /** Target profile filename. */
+  targetProfile: string;
+  /** Number of test patches the report aggregates over. */
+  nTest: number;
+}
