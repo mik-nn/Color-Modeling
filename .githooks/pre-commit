@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Document-Driven Development pre-commit gate.
+#
+# Blocks `feat:` and `fix:` commits whose diff touches frontend/src/lib/
+# or frontend/src/components/ without a matching change to docs/progress-log.md.
+#
+# Bypass with `git commit --no-verify` only for truly trivial changes
+# (typos, comments, dead-code removal) — and then add a one-liner to
+# progress-log.md in the next commit.
+
+set -euo pipefail
+
+# Skip if no commit message yet (this is a pre-commit, not commit-msg, so we
+# inspect the staged diff for intent based on file paths only). We treat any
+# change to lib/ or components/ as "feat/fix-like" — the spirit of DDD is that
+# *all* substantive code changes are logged, not just those tagged feat/fix.
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMRT)
+
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+touches_code=0
+touches_log=0
+
+while IFS= read -r f; do
+  case "$f" in
+    frontend/src/lib/*|frontend/src/components/*)
+      touches_code=1
+      ;;
+    docs/progress-log.md)
+      touches_log=1
+      ;;
+  esac
+done <<< "$STAGED"
+
+if [ "$touches_code" -eq 1 ] && [ "$touches_log" -eq 0 ]; then
+  cat >&2 <<EOF
+ERROR: Document-Driven Development gate
+
+This commit touches code in frontend/src/lib/ or frontend/src/components/
+but does NOT update docs/progress-log.md.
+
+The DDD rule: every substantive code change is reflected in the progress log
+as part of the same commit. Add a paragraph to docs/progress-log.md describing
+what changed and WHY, then re-stage and commit again.
+
+Trivial exceptions (typos, comments, dead-code removal) may bypass with:
+  git commit --no-verify
+
+…but then please log it in your next commit.
+
+See CLAUDE.md §1 and §3 for the full rule.
+EOF
+  exit 1
+fi
+
+exit 0

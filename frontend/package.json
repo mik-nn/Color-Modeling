@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "bash scripts/install-hooks.sh || true",
     "predev": "vitest run",
     "dev": "vite",
     "build": "vite build",

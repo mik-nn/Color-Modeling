@@ -6,6 +6,34 @@
 
 ---
 
+## 2026-05-23 — DDD enforcement: pre-commit hook
+
+Wire the DDD loop into git. Without a hook, future commits will drift back to "I'll
+document it later" — the project's prior state, which produced the audit findings in the
+previous entry.
+
+- **`.githooks/pre-commit` (new)** — fails when `git diff --cached` touches
+  `frontend/src/lib/` or `frontend/src/components/` without a matching change to
+  `docs/progress-log.md`. Bypass with `--no-verify` only for trivial fixes (typos,
+  comments, dead code) — and then log it in the following commit.
+- **`frontend/scripts/install-hooks.sh` (new)** — idempotent `chmod +x .githooks/* &&
+  git config core.hooksPath .githooks`. Safe to re-run; skips silently outside a git
+  work tree (e.g. tarball install).
+- **`frontend/package.json`** — `postinstall` script runs the installer so every
+  `npm install` keeps the hook active. Guarded with `|| true` so a missing repo does
+  not fail the install.
+
+Rationale for raw `.githooks/` vs husky: zero new dependencies, one shell file in the
+repo, identical onboarding (`npm install`). Husky's added value (auto-wiring of
+`core.hooksPath` from `node_modules`) is exactly what `install-hooks.sh` does in a
+fraction of the lines.
+
+Verification: `git config core.hooksPath` returns `.githooks` after `npm install`.
+Commit 2 of today's session (this commit) passed the gate because it updates
+`progress-log.md`.
+
+---
+
 ## 2026-05-23 — Documentation revision (DDD foundation)
 
 Project-wide doc audit and reset. Reasons: documentation had drifted significantly from
