@@ -73,17 +73,63 @@ with `(c=0.5, m=0, y=0)` and a patch with `(c=0, m=0, y=0.3)` may both end
 up at `A(380) ≈ 0.10` on the reference substrate but have very different
 OBA-killing on the target — C7 predicts the same `B(380)` for both → wrong.
 
-**A correct OBA predictor needs an explicit per-ink coverage covariate**, e.g.:
+**Two architectural paths address this**:
+
+#### Path 1: Per-ink coverage covariate predictor (`C9` — planned)
+
+Add ink coverage as an explicit covariate:
 
 ```
 B(λ, RGB) ≈ a(λ) · A(λ, RGB) + b(λ) + Σ_ink γ_λ(ink) · coverage(ink, RGB)
 ```
 
 For 3 RGB→CMY channels: `2 + 3 = 5` free params per λ. Needs ≥ 5 anchors
-that span coverage of each channel (e.g. paper + 100 % C + 100 % M +
-100 % Y + 1 mid-anchor for stability) for OLS to be well-conditioned.
+spanning coverage of each channel for OLS to be well-conditioned.
 
-**Designated as predictor candidate `C9` — not yet implemented.**
+#### Path 2: Pre-processing OBA separation (`D7` — planned, PREFERRED) ★
+
+**OBA can be extracted analytically from the paper spectrum alone, with no
+extra measurement.** The fluorescence bump at 420–450 nm sits on top of the
+substrate's smooth base reflectance. Algorithm:
+
+1. **Estimate substrate_base shape** by fitting a smooth (polynomial / smoothing
+   spline) curve to `R_paper(λ)` over the OBA-free range, λ ∈ [460, 730].
+2. **Extrapolate substrate_base back to λ ∈ [380, 450]**.
+3. **Per-λ in the OBA band**:
+   `OBA_emission(λ) = max(0, R_paper(λ) − substrate_base(λ))`.
+
+Per-patch OBA scaling (two options, both work without extra anchors):
+
+- **(a) UV-block proxy from existing spectra**:
+  `UV_block(patch) = max(0, 1 − R_patch(380) / R_paper(380))`
+  → `OBA_factor(patch) = max(0, 1 − UV_block(patch))`
+- **(b) 1-anchor calibration**: one yellow solid on B empirically pins
+  the maximum-block coefficient; interpolate linearly for other patches.
+
+Subtract from EVERY measured patch on both substrates:
+
+```
+R_clean(patch, λ) = R_measured(patch, λ) − OBA_factor(patch) · OBA_emission(λ)
+```
+
+Run ANY predictor on `R_clean_A` → `R_clean_B`. At the end, ADD OBA back to
+the prediction using the target's `OBA_emission_B` and the same `OBA_factor`
+(which depends on the patch's RGB, not on the substrate):
+
+```
+R_pred(patch, λ) = R_pred_clean(patch, λ) + OBA_factor(patch) · OBA_emission_B(λ)
+```
+
+**Why this is preferred**: structurally removes OBA from the cross-substrate
+problem, so even simple predictors (A3 / C7) work on clean spectra. The
+catastrophic S3-cyan failure mode (k=5, median 9.28) is expected to disappear
+because the cyan ramp's R_clean at 380 nm DOES vary with cyan coverage once
+the OBA bump is gone. C9's 5-params-per-λ overhead is also avoided.
+
+**Designated as predictor wrapper candidate `D7` — not yet implemented.**
+The user observed (2026-05-24) that since both substrates are fully measured
+in the research dataset, OBA can be computed by analysis alone — no extra
+field needed.
 
 ### 1.6 OBA-mismatch impact on existing predictors
 
