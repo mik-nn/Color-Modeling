@@ -6,6 +6,100 @@
 
 ---
 
+## 2026-05-24 — Phase 7: D7 OBA-separation wrapper (analytic, no extra anchor)
+
+User-articulated insight ("у нас же есть измерения на 2х подложках"): since
+both substrates are fully measured in the research dataset, the OBA
+fluorescence component can be extracted analytically from the paper spectra
+alone — no extra measurement needed. Wraps any base predictor with a
+pre-clean / post-add-back pipeline.
+
+### Algorithm (per knowledge-base §1.5 path 2)
+
+1. **Extract OBA emission per substrate** from paper spectrum:
+   - Fit degree-2 polynomial to `R_paper(λ)` over the OBA-free range
+     λ ∈ [460, 730] nm.
+   - Extrapolate base polynomial back to λ ∈ [380, 450] nm.
+   - `OBA_emission(λ) = max(0, R_paper(λ) − base(λ))` in the OBA band.
+2. **Per-patch OBA factor** in [0, 1]:
+   `factor(patch) = clamp(R_patch(380) / R_paper(380), 0, 1)`. UV-block
+   proxy from existing spectra — no additional measurement.
+3. **Pre-clean** both ref and target matrices:
+   `R_clean = R_measured − factor · emission`.
+4. **Run any base predictor** on `(R_clean_A → R_clean_B)`.
+5. **Add OBA back** to the prediction:
+   `R_pred = R_pred_clean + factor · emission_B`.
+
+### Changes
+
+- **`frontend/src/lib/predict/obaSeparator.ts` (new)**:
+  - `extractOBAEmission(paperSpec, options)` — quadratic-extrapolation OBA
+    extractor; returns emission per λ, base-coeffs, peak amplitude.
+  - `computeOBAFactorPerPatch(X, L, paperIdx)` — UV-block proxy.
+  - `subtractOBA / addOBA` — element-wise, [0, 1]-clamped.
+  - `runOBASeparatedTransfer({basePredict, ...})` — full wrapper, returns
+    standard `PredictionReport` with `variant = "D7_<base>"`.
+- **`frontend/src/lib/predict/obaSeparator.test.ts` (+8 tests)**: flat-paper
+  zero-emission, Gaussian-bump recovery, non-negative emission, UV-block
+  proxy bounds, subtract→add roundtrip, identity-predictor wrapping,
+  bump-detection on target paper.
+- **`frontend/src/components/TransferView.tsx`**:
+  - New "D7 OBA-separate" checkbox (control row expanded 4→5 columns).
+  - Inline OBA pre-clean of `X_A`, `X_B`, and the pool matrices when
+    enabled (pool gets target's emission as a proxy).
+  - Each predictor adapter (A3, D1, B3, C7) detects the toggle and
+    post-adds OBA back via `evalWithOBABack` before evaluating.
+  - New `OBAExtractionTile` showing per-λ emission (380–460 nm) for ref +
+    target with peak amplitude and peak λ.
+
+### First data point (DecorMatte ref → Lyve target)
+
+| Strategy | k  | Predictor | D7 OFF | D7 ON | Δ |
+|---|---|---|---|---|---|
+| S1       | 13 | A3       | 1.54   | 1.50  | −0.04 |
+| S1       | 13 | D1       | 1.45   | 1.42  | −0.03 |
+| S1       | 13 | B3       | 2.17   | 2.21  | +0.04 |
+| S1       | 13 | C7       | 1.28   | 1.30  | +0.02 |
+| S3 cyan  |  5 | A3       | 9.31   | 9.23  | −0.08 |
+| S3 cyan  |  5 | **D1**   | **2.93** | **2.42** | **−0.51** |
+| S3 cyan  |  5 | B3       | 21.28  | 21.69 | +0.41 |
+| S3 cyan  |  5 | C7       | 9.28   | 8.88  | −0.40 |
+
+Extracted OBA: A (DecorMatte) peak = 0.106 @ 410 nm; B (Lyve) peak = 0.000
+(no OBA, as expected from per-substrate dump).
+
+**Direction-of-OBA matters**: this pair has OBA in the REF only, so the
+predicted target naturally has no OBA contribution to add back. The win is
+in stripping OBA from the ref so the cross-substrate signal is no longer
+contaminated by the 380–410 nm bump. **D1 + S3 cyan benefits most** (−0.51
+median ΔE00) because that combination was the catastrophic failure case
+in Phase 6 — D7 directly addresses it. B3 slightly degrades because pool
+basis was rebuilt with target's (zero) emission proxy for ALL pool, biased
+for OBA-rich pool members.
+
+### Verification
+
+- `npx tsc --noEmit` → exit 0
+- `npx vitest run` → **130/130 passed** (was 122; +8 obaSeparator)
+- `npx vite build` → 350 KB / 106 KB gzip, success
+- Playwright headless sweep — 4 configurations (S1/S3cyan × D7 ON/OFF),
+  numbers extracted, screenshots captured.
+
+Screenshots:
+
+- `docs/experiments/2026-05-24-d7-s1-on-decormatte-lyve.png`
+- `docs/experiments/2026-05-24-d7-s3cyan-on-decormatte-lyve.png`
+
+### Next
+
+(a) Run inverse pair (Lyve→DecorMatte) where target has heavy OBA, to
+exercise the "add OBA back" branch; (b) Phase 8 batch runner over many
+OBA-disparate pairs for statistical verdict on D7's impact; (c) Improve
+per-pool-profile OBA extraction in the B3 path (currently uses target's
+emission as global proxy — should use each pool profile's own paper).
+
+---
+
 ## 2026-05-24 — Phase 6: C7 per-λ monotone curve + S3 single-channel ramp anchors
 
 User hypothesis: substrate transform `B = f_λ(A)` is a function of A per

@@ -26,9 +26,18 @@ import {
 import { runPaperRatioResidualTransfer } from '../lib/predict/paperRatioResidual';
 import { detectOBA, obaMismatch, obaMismatchSeverity, type OBAInfo } from '../lib/predict/oba';
 import { fitPoolBasis, runPoolPCATransfer } from '../lib/predict/poolPCATransfer';
-import { runPerLambdaCurveTransfer } from '../lib/predict/perLambdaCurve';
+import { runPerLambdaCurveTransfer, applyPerLambdaCurve } from '../lib/predict/perLambdaCurve';
+import { evaluatePrediction } from '../lib/dataset/evaluate';
 import { runGreedyActiveAnchors, type GreedyResult } from '../lib/sampling/greedy';
 import { pickChannelRampAnchors, type RampChannel } from '../lib/sampling/channelRamp';
+import {
+  extractOBAEmission,
+  computeOBAFactorPerPatch,
+  subtractOBA,
+  addOBA,
+  type OBAExtraction,
+} from '../lib/predict/obaSeparator';
+import { applyPerLambdaAffine } from '../lib/predict/perLambdaAffine';
 
 type PredictorKey = 'A3' | 'D1' | 'B3' | 'C7' | 'A3_vs_D1' | 'ALL';
 type AnchorStrategy = 'S1' | 'S2' | 'S3';
@@ -58,6 +67,10 @@ type RunResult =
       obaRef: OBAInfo;
       obaTarget: OBAInfo;
       obaMismatchScore: number;
+      /** Present only when obaSeparate=true. Per-substrate analytic emission. */
+      obaExtractionA?: OBAExtraction;
+      obaExtractionB?: OBAExtraction;
+      obaSeparateEnabled: boolean;
     };
 
 function deColor(de: number): string {
@@ -98,6 +111,7 @@ export default function TransferView({ profiles }: Props) {
   const [greedyMaxK, setGreedyMaxK] = useState<number>(40);
   const [rampChannel, setRampChannel] = useState<RampChannel>('neutral');
   const [rampLevels, setRampLevels] = useState<number>(4);
+  const [obaSeparate, setObaSeparate] = useState<boolean>(false);
 
   const refProfile = profiles.find(p => p.metadata.full_name === refName);
   const targetProfile = profiles.find(p => p.metadata.full_name === targetName);
@@ -177,55 +191,166 @@ export default function TransferView({ profiles }: Props) {
       const obaTarget = detectOBA(paperSpecB, { startWL });
       const obaMm = obaMismatch(obaRef, obaTarget);
 
+      // D7 OBA separation (optional): extract emission analytically and
+      // pre-clean both matrices. All predictors below see the clean spectra.
+      // At evaluation/display time we add B's OBA emission back.
+      let X_A_work: Float64Array = X_A;
+      let X_B_work: Float64Array = X_B;
+      let obaExtractionA: OBAExtraction | undefined;
+      let obaExtractionB: OBAExtraction | undefined;
+      let factorsA_local: Float64Array | undefined;
+      let factorsB_local: Float64Array | undefined;
+      if (obaSeparate) {
+        obaExtractionA = extractOBAEmission(paperSpecA, { startWL });
+        obaExtractionB = extractOBAEmission(paperSpecB, { startWL });
+        factorsA_local = computeOBAFactorPerPatch(X_A, L, paperRowIdx, { startWL });
+        factorsB_local = computeOBAFactorPerPatch(X_B, L, paperRowIdx, { startWL });
+        X_A_work = subtractOBA(X_A, L, factorsA_local, obaExtractionA.emission);
+        X_B_work = subtractOBA(X_B, L, factorsB_local, obaExtractionB.emission);
+      }
+
       const runs: PredictorRun[] = [];
 
       // Predictor adapters: each takes a candidate anchor list and returns a
       // PredictionReport (+ extras for the UI). Same shape used by both the
       // S1 single-shot path and the S2 greedy loop.
-      const runA3 = (idx: number[]) => runPerLambdaAffineTransfer({
-        X_A, X_B, sampleIds: aligned.sampleIds, anchorIdx: idx, L,
-        paperWP,
-        refProfile: refProfile.metadata.full_name,
-        targetProfile: targetProfile.metadata.full_name,
-      });
-      const runD1 = (idx: number[]) => runPaperRatioResidualTransfer({
-        X_A, X_B, D: D_B, sampleIds: aligned.sampleIds, anchorIdx: idx,
-        paperRowIdx: idx[0] ?? paperRowIdx, L,
-        paperWP,
-        refProfile: refProfile.metadata.full_name,
-        targetProfile: targetProfile.metadata.full_name,
-        residualRank,
-      });
-      const runC7 = (idx: number[]) => runPerLambdaCurveTransfer({
-        X_A, X_B, sampleIds: aligned.sampleIds, anchorIdx: idx, L,
-        paperWP,
-        refProfile: refProfile.metadata.full_name,
-        targetProfile: targetProfile.metadata.full_name,
-      });
+      //
+      // When D7 OBA-separation is enabled, X_A_work / X_B_work are the
+      // OBA-clean matrices. The predictor sees clean spectra, but we
+      // post-process by adding the target's OBA emission back to every
+      // predicted row before evaluating against the (uncleaned) ground truth.
+      //
+      // Each adapter calls the underlying predictor and, when D7 is on,
+      // augments the returned report with metrics recomputed after adding
+      // OBA back. Implemented inline rather than via the obaSeparator wrapper
+      // because each predictor exposes different "fit" extras we still want
+      // to show in the UI.
+
+      const evalWithOBABack = (
+        X_pred_clean_full: Float64Array,
+        anchorList: number[],
+        variantSuffix: string,
+      ) => {
+        // X_pred_clean_full: N × L predicted matrix on clean scale.
+        // We add B's OBA emission back, then evaluate non-anchor patches
+        // against the original (un-cleaned) X_B.
+        const X_pred = factorsB_local && obaExtractionB
+          ? addOBA(X_pred_clean_full, L, factorsB_local, obaExtractionB.emission)
+          : X_pred_clean_full;
+        const anchorSet = new Set(anchorList);
+        const testIdx: number[] = [];
+        for (let i = 0; i < N; i++) if (!anchorSet.has(i)) testIdx.push(i);
+        const nTest = testIdx.length;
+        const XPredTest = new Float64Array(nTest * L);
+        const XTrueTest = new Float64Array(nTest * L);
+        const sids: string[] = new Array(nTest);
+        for (let t = 0; t < nTest; t++) {
+          const src = testIdx[t];
+          sids[t] = aligned.sampleIds[src];
+          for (let l = 0; l < L; l++) {
+            XPredTest[t * L + l] = X_pred[src * L + l];
+            XTrueTest[t * L + l] = X_B[src * L + l];
+          }
+        }
+        return evaluatePrediction({
+          variant: `D7_${variantSuffix}`,
+          k: anchorList.length,
+          XPred: XPredTest,
+          XTrue: XTrueTest,
+          L,
+          sampleIds: sids,
+          paperWP,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+        });
+      };
+
+      const runA3 = (idx: number[]) => {
+        const base = runPerLambdaAffineTransfer({
+          X_A: X_A_work, X_B: X_B_work,
+          sampleIds: aligned.sampleIds, anchorIdx: idx, L,
+          paperWP,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+        });
+        if (obaSeparate) {
+          // Build the full N×L prediction on clean scale by re-applying the fit.
+          const X_pred_clean = applyPerLambdaAffine(X_A_work, L, base.fit);
+          return { ...base, report: evalWithOBABack(X_pred_clean, idx, 'A3') };
+        }
+        return base;
+      };
+      const runD1 = (idx: number[]) => {
+        const base = runPaperRatioResidualTransfer({
+          X_A: X_A_work, X_B: X_B_work, D: D_B,
+          sampleIds: aligned.sampleIds, anchorIdx: idx,
+          paperRowIdx: idx[0] ?? paperRowIdx, L,
+          paperWP,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+          residualRank,
+        });
+        if (obaSeparate) {
+          return { ...base, report: evalWithOBABack(base.X_pred, idx, 'D1') };
+        }
+        return base;
+      };
+      const runC7 = (idx: number[]) => {
+        const base = runPerLambdaCurveTransfer({
+          X_A: X_A_work, X_B: X_B_work,
+          sampleIds: aligned.sampleIds, anchorIdx: idx, L,
+          paperWP,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+        });
+        if (obaSeparate) {
+          const X_pred_clean = applyPerLambdaCurve(X_A_work, L, base.fit);
+          return { ...base, report: evalWithOBABack(X_pred_clean, idx, 'C7') };
+        }
+        return base;
+      };
 
       // B3 needs a pool basis; build once outside the closure so the greedy
       // loop doesn't re-run SVD per iteration.
-      const b3Ready = poolMatrices && poolMatrices.length >= 2;
+      //
+      // Under D7 OBA-separation the pool spectra should also be cleaned, but
+      // we have no per-pool-profile paper anchor here — fall back to using
+      // the same emission shape as B for all pool profiles. Imperfect but
+      // sufficient because OBA emission shape is similar across substrates
+      // (peak position fixed at ~440 nm), only amplitude differs.
+      const b3Ready = !!poolMatrices && poolMatrices.length >= 2;
+      const poolXs: Float64Array[] = [];
+      const poolNs: number[] = [];
+      if (b3Ready) {
+        for (const m of poolMatrices!) {
+          if (obaSeparate && obaExtractionB) {
+            const f = computeOBAFactorPerPatch(m.X, L, 0, { startWL });
+            poolXs.push(subtractOBA(m.X, L, f, obaExtractionB.emission));
+          } else {
+            poolXs.push(m.X);
+          }
+          poolNs.push(m.N);
+        }
+      }
       const b3Basis = b3Ready
-        ? fitPoolBasis({
-            matrices: poolMatrices.map(m => m.X),
-            rowCounts: poolMatrices.map(m => m.N),
-            L,
-            p: Math.min(poolBasisRank, L),
-          })
+        ? fitPoolBasis({ matrices: poolXs, rowCounts: poolNs, L, p: Math.min(poolBasisRank, L) })
         : null;
       const runB3 = (idx: number[]) => {
         if (!b3Basis) throw new Error('B3 unavailable: need ≥ 2 pool profiles');
-        return runPoolPCATransfer({
+        const base = runPoolPCATransfer({
           basis: b3Basis,
-          X_ref: X_A,
-          X_target: X_B,
+          X_ref: X_A_work,
+          X_target: X_B_work,
           sampleIds: aligned.sampleIds,
           anchorIdx: idx, L,
           paperWP,
           refProfile: refProfile.metadata.full_name,
           targetProfile: targetProfile.metadata.full_name,
         });
+        if (obaSeparate) {
+          return { ...base, report: evalWithOBABack(base.X_pred, idx, 'B3') };
+        }
+        return base;
       };
 
       type Variant = 'A3' | 'D1' | 'B3' | 'C7';
@@ -293,12 +418,14 @@ export default function TransferView({ profiles }: Props) {
         kind: 'ok' as const,
         runs, anchors, alignedN: N,
         obaRef, obaTarget, obaMismatchScore: obaMm,
+        obaExtractionA, obaExtractionB,
+        obaSeparateEnabled: obaSeparate,
       };
     } catch (e) {
       return { kind: 'error' as const, error: e instanceof Error ? e.message : String(e) };
     }
   }, [refProfile, targetProfile, predictor, residualRank, poolMatrices, poolBasisRank,
-      anchorStrategy, greedyTarget, greedyMaxK, rampChannel, rampLevels]);
+      anchorStrategy, greedyTarget, greedyMaxK, rampChannel, rampLevels, obaSeparate]);
 
   if (profiles.length < 2) {
     return (
@@ -367,7 +494,7 @@ export default function TransferView({ profiles }: Props) {
         </label>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         <label className="block">
           <span className="text-xs uppercase tracking-wider text-gray-500">Predictor</span>
           <select
@@ -411,6 +538,20 @@ export default function TransferView({ profiles }: Props) {
             <option value={8}>8</option>
             <option value={12}>12</option>
           </select>
+        </label>
+        <label className="block">
+          <span className="text-xs uppercase tracking-wider text-gray-500">D7 OBA-separate</span>
+          <div className="mt-1 flex items-center gap-3 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm">
+            <input
+              type="checkbox"
+              checked={obaSeparate}
+              onChange={e => setObaSeparate(e.target.checked)}
+              className="accent-blue-500"
+            />
+            <span className={obaSeparate ? 'text-emerald-300' : 'text-gray-400'}>
+              {obaSeparate ? 'ON — predictors run on OBA-clean spectra' : 'OFF — predictors see raw spectra'}
+            </span>
+          </div>
         </label>
         <label className="block">
           <span className="text-xs uppercase tracking-wider text-gray-500">Anchor strategy</span>
@@ -529,6 +670,9 @@ export default function TransferView({ profiles }: Props) {
             obaTarget={result.obaTarget}
             mismatch={result.obaMismatchScore}
           />
+          {result.obaSeparateEnabled && result.obaExtractionA && result.obaExtractionB && (
+            <OBAExtractionTile a={result.obaExtractionA} b={result.obaExtractionB} />
+          )}
 
           {result.runs.length > 1 && (
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
@@ -721,6 +865,52 @@ function Metric({ label, value, cls }: { label: string; value: string; cls: stri
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
       <div className="text-xs uppercase tracking-wider text-gray-500">{label}</div>
       <div className={`text-2xl font-mono mt-1 ${cls}`}>{value}</div>
+    </div>
+  );
+}
+
+function OBAExtractionTile({ a, b }: { a: OBAExtraction; b: OBAExtraction }) {
+  // Compact per-λ emission strip for both substrates, 380–460 nm.
+  const obaBandIdx = [0, 1, 2, 3, 4, 5, 6, 7, 8]; // 380..460 nm @ 10 nm
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-2">
+      <div className="text-xs uppercase tracking-wider text-gray-500">
+        D7 — extracted OBA emission (subtracted before predict, added back after)
+      </div>
+      <div className="grid grid-cols-2 gap-4 text-xs">
+        <div>
+          <div className="text-gray-400 mb-1">
+            Reference paper · peak {a.peakAmplitude.toFixed(3)} @ {380 + a.peakLambdaIdx * 10} nm
+          </div>
+          <div className="font-mono text-gray-300 flex flex-wrap gap-x-3 gap-y-1">
+            {obaBandIdx.map(i => (
+              <span key={i}>
+                λ{380 + i * 10}: <span className={a.emission[i] > 0.02 ? 'text-emerald-300' : 'text-gray-500'}>
+                  {a.emission[i].toFixed(3)}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-400 mb-1">
+            Target paper · peak {b.peakAmplitude.toFixed(3)} @ {380 + b.peakLambdaIdx * 10} nm
+          </div>
+          <div className="font-mono text-gray-300 flex flex-wrap gap-x-3 gap-y-1">
+            {obaBandIdx.map(i => (
+              <span key={i}>
+                λ{380 + i * 10}: <span className={b.emission[i] > 0.02 ? 'text-emerald-300' : 'text-gray-500'}>
+                  {b.emission[i].toFixed(3)}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="text-[11px] text-gray-500">
+        Emission = max(0, R_paper − substrate_base) per λ in the 380–450 nm OBA band, where
+        substrate_base is a degree-2 polynomial fit to R_paper over λ ∈ [460, 730].
+      </p>
     </div>
   );
 }
