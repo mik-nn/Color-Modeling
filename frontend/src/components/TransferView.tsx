@@ -26,8 +26,10 @@ import {
 import { runPaperRatioResidualTransfer } from '../lib/predict/paperRatioResidual';
 import { detectOBA, obaMismatch, obaMismatchSeverity, type OBAInfo } from '../lib/predict/oba';
 import { fitPoolBasis, runPoolPCATransfer } from '../lib/predict/poolPCATransfer';
+import { runGreedyActiveAnchors, type GreedyResult } from '../lib/sampling/greedy';
 
 type PredictorKey = 'A3' | 'D1' | 'B3' | 'A3_vs_D1' | 'ALL';
+type AnchorStrategy = 'S1' | 'S2';
 
 interface Props {
   profiles: ProfileData[];
@@ -41,6 +43,7 @@ interface PredictorRun {
   clampedBandCount?: number;         // D1 only
   poolSize?: number;                 // B3 only
   basisRank?: number;                // B3 only
+  greedy?: GreedyResult;             // S2 only
 }
 
 type RunResult =
@@ -71,6 +74,9 @@ export default function TransferView({ profiles }: Props) {
   const [predictor, setPredictor] = useState<PredictorKey>('A3_vs_D1');
   const [residualRank, setResidualRank] = useState<number>(2);
   const [poolBasisRank, setPoolBasisRank] = useState<number>(6);
+  const [anchorStrategy, setAnchorStrategy] = useState<AnchorStrategy>('S1');
+  const [greedyTarget, setGreedyTarget] = useState<number>(1.5);
+  const [greedyMaxK, setGreedyMaxK] = useState<number>(40);
 
   const refProfile = profiles.find(p => p.metadata.full_name === refName);
   const targetProfile = profiles.find(p => p.metadata.full_name === targetName);
@@ -147,57 +153,105 @@ export default function TransferView({ profiles }: Props) {
 
       const runs: PredictorRun[] = [];
 
-      if (predictor === 'A3' || predictor === 'A3_vs_D1' || predictor === 'ALL') {
-        const a3 = runPerLambdaAffineTransfer({
-          X_A, X_B, sampleIds: aligned.sampleIds, anchorIdx, L,
-          paperWP,
-          refProfile: refProfile.metadata.full_name,
-          targetProfile: targetProfile.metadata.full_name,
-        });
-        runs.push({ variant: 'A3', report: a3.report, perLambdaR2: a3.fit.rSquaredPerLambda });
-      }
+      // Predictor adapters: each takes a candidate anchor list and returns a
+      // PredictionReport (+ extras for the UI). Same shape used by both the
+      // S1 single-shot path and the S2 greedy loop.
+      const runA3 = (idx: number[]) => runPerLambdaAffineTransfer({
+        X_A, X_B, sampleIds: aligned.sampleIds, anchorIdx: idx, L,
+        paperWP,
+        refProfile: refProfile.metadata.full_name,
+        targetProfile: targetProfile.metadata.full_name,
+      });
+      const runD1 = (idx: number[]) => runPaperRatioResidualTransfer({
+        X_A, X_B, D: D_B, sampleIds: aligned.sampleIds, anchorIdx: idx,
+        paperRowIdx: idx[0] ?? paperRowIdx, L,
+        paperWP,
+        refProfile: refProfile.metadata.full_name,
+        targetProfile: targetProfile.metadata.full_name,
+        residualRank,
+      });
 
-      if (predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL') {
-        const d1 = runPaperRatioResidualTransfer({
-          X_A, X_B, D: D_B, sampleIds: aligned.sampleIds, anchorIdx, paperRowIdx, L,
-          paperWP,
-          refProfile: refProfile.metadata.full_name,
-          targetProfile: targetProfile.metadata.full_name,
-          residualRank,
-        });
-        runs.push({
-          variant: 'D1',
-          report: d1.report,
-          residualRank: d1.fit.residualRank,
-          clampedBandCount: d1.fit.clampedBands.length,
-        });
-      }
-
-      if ((predictor === 'B3' || predictor === 'ALL') && poolMatrices && poolMatrices.length >= 2) {
-        // Build the pool basis from every other loaded profile (target excluded).
-        // Each pool profile contributes its full N×L spectral matrix.
-        const matrices = poolMatrices.map(m => m.X);
-        const rowCounts = poolMatrices.map(m => m.N);
-        const basis = fitPoolBasis({
-          matrices, rowCounts, L,
-          p: Math.min(poolBasisRank, L),
-        });
-        const b3 = runPoolPCATransfer({
-          basis,
+      // B3 needs a pool basis; build once outside the closure so the greedy
+      // loop doesn't re-run SVD per iteration.
+      const b3Ready = poolMatrices && poolMatrices.length >= 2;
+      const b3Basis = b3Ready
+        ? fitPoolBasis({
+            matrices: poolMatrices.map(m => m.X),
+            rowCounts: poolMatrices.map(m => m.N),
+            L,
+            p: Math.min(poolBasisRank, L),
+          })
+        : null;
+      const runB3 = (idx: number[]) => {
+        if (!b3Basis) throw new Error('B3 unavailable: need ≥ 2 pool profiles');
+        return runPoolPCATransfer({
+          basis: b3Basis,
           X_ref: X_A,
           X_target: X_B,
           sampleIds: aligned.sampleIds,
-          anchorIdx, L,
+          anchorIdx: idx, L,
           paperWP,
           refProfile: refProfile.metadata.full_name,
           targetProfile: targetProfile.metadata.full_name,
         });
-        runs.push({
-          variant: 'B3',
-          report: b3.report,
-          basisRank: b3.p,
-          poolSize: poolMatrices.length,
-        });
+      };
+
+      type Variant = 'A3' | 'D1' | 'B3';
+      const wantA3 = predictor === 'A3' || predictor === 'A3_vs_D1' || predictor === 'ALL';
+      const wantD1 = predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL';
+      const wantB3 = (predictor === 'B3' || predictor === 'ALL') && b3Ready;
+
+      const dispatch = (v: Variant, idx: number[]) => {
+        if (v === 'A3') return { ...runA3(idx), variant: 'A3' as const };
+        if (v === 'D1') return { ...runD1(idx), variant: 'D1' as const };
+        return { ...runB3(idx), variant: 'B3' as const };
+      };
+
+      const variants: Variant[] = [];
+      if (wantA3) variants.push('A3');
+      if (wantD1) variants.push('D1');
+      if (wantB3) variants.push('B3');
+
+      for (const v of variants) {
+        if (anchorStrategy === 'S2') {
+          const greedy = runGreedyActiveAnchors({
+            predict: (a) => dispatch(v, a).report,
+            seedAnchors: anchorIdx,
+            sampleIds: aligned.sampleIds,
+            targetMedianDE: greedyTarget,
+            maxK: greedyMaxK,
+          });
+          // Re-run dispatch once with final anchors to capture per-variant extras.
+          const finalRun = dispatch(v, greedy.finalAnchors);
+          const base: PredictorRun = { variant: v, report: finalRun.report, greedy };
+          if (v === 'A3') base.perLambdaR2 = (finalRun as ReturnType<typeof runA3>).fit.rSquaredPerLambda;
+          if (v === 'D1') {
+            const f = (finalRun as ReturnType<typeof runD1>).fit;
+            base.residualRank = f.residualRank;
+            base.clampedBandCount = f.clampedBands.length;
+          }
+          if (v === 'B3') {
+            const r = finalRun as ReturnType<typeof runB3>;
+            base.basisRank = r.p;
+            base.poolSize = poolMatrices!.length;
+          }
+          runs.push(base);
+        } else {
+          const r = dispatch(v, anchorIdx);
+          const base: PredictorRun = { variant: v, report: r.report };
+          if (v === 'A3') base.perLambdaR2 = (r as ReturnType<typeof runA3>).fit.rSquaredPerLambda;
+          if (v === 'D1') {
+            const f = (r as ReturnType<typeof runD1>).fit;
+            base.residualRank = f.residualRank;
+            base.clampedBandCount = f.clampedBands.length;
+          }
+          if (v === 'B3') {
+            const br = r as ReturnType<typeof runB3>;
+            base.basisRank = br.p;
+            base.poolSize = poolMatrices!.length;
+          }
+          runs.push(base);
+        }
       }
 
       return {
@@ -208,7 +262,8 @@ export default function TransferView({ profiles }: Props) {
     } catch (e) {
       return { kind: 'error' as const, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [refProfile, targetProfile, predictor, residualRank, poolMatrices, poolBasisRank]);
+  }, [refProfile, targetProfile, predictor, residualRank, poolMatrices, poolBasisRank,
+      anchorStrategy, greedyTarget, greedyMaxK]);
 
   if (profiles.length < 2) {
     return (
@@ -323,11 +378,61 @@ export default function TransferView({ profiles }: Props) {
         </label>
         <label className="block">
           <span className="text-xs uppercase tracking-wider text-gray-500">Anchor strategy</span>
-          <div className="mt-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-400">
-            S1 — forced heuristic (13 anchors)
-          </div>
+          <select
+            value={anchorStrategy}
+            onChange={e => setAnchorStrategy(e.target.value as AnchorStrategy)}
+            className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
+          >
+            <option value="S1">S1 — forced (13 fixed anchors)</option>
+            <option value="S2">S2 — greedy adaptive (S1 seed + grow)</option>
+          </select>
         </label>
       </div>
+
+      {anchorStrategy === 'S2' && (
+        <div className="grid grid-cols-2 gap-4 p-3 rounded-lg border border-gray-800 bg-gray-900/60">
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-gray-500">
+              S2 target median ΔE00
+            </span>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="range"
+                min={0.5} max={5.0} step={0.1}
+                value={greedyTarget}
+                onChange={e => setGreedyTarget(Number(e.target.value))}
+                className="flex-1"
+              />
+              <span className="font-mono text-sm text-gray-200 w-12 text-right">
+                {greedyTarget.toFixed(1)}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Greedy stops as soon as the predictor's median ΔE00 ≤ this.
+            </p>
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-gray-500">
+              S2 max anchors (k cap)
+            </span>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="range"
+                min={15} max={80} step={1}
+                value={greedyMaxK}
+                onChange={e => setGreedyMaxK(Number(e.target.value))}
+                className="flex-1"
+              />
+              <span className="font-mono text-sm text-gray-200 w-12 text-right">
+                {greedyMaxK}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Hard cap on greedy iterations. Each iter ≈ one predictor refit.
+            </p>
+          </label>
+        </div>
+      )}
 
       {result && result.kind === 'error' && (
         <div className="p-3 rounded-lg bg-red-950 border border-red-800 text-red-300 text-sm">
@@ -448,6 +553,44 @@ export default function TransferView({ profiles }: Props) {
                       </span>{' '}
                       wavelengths (default bounds [0.3, 3.0]). Typically signals
                       OBA mismatch in 380–410 nm — distrust D1 at those bands.
+                    </div>
+                  )}
+                </div>
+              )}
+              {run.greedy && (
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-2">
+                  <div className="text-xs uppercase tracking-wider text-gray-500">
+                    S2 greedy trajectory
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <Metric
+                      label="converged?"
+                      value={run.greedy.converged ? 'yes' : 'no (hit cap)'}
+                      cls={run.greedy.converged ? 'text-emerald-400' : 'text-yellow-400'}
+                    />
+                    <Metric
+                      label="iterations"
+                      value={String(run.greedy.trajectory.length)}
+                      cls="text-gray-200"
+                    />
+                    <Metric
+                      label="final k"
+                      value={String(run.greedy.finalAnchors.length)}
+                      cls="text-gray-200"
+                    />
+                  </div>
+                  <div className="text-[11px] text-gray-400">
+                    Per-iter medianΔE00:{' '}
+                    <span className="font-mono text-gray-200">
+                      {run.greedy.trajectory.map(s => s.report.medianDE00.toFixed(2)).join(' → ')}
+                    </span>
+                  </div>
+                  {run.greedy.addedOrder.length > 0 && (
+                    <div className="text-[11px] text-gray-400">
+                      Added patches ({run.greedy.addedOrder.length} rows):{' '}
+                      <span className="font-mono text-gray-200">
+                        {run.greedy.addedOrder.map(rowIdx => `r${rowIdx}`).join(', ')}
+                      </span>
                     </div>
                   )}
                 </div>

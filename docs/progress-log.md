@@ -6,6 +6,76 @@
 
 ---
 
+## 2026-05-24 — Phase 5: S2 greedy adaptive anchor selection
+
+User-facing answer to "what is the minimum k for this ΔE budget?".
+
+Greedy loop on top of any of the existing predictors (A3 / D1 / B3):
+
+1. Start from S1 seed (13 forced anchors).
+2. Run predictor → inspect report.
+3. If `medianDE00 ≤ targetMedianDE` — stop (converged).
+4. Else add `report.worstPatchSampleIds[0]` (skipping rows already in anchors)
+   to the anchor set, refit, loop until `maxK` is hit.
+
+The predictor is treated as a pure callback `(anchorIdx) → PredictionReport`,
+so the same machinery wraps every variant. B3's pool basis is built once
+before the loop (heavy SVD) and reused.
+
+### Changes
+
+- **`frontend/src/lib/sampling/greedy.ts` (new)** — `runGreedyActiveAnchors`
+  with `GreedyPredictor`, `GreedyOptions`, `GreedyStep`, `GreedyResult`
+  types. Trajectory + per-iter step record + converged flag + onIteration
+  callback for live UI updates.
+- **`frontend/src/lib/sampling/greedy.test.ts` (+5 tests)** — converge-at-iter-0
+  when seed already passes, monotone-improving trajectory, maxK cap with
+  `converged=false`, worst-patch already-anchor skip, error guards.
+- **`frontend/src/components/TransferView.tsx`** —
+  - New "Anchor strategy" dropdown: `S1 forced (13)` vs `S2 greedy adaptive`.
+  - S2 control panel (only shown when S2 selected): ΔE target slider
+    (0.5 → 5.0, step 0.1) + max anchors slider (15 → 80, step 1).
+  - Predictor blocks now show an S2 trajectory card when S2 is active:
+    converged flag, iteration count, final k, per-iter median ΔE00
+    trajectory string, list of added rows.
+  - Internal refactor: each variant exposed as a `dispatch(v, anchorIdx)`
+    closure so S2 can call it repeatedly. B3 pool basis built outside
+    the per-variant loop and reused across iterations.
+
+### First data point (EXPERIMENTS row)
+
+DecorMatte (ref) vs Lyve (target), both CanvasMatte, D1 + S2, target
+0.8 ΔE00, max k = 40:
+
+- Seed k=13: median 1.45
+- After 28 iterations (k=40): median **1.33**, P95 3.09, R² 0.941
+- Did NOT converge to 0.8 — hit k cap
+
+**Empirical floor for D1 on this pair ≈ 1.33 ΔE00 even at k=40.**
+Trajectory non-monotone (greedy occasionally adds a patch that worsens
+median locally). P95 dropped 5.36 → 3.09 (43% reduction): the real win
+of going k=13 → k=40 is outlier safety, not median improvement.
+
+Screenshot: `docs/experiments/2026-05-24-s2-greedy-d1-decormatte-lyve.png`.
+
+### Verification
+
+- `npx tsc --noEmit` → exit 0
+- `npx vitest run` → **110/110 passed** (was 105; +5 greedy)
+- `npx vite build` → 339 KB / 102 KB gzip, success
+- Playwright headless: S2 dropdown selects, slider changes value (via
+  native input setter for React), greedy iterations visible in trajectory
+  card, ANCHORS k counter jumps from 13 to 40.
+
+### Next
+
+Phase 7 — H4/H7/H8 batch runner over all 702 directed pairs. With S2
+shipped we can now ask "what's the median minimum-k distribution across
+all substrates?" Will produce a JSON artefact + summary row in
+`EXPERIMENTS.md`.
+
+---
+
 ## 2026-05-24 — Phase 4: B3 pool-PCA predictor + 3-way head-to-head
 
 Third predictor (B3) lands. Uses a PCA basis built from the *pool* of all
