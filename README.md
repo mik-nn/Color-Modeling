@@ -78,6 +78,7 @@ Use `nvm use 20` if your local Node is older.
 | [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) | What each module does. |
 | [docs/Tech.md](docs/Tech.md) | Stack, versions, build/test commands. |
 | [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) | Append-only experiment log. |
+| [docs/knowledge-base.md](docs/knowledge-base.md) | OBA physics, per-ink absorption, predictor / anchor-strategy strengths and weaknesses. |
 | [docs/progress-log.md](docs/progress-log.md) | Per-session changelog. |
 | [docs/cynsn-pipeline.md](docs/cynsn-pipeline.md) | CYNSN flow + known bugs. |
 | [docs/AGENTS.md](docs/AGENTS.md) | Claude Code subagents + skills map. |
