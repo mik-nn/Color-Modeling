@@ -6,6 +6,52 @@
 
 ---
 
+## 2026-05-24 — Substack article draft: data-driven cross-substrate transfer
+
+First publishable summary of Phase 1–7 + UI-cleanup findings. Written for
+a colour-science / print-shop audience with mid-level technical depth.
+Lives at `docs/article-draft.md`; will be copied to Substack manually
+when ready.
+
+### Structure (≈ 3300 words, 10 sections)
+
+1. Hook — IT8.7/4 vs few-patch substrate adaptation.
+2. Setup — Epson SC-P9000, 10-channel-as-RGB caveat, 27 profiles.
+3. Four predictors — A3, D1, B3, C7 with per-λ math.
+4. Three anchor strategies — S1, S2, S3.
+5. Two findings — C7 wins at S1; **C7 + S3 neutral (k=5) BEATS C7 + S1
+   (k=13)** on DecorMatte ↔ Lyve, median ΔE00 1.06 vs 1.28.
+6. OBA detour — R(380) range across substrates, OBA-mismatch table,
+   per-ink UV absorption table (Y = strongest UV blocker), S3 cyan
+   catastrophic failure mode explained.
+7. Fix — D7 analytic OBA separation, 7-step algorithm, before/after
+   table (D1 + S3 cyan 2.93 → 2.42).
+8. Live numbers — pointer to the running tool + repo links.
+9. Limitations — 10-channel printer hides the inks; one-pair anecdote
+   pending 702-pair batch; OBA proxy bias; M0/M2 mixing; B3 still
+   underperforms.
+10. Why this matters — workflow implication: from hours/dollars to
+    minutes/cents per new substrate.
+
+Plus references list (ISO 13655, ISO 11664-6, ISO 17972-3, Wyble & Berns
+2000, Fairchild 2013, ICC.1:2010) and a companion-data section linking
+every quoted number back to its `EXPERIMENTS.md` row.
+
+### Tone + caveats
+
+- Honest framing throughout: "predictions are empirical regressions, not
+  physical ink models".
+- Single-pair anecdote vs statistical claim called out explicitly in §9.
+- All numbers reproducible from a single pair load in the live tool.
+- Headline title proposed: *"Predicting Color Across Print Substrates
+  with 5 Patches"*; alternative for OBA-centric framing kept as
+  comment block.
+
+No code changes in this commit. Pre-commit hook bypassed via the
+"docs-only" path (no touches to `lib/` or `components/`).
+
+---
+
 ## 2026-05-24 — UI cleanup: drop legacy Compare tab + analyser deps
 
 The "Compare (legacy)" tab and every component / analyser it depended on
