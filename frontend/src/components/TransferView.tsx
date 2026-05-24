@@ -26,17 +26,19 @@ import {
 import { runPaperRatioResidualTransfer } from '../lib/predict/paperRatioResidual';
 import { detectOBA, obaMismatch, obaMismatchSeverity, type OBAInfo } from '../lib/predict/oba';
 import { fitPoolBasis, runPoolPCATransfer } from '../lib/predict/poolPCATransfer';
+import { runPerLambdaCurveTransfer } from '../lib/predict/perLambdaCurve';
 import { runGreedyActiveAnchors, type GreedyResult } from '../lib/sampling/greedy';
+import { pickChannelRampAnchors, type RampChannel } from '../lib/sampling/channelRamp';
 
-type PredictorKey = 'A3' | 'D1' | 'B3' | 'A3_vs_D1' | 'ALL';
-type AnchorStrategy = 'S1' | 'S2';
+type PredictorKey = 'A3' | 'D1' | 'B3' | 'C7' | 'A3_vs_D1' | 'ALL';
+type AnchorStrategy = 'S1' | 'S2' | 'S3';
 
 interface Props {
   profiles: ProfileData[];
 }
 
 interface PredictorRun {
-  variant: 'A3' | 'D1' | 'B3';
+  variant: 'A3' | 'D1' | 'B3' | 'C7';
   report: PredictionReport;
   perLambdaR2?: Float64Array;        // A3 only
   residualRank?: number;             // D1 only
@@ -68,6 +70,23 @@ function fmt(n: number, d = 2): string {
   return Number.isFinite(n) ? n.toFixed(d) : '—';
 }
 
+/**
+ * Evenly spaced ramp levels in the 0–255 device-addressing range,
+ * EXCLUDING the paper endpoint (255, picked separately as the paper
+ * anchor). Includes 0 (max ink) when `count ≥ 1`.
+ */
+function evenlySpacedRampLevels(count: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [0];
+  const out: number[] = [];
+  for (let i = 0; i < count; i++) {
+    // i=0 → 192, i=last → 0, evenly spaced.
+    const v = Math.round(192 * (1 - i / (count - 1)));
+    out.push(v);
+  }
+  return out;
+}
+
 export default function TransferView({ profiles }: Props) {
   const [refName, setRefName] = useState<string>('');
   const [targetName, setTargetName] = useState<string>('');
@@ -77,6 +96,8 @@ export default function TransferView({ profiles }: Props) {
   const [anchorStrategy, setAnchorStrategy] = useState<AnchorStrategy>('S1');
   const [greedyTarget, setGreedyTarget] = useState<number>(1.5);
   const [greedyMaxK, setGreedyMaxK] = useState<number>(40);
+  const [rampChannel, setRampChannel] = useState<RampChannel>('neutral');
+  const [rampLevels, setRampLevels] = useState<number>(4);
 
   const refProfile = profiles.find(p => p.metadata.full_name === refName);
   const targetProfile = profiles.find(p => p.metadata.full_name === targetName);
@@ -130,7 +151,12 @@ export default function TransferView({ profiles }: Props) {
         wavelengths: B.wavelengths, sampleIds: aligned.sampleIds, droppedCount: 0,
       };
 
-      const anchors = pickHeuristicAnchors(Baligned);
+      const anchors = anchorStrategy === 'S3'
+        ? pickChannelRampAnchors(Baligned, {
+            channel: rampChannel,
+            levels: evenlySpacedRampLevels(rampLevels),
+          })
+        : pickHeuristicAnchors(Baligned);
       const anchorIdx = anchors.meta?.chosenIdx as number[];
       const paperRowIdx = anchorIdx[0];
 
@@ -170,6 +196,12 @@ export default function TransferView({ profiles }: Props) {
         targetProfile: targetProfile.metadata.full_name,
         residualRank,
       });
+      const runC7 = (idx: number[]) => runPerLambdaCurveTransfer({
+        X_A, X_B, sampleIds: aligned.sampleIds, anchorIdx: idx, L,
+        paperWP,
+        refProfile: refProfile.metadata.full_name,
+        targetProfile: targetProfile.metadata.full_name,
+      });
 
       // B3 needs a pool basis; build once outside the closure so the greedy
       // loop doesn't re-run SVD per iteration.
@@ -196,14 +228,16 @@ export default function TransferView({ profiles }: Props) {
         });
       };
 
-      type Variant = 'A3' | 'D1' | 'B3';
+      type Variant = 'A3' | 'D1' | 'B3' | 'C7';
       const wantA3 = predictor === 'A3' || predictor === 'A3_vs_D1' || predictor === 'ALL';
       const wantD1 = predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL';
       const wantB3 = (predictor === 'B3' || predictor === 'ALL') && b3Ready;
+      const wantC7 = predictor === 'C7' || predictor === 'ALL';
 
       const dispatch = (v: Variant, idx: number[]) => {
         if (v === 'A3') return { ...runA3(idx), variant: 'A3' as const };
         if (v === 'D1') return { ...runD1(idx), variant: 'D1' as const };
+        if (v === 'C7') return { ...runC7(idx), variant: 'C7' as const };
         return { ...runB3(idx), variant: 'B3' as const };
       };
 
@@ -211,6 +245,7 @@ export default function TransferView({ profiles }: Props) {
       if (wantA3) variants.push('A3');
       if (wantD1) variants.push('D1');
       if (wantB3) variants.push('B3');
+      if (wantC7) variants.push('C7');
 
       for (const v of variants) {
         if (anchorStrategy === 'S2') {
@@ -263,7 +298,7 @@ export default function TransferView({ profiles }: Props) {
       return { kind: 'error' as const, error: e instanceof Error ? e.message : String(e) };
     }
   }, [refProfile, targetProfile, predictor, residualRank, poolMatrices, poolBasisRank,
-      anchorStrategy, greedyTarget, greedyMaxK]);
+      anchorStrategy, greedyTarget, greedyMaxK, rampChannel, rampLevels]);
 
   if (profiles.length < 2) {
     return (
@@ -340,11 +375,12 @@ export default function TransferView({ profiles }: Props) {
             onChange={e => setPredictor(e.target.value as PredictorKey)}
             className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
           >
-            <option value="ALL">A3 vs D1 vs B3 (3-way)</option>
+            <option value="ALL">A3 vs D1 vs B3 vs C7 (4-way)</option>
             <option value="A3_vs_D1">A3 vs D1 (head-to-head)</option>
             <option value="A3">A3 — per-λ affine (baseline)</option>
             <option value="D1">D1 — paper-ratio + PCA residual</option>
             <option value="B3">B3 — pool-PCA (basis from {poolMatrices?.length ?? 0} profiles)</option>
+            <option value="C7">C7 — per-λ monotone curve</option>
           </select>
         </label>
         <label className="block">
@@ -385,9 +421,55 @@ export default function TransferView({ profiles }: Props) {
           >
             <option value="S1">S1 — forced (13 fixed anchors)</option>
             <option value="S2">S2 — greedy adaptive (S1 seed + grow)</option>
+            <option value="S3">S3 — single-channel ramp (paper + N ramp anchors)</option>
           </select>
         </label>
       </div>
+
+      {anchorStrategy === 'S3' && (
+        <div className="grid grid-cols-2 gap-4 p-3 rounded-lg border border-gray-800 bg-gray-900/60">
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-gray-500">
+              S3 ramp channel
+            </span>
+            <select
+              value={rampChannel}
+              onChange={e => setRampChannel(e.target.value as RampChannel)}
+              className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
+            >
+              <option value="neutral">neutral gray (R=G=B)</option>
+              <option value="C">cyan (G=B=255, R varies)</option>
+              <option value="M">magenta (R=B=255, G varies)</option>
+              <option value="Y">yellow (R=G=255, B varies)</option>
+            </select>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Channel ramp to use as anchors. Tests the hypothesis that
+              substrate transform is shared across inks.
+            </p>
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-gray-500">
+              S3 ramp levels (excluding paper)
+            </span>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="range"
+                min={1} max={8} step={1}
+                value={rampLevels}
+                onChange={e => setRampLevels(Number(e.target.value))}
+                className="flex-1"
+              />
+              <span className="font-mono text-sm text-gray-200 w-12 text-right">
+                {rampLevels}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Total anchors = paper + N = {1 + rampLevels}. Compare to S1's
+              13. Lower k = lower measurement burden if hypothesis holds.
+            </p>
+          </label>
+        </div>
+      )}
 
       {anchorStrategy === 'S2' && (
         <div className="grid grid-cols-2 gap-4 p-3 rounded-lg border border-gray-800 bg-gray-900/60">

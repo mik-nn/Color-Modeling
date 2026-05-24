@@ -6,6 +6,107 @@
 
 ---
 
+## 2026-05-24 — Phase 6: C7 per-λ monotone curve + S3 single-channel ramp anchors
+
+User hypothesis: substrate transform `B = f_λ(A)` is a function of A per
+wavelength — the same `f_λ` applies to every ink, so anchors from one
+channel ramp suffice. This phase implements the machinery to test it.
+
+### C7 predictor
+
+`lib/predict/perLambdaCurve.ts` — for each λ:
+
+1. Take the k anchor (A(λ), B(λ)) pairs.
+2. Sort by A, dedup colliding A values (average B).
+3. Build a piecewise-linear interpolant.
+4. Apply: bracket-linear inside the range, slope-of-edge extrapolation
+   outside, clamped to [0, 1].
+
+72 free parameters of A3 → up to k free DOF per λ — captures saturation
+curves and OBA non-linearity in a way A3's affine cannot.
+
+### S3 anchor strategy
+
+`lib/sampling/channelRamp.ts` — `pickChannelRampAnchors(profile, {channel,
+levels})` picks paper + N nearest patches along one channel:
+
+- C: G=B=255, R varies.
+- M: R=B=255, G varies.
+- Y: R=G=255, B varies.
+- neutral: R=G=B varies.
+
+Levels in 0–255 device-addressing space (255 = no ink). Default
+`[192, 128, 64, 0]` → 4 ramp anchors + paper = k=5.
+
+### TransferView wiring
+
+- Predictor dropdown gains C7 option and renames ALL to "4-way".
+- Anchor strategy dropdown gains S3 option.
+- New S3 control panel (only shown when S3): channel selector + ramp
+  levels slider (1–8). Surfaces total k = 1 + levels alongside.
+
+### First data points
+
+DecorMatte ↔ Lyve, both CanvasMatte, OBA mismatch 0.179:
+
+| Strategy | k  | A3    | D1    | B3      | **C7**    | Winner |
+|---|---|---|---|---|---|---|
+| S1       | 13 | 1.54  | 1.45  | 2.17    | **1.28**  | C7 |
+| S3 neutral (4 levels) | 5 | 1.53 | 1.42 | 27.00 | **1.06** | C7 |
+| S3 cyan (4 levels)    | 5 | 9.31 | 2.93 | 21.28 | 9.28     | D1 |
+
+**Two findings:**
+
+1. **C7 beats A3, D1, B3 at the same anchor budget (S1, k=13).**
+   The per-λ piecewise curve captures saturation curves the per-λ affine
+   misses, with no need for the paper-ratio decomposition D1 uses.
+
+2. **C7 + S3 neutral (k=5) BEATS C7+S1 (k=13).** User hypothesis confirmed
+   for neutral ramp. Substrate transform is shared across inks when the
+   anchor ramp visits all reflectance levels at every λ. 5 anchors get a
+   median ΔE00 of 1.06 — better than 13 anchors anywhere else.
+
+3. **OBA caveat (user reminder).** C7 + S3 cyan (k=5) explodes to median
+   9.28. Cyan is transparent at 380–410 nm → cyan ramp does not vary
+   A(λ) there → per-λ curve undetermined at OBA bands → catastrophic
+   extrapolation. S3 single-channel ramps only work when the channel
+   absorbs across the full λ range. Neutral does; cyan doesn't.
+
+H9 added to `docs/RESEARCH_HYPOTHESIS.md`. Empirical confirmation on this
+pair + caveat. Phase 7 batch runner needed for definitive verdict.
+
+Screenshots:
+
+- `docs/experiments/2026-05-24-c7-s1-decormatte-lyve.png`
+- `docs/experiments/2026-05-24-c7-s3-neutral-k5-decormatte-lyve.png`
+- `docs/experiments/2026-05-24-c7-s3-cyan-FAIL-decormatte-lyve.png`
+
+### Tests (+11)
+
+- `perLambdaCurve.test.ts` (+6): anchor recovery, dedup, [0,1] clamp,
+  degenerate dedup → constant offset, error guards, end-to-end synthetic
+  monotone-non-affine transform.
+- `channelRamp.test.ts` (+5): C/M/Y/neutral ramp picks, custom levels,
+  nearest-fallback, no-duplicate guarantee, CMYK rejection.
+
+### Verification
+
+- `npx tsc --noEmit` → exit 0
+- `npx vitest run` → **122/122 passed** (was 110; +11)
+- `npx vite build` → 344 KB / 104 KB gzip, success
+- Playwright: 3 head-to-head screenshots captured against real P9000 data,
+  numbers extracted and recorded above.
+
+### Next
+
+Phase 7 — H9/H4/H8 batch runner over all 702 directed pairs (or a sampled
+subset) to produce distributions for the hypothesis tests. Open question:
+add a "blue boost" patch to S3 cyan/magenta/yellow ramps to ground the
+OBA bands, or just ship S3 with a UI warning when a non-neutral channel
+is chosen.
+
+---
+
 ## 2026-05-24 — Phase 5: S2 greedy adaptive anchor selection
 
 User-facing answer to "what is the minimum k for this ΔE budget?".

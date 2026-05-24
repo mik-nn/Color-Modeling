@@ -197,6 +197,61 @@ properly test H8.
 
 ---
 
+## H9 — Per-λ substrate transform is shared across inks (2026-05, data-driven)
+
+User-articulated hypothesis: ink behaviour is *proportional* across substrates.
+If we know the substrate transform `f_λ(A → B)` for one channel ramp (e.g.,
+cyan), we can apply the same `f_λ` to all other channels and predict the full
+target profile from a handful of anchors.
+
+Formal statement: for every λ there exists a monotone function `f_λ` such
+that `B(λ, RGB) ≈ f_λ(A(λ, RGB))` for ALL RGB triples, regardless of which
+inks are active at that RGB. The function is fit empirically per λ from any
+anchor set whose (A, B) pairs span enough of the per-λ reflectance range.
+
+### Why this matters
+
+If true, the measurement burden for cross-substrate transfer drops from "13
+spread anchors" (S1) to "paper + 4 ramp patches = 5 anchors" (S3 + C7).
+For a 905-patch chart, this is the difference between 1.4 % and 0.6 % of
+patches measured.
+
+### Acceptance & falsification
+
+- Pass: C7 predictor + S3 neutral ramp (k=5) achieves median ΔE00 ≤ 1.5 on
+  ≥ 60 % of substrate pairs in the dataset, AND beats A3+S1 (k=13) on
+  ≥ 50 % of those pairs.
+- Reject: ratio of pairs where C7+S3 underperforms A3+S1 exceeds 50 %, OR
+  S3 ramps in different channels (C / M / Y / neutral) produce wildly
+  different results for the same pair (suggests channel-specific
+  transform, contradicting "shared").
+
+### Caveat — OBA-band limitation
+
+S3 single-channel ramps that do NOT visit a wide range of A(λ) at every λ
+will fail at those λ. Cyan ink is transparent at 380–410 nm; a cyan ramp
+leaves the per-λ curve there undefined and the predictor extrapolates
+catastrophically. Empirical confirmation: 2026-05-24 EXPERIMENTS row
+"S3 cyan ramp counterexample" shows C7+S3cyan median 9.28 ΔE00 vs
+C7+S3neutral median 1.06 on the same pair. Neutral gray ramps work
+because they touch all inks proportionally.
+
+### First data point
+
+DecorMatte ↔ Lyve, both CanvasMatte, OBA mismatch 0.179:
+- A3 + S1 (k=13): median 1.54
+- C7 + S1 (k=13): median 1.28 — best at S1 budget
+- C7 + S3 neutral (k=5): median **1.06** — H9 confirmed for neutral ramp
+- C7 + S3 cyan (k=5): median 9.28 — H9 confirmed-with-caveat
+
+### Tests
+
+H9 needs the Phase 7 batch runner over all 702 directed pairs to know
+how often C7+S3neutral wins, and what the worst-case substrate pair
+looks like.
+
+---
+
 ## Conventions
 
 - All ΔE values are CIEDE2000 unless explicitly tagged ΔE76.
