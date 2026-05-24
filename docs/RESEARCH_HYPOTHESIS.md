@@ -252,6 +252,36 @@ looks like.
 
 ---
 
+## H10 — Conditional Autoencoder cross-trained on MK profiles (2026-05-24)
+
+A Conditional Autoencoder trained on 70 % of the MK (matte-black) profile
+subset, with hybrid conditioning (paper spectrum + substrate ID with 30 %
+ID-dropout) and substrate-invariance loss, predicts held-out substrates
+from paper white alone with median ΔE00 ≤ 1.5 on ≥ 60 % of pairs.
+
+### First run (2026-05-24, see EXPERIMENTS)
+
+- Training MSE in reflectance: 0.0009 on the held-out fold.
+- Per-pair median-of-medians ΔE00: 3.20.
+- Pairs achieving median ≤ 1.5: 0 %.
+
+**H10 in its current form is REJECTED.** The CAE without anchor fine-tune
+loses to every classical predictor on every tested pair because A3 / D1 /
+B3 / C7 each see 13 anchors of MEASURED target reflectance while the CAE
+sees only the paper white spectrum.
+
+### H10b (planned)
+
+CAE_RAW + 1-step few-shot fine-tune of substrate_latent_B on k anchors at
+inference reduces median ΔE00 by ≥ 0.5 on held-out pairs.
+
+### H10c (planned, Stage 2)
+
+CAE_D7 (CAE trained on OBA-cleaned spectra, OBA re-added at output) beats
+CAE_RAW on OBA-mismatched held-out pairs (mismatch ≥ 0.10) by ≥ 0.2 ΔE00.
+
+---
+
 ## Conventions
 
 - All ΔE values are CIEDE2000 unless explicitly tagged ΔE76.

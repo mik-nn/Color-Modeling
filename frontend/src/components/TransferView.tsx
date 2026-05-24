@@ -38,8 +38,12 @@ import {
   type OBAExtraction,
 } from '../lib/predict/obaSeparator';
 import { applyPerLambdaAffine } from '../lib/predict/perLambdaAffine';
+import { runCAETransfer, type CAEWeights } from '../lib/predict/cae';
+import caeWeightsRaw from '../data/cae_weights_raw.json';
 
-type PredictorKey = 'A3' | 'D1' | 'B3' | 'C7' | 'A3_vs_D1' | 'ALL';
+type PredictorKey = 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'A3_vs_D1' | 'ALL';
+
+const CAE_WEIGHTS_RAW = caeWeightsRaw as unknown as CAEWeights;
 type AnchorStrategy = 'S1' | 'S2' | 'S3';
 
 interface Props {
@@ -47,7 +51,7 @@ interface Props {
 }
 
 interface PredictorRun {
-  variant: 'A3' | 'D1' | 'B3' | 'C7';
+  variant: 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW';
   report: PredictionReport;
   perLambdaR2?: Float64Array;        // A3 only
   residualRank?: number;             // D1 only
@@ -55,6 +59,9 @@ interface PredictorRun {
   poolSize?: number;                 // B3 only
   basisRank?: number;                // B3 only
   greedy?: GreedyResult;             // S2 only
+  caeRefInTrain?: boolean;           // CAE only
+  caeTargetInTrain?: boolean;        // CAE only
+  caeBestTestMSE?: number;           // CAE only
 }
 
 type RunResult =
@@ -353,16 +360,28 @@ export default function TransferView({ profiles }: Props) {
         return base;
       };
 
-      type Variant = 'A3' | 'D1' | 'B3' | 'C7';
+      type Variant = 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW';
       const wantA3 = predictor === 'A3' || predictor === 'A3_vs_D1' || predictor === 'ALL';
       const wantD1 = predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL';
       const wantB3 = (predictor === 'B3' || predictor === 'ALL') && b3Ready;
       const wantC7 = predictor === 'C7' || predictor === 'ALL';
+      const wantCAE = predictor === 'CAE_RAW' || predictor === 'ALL';
+
+      const runCAE = (idx: number[]) => runCAETransfer({
+        weights: CAE_WEIGHTS_RAW,
+        X_A, X_B, D: D_B,
+        paper_A: paperSpecA, paper_B: paperSpecB,
+        sampleIds: aligned.sampleIds, anchorIdx: idx, paperRowIdx, L,
+        paperWP,
+        refProfile: refProfile.metadata.full_name,
+        targetProfile: targetProfile.metadata.full_name,
+      });
 
       const dispatch = (v: Variant, idx: number[]) => {
         if (v === 'A3') return { ...runA3(idx), variant: 'A3' as const };
         if (v === 'D1') return { ...runD1(idx), variant: 'D1' as const };
         if (v === 'C7') return { ...runC7(idx), variant: 'C7' as const };
+        if (v === 'CAE_RAW') return { ...runCAE(idx), variant: 'CAE_RAW' as const };
         return { ...runB3(idx), variant: 'B3' as const };
       };
 
@@ -371,6 +390,7 @@ export default function TransferView({ profiles }: Props) {
       if (wantD1) variants.push('D1');
       if (wantB3) variants.push('B3');
       if (wantC7) variants.push('C7');
+      if (wantCAE) variants.push('CAE_RAW');
 
       for (const v of variants) {
         if (anchorStrategy === 'S2') {
@@ -395,6 +415,12 @@ export default function TransferView({ profiles }: Props) {
             base.basisRank = r.p;
             base.poolSize = poolMatrices!.length;
           }
+          if (v === 'CAE_RAW') {
+            const c = finalRun as ReturnType<typeof runCAE>;
+            base.caeRefInTrain = c.refInTrain;
+            base.caeTargetInTrain = c.targetInTrain;
+            base.caeBestTestMSE = CAE_WEIGHTS_RAW.best_test_mse;
+          }
           runs.push(base);
         } else {
           const r = dispatch(v, anchorIdx);
@@ -409,6 +435,12 @@ export default function TransferView({ profiles }: Props) {
             const br = r as ReturnType<typeof runB3>;
             base.basisRank = br.p;
             base.poolSize = poolMatrices!.length;
+          }
+          if (v === 'CAE_RAW') {
+            const c = r as ReturnType<typeof runCAE>;
+            base.caeRefInTrain = c.refInTrain;
+            base.caeTargetInTrain = c.targetInTrain;
+            base.caeBestTestMSE = CAE_WEIGHTS_RAW.best_test_mse;
           }
           runs.push(base);
         }
@@ -502,12 +534,13 @@ export default function TransferView({ profiles }: Props) {
             onChange={e => setPredictor(e.target.value as PredictorKey)}
             className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
           >
-            <option value="ALL">A3 vs D1 vs B3 vs C7 (4-way)</option>
+            <option value="ALL">All predictors (A3 / D1 / B3 / C7 / CAE_RAW)</option>
             <option value="A3_vs_D1">A3 vs D1 (head-to-head)</option>
             <option value="A3">A3 — per-λ affine (baseline)</option>
             <option value="D1">D1 — paper-ratio + PCA residual</option>
             <option value="B3">B3 — pool-PCA (basis from {poolMatrices?.length ?? 0} profiles)</option>
             <option value="C7">C7 — per-λ monotone curve</option>
+            <option value="CAE_RAW">CAE_RAW — Conditional Autoencoder (cross-trained MK, raw spectra)</option>
           </select>
         </label>
         <label className="block">
@@ -819,6 +852,29 @@ export default function TransferView({ profiles }: Props) {
                       </span>
                     </div>
                   )}
+                </div>
+              )}
+              {run.caeBestTestMSE !== undefined && (
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-400 space-y-1">
+                  <div>
+                    CAE cross-trained on 11 / 16 MK profiles (70 / 30 split, seed 42).
+                    Best held-out MSE on training: <span className="font-mono text-gray-200">{run.caeBestTestMSE.toFixed(5)}</span>.
+                  </div>
+                  <div>
+                    Reference profile in training pool:{' '}
+                    <span className={run.caeRefInTrain ? 'text-emerald-300' : 'text-yellow-300'}>
+                      {run.caeRefInTrain ? 'yes' : 'no (held-out — substrate id = null)'}
+                    </span>.
+                    Target in training pool:{' '}
+                    <span className={run.caeTargetInTrain ? 'text-emerald-300' : 'text-yellow-300'}>
+                      {run.caeTargetInTrain ? 'yes' : 'no (held-out — substrate id = null)'}
+                    </span>.
+                  </div>
+                  <div>
+                    No anchor fine-tuning yet — substrate identity comes purely from the
+                    paper-white spectrum. Few-shot anchor adaptation queued for the next
+                    revision.
+                  </div>
                 </div>
               )}
               {run.poolSize !== undefined && (

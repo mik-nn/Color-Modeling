@@ -1,0 +1,25 @@
+{
+  "seed": 42,
+  "train_count": 11,
+  "test_count": 5,
+  "train": [
+    "BC_800M_P9000_mk_CanvasMatte",
+    "BC_AllureAq_P9000_MK_EMP",
+    "BC_BagasseText_P9000_mk_WCRW",
+    "BC_BelgianLinen_P9000_mk_CanvasMatte",
+    "BC_ChromataWhite_P9000_mk_CanvasMatte",
+    "BC_DecorMatte_P9000_mk_CanvasMatte",
+    "BC_EleganceVelvet_P9000_mk_WCRW",
+    "BC_Lyve_P9000_mk_CanvasMatte",
+    "BC_PhotoPeelMatte_P9000_mk_SWM",
+    "BC_PuraSmooth_P9000_mk_WCRW",
+    "BC_PuraVelvet_P9000_mk_WCRW"
+  ],
+  "test": [
+    "BC_600MT_P9000_mk_WCRW",
+    "BC_ArtPeelBlckt_P9000_mk_EMP",
+    "BC_BagasseSmooth_P9000_mk_WCRW",
+    "BC_OpticaOne_P9000_mk_WCRW",
+    "BC_VibrancePhotoMatte_mk_P9000_WCRW"
+  ]
+}

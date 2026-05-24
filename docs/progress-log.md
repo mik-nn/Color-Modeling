@@ -6,6 +6,104 @@
 
 ---
 
+## 2026-05-24 — Phase 8: CAE_RAW — Conditional Autoencoder cross-trained on MK profiles
+
+First neural-network predictor lands as the 5th option in the
+TransferView head-to-head. Cross-trained on 70 % of the matte-black (MK)
+profile subset (11 train / 5 held-out, seed 42). Goal: separate substrate
+factor from print-mode factor so the model generalises across substrates
+on the same printer + ink mode.
+
+### New scaffolding
+
+- **`frontend/scripts/exportCaeData.ts`** — TS → JSON exporter for the
+  Python training pipeline. Reuses existing `parseIcmFile` (jsdom-polyfilled
+  DOMParser). Dumps all 16 MK profiles with paper spectrum + per-patch
+  RGB + spectrum. Output `data/cae-input/profiles-mk.json` (~5 MB,
+  gitignored). Run: `npx tsx scripts/exportCaeData.ts`.
+- **`python/cae/`** (new subtree, gitignored venv + weights):
+  - `requirements.txt` — torch ≥ 2.0, numpy.
+  - `split.py` — deterministic 11 / 5 split, seed 42, writes `split.json`.
+  - `dataset.py` — `ProfileBank` + `CrossSubstrateDataset` yielding
+    `(paper_A, R_A, RGB, id_A, paper_B, R_B, id_B)` triplets, optional
+    D7 OBA-cleaning at load time.
+  - `oba.py` — Python port of `obaSeparator.ts` (quadratic-extrapolation
+    extractor + UV-block proxy + subtract/add helpers).
+  - `model.py` — `CAEHybrid` PyTorch module:
+    `substrate_encoder(paper(36) + onehot_id(12)) → 32 → 8` and
+    `spectrum_encoder(R(36) + RGB(3) + sub_lat(8)) → 64 → 16` and decoder
+    mirror. Loss = `MSE(R_B_pred, R_B_true) + 0.1 · ‖ink_lat_A − ink_lat_B‖²`
+    (substrate-invariance term, decayed to 0.01 after epoch 20).
+  - `train.py` — Adam lr 1e-3, batch 256, 30 epochs (early-stop on
+    held-out MSE), ID dropout 30 %.
+  - `evaluate.py` — full per-pair held-out median + P95 ΔE00 (inline
+    spectraToLab + CIEDE2000 ports).
+  - `export_weights.py` — `state_dict` → JSON for TS load.
+
+### TS inference + UI
+
+- **`frontend/src/lib/predict/cae.ts` (new)** — pure-TS forward pass
+  (matrix multiply + ReLU). Loads `cae_weights_raw.json`. Substrate ID
+  comes from `weights.id_table`; unseen profile names map to `null_id`.
+  No anchor fine-tune in this version — substrate identity is the paper
+  spectrum alone.
+- **`frontend/src/data/cae_weights_raw.json`** — committed weights JSON
+  (214 KB). Schema documented in `cae.ts`.
+- **`frontend/src/components/TransferView.tsx`** —
+  - `PredictorKey += 'CAE_RAW'`; ALL renamed to "All predictors".
+  - New CAE detail block: cross-train split notice, best held-out MSE
+    from weights file, "in train pool / held-out" indicator per
+    ref / target, caveat about absent anchor fine-tune.
+
+### Training run results (variant: raw)
+
+- 99,550 training pairs, 18,100 held-out pairs.
+- Best held-out reflectance MSE: **0.0009** at epoch 25.
+- Per-pair ΔE00 summary: median-of-medians **3.20**, median-of-P95s 8.29,
+  **0 % of pairs achieve median ≤ 1.5**.
+
+### Head-to-head observations
+
+| Pair | A3 | D1 | B3 | C7 | **CAE_RAW** |
+|---|---|---|---|---|---|
+| DecorMatte → Lyve (both in train) | 1.54 | 1.45 | 2.13 | 1.28 | **1.94** |
+| 600MT → OpticaOne (both held-out) | 0.64 | 0.60 | 0.68 | 0.52 | **2.35** |
+
+**H10 rejected in current form.** The CAE without anchor fine-tune
+consistently loses because A3 / D1 / B3 / C7 each see 13 anchors of
+MEASURED target reflectance — the CAE sees only the paper white spectrum.
+The model has done what it was trained for (cross-substrate
+generalisation, MSE 0.0009 on reflectance), but the task is asymmetric.
+Three remediation paths queued (H10b — anchor fine-tune; H10c — D7-CAE
+on OBA-cleaned spectra; CAE conditioning on (paper_A, paper_B, R_A, RGB,
+anchors)).
+
+Outlier: AllureAq (substrate class "EMP") explodes to 29 ΔE00 — substrate
+very different from the rest of the training pool.
+
+Screenshots:
+
+- `docs/experiments/2026-05-24-cae-train-pair-decormatte-lyve.png`
+- `docs/experiments/2026-05-24-cae-heldout-pair-600mt-opticaone.png`
+
+### Verification
+
+- `npx tsc --noEmit` → exit 0.
+- `npx vitest run` → **91 / 91 passed** (no new TS tests yet).
+- `npx vite build` → **411 KB / 161 KB gzip** (was 197 / 63 — weights
+  added 214 KB raw, ~70 KB gzipped after minification + tree-shake).
+- Python `evaluate.py` ran on 5 held-out targets × every other profile =
+  85 directed pairs; full results in
+  `python/cae/weights/evaluate_raw.json` (gitignored).
+
+### Next
+
+Stage 2 — train D7-CAE (Python `train.py --variant d7`), commit
+`cae_weights_d7.json`, add CAE_D7 to UI. After that: H10b anchor-finetune
+revision, AllureAq investigation, batch H4 / H8 / H9 runner.
+
+---
+
 ## 2026-05-24 — Substack article draft: data-driven cross-substrate transfer
 
 First publishable summary of Phase 1–7 + UI-cleanup findings. Written for
