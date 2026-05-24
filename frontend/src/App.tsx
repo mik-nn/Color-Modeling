@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useProfileStore } from './store/useProfileStore';
 import ProfileUploader from './components/ProfileUploader';
 import ProfileList from './components/ProfileList';
-import ComparisonView from './components/ComparisonView';
 import TransferView from './components/TransferView';
 
 // Dev-only: expose store on window for Playwright introspection and console
@@ -13,20 +12,15 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') {
   (window as any).__store = useProfileStore;
 }
 
-type Tab = 'compare' | 'transfer';
-
 function App() {
   const {
     profiles,
-    selectedProfiles,
     isLoading,
     addProfiles,
     removeProfile,
-    selectProfile,
   } = useProfileStore();
 
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('compare');
 
   const handleFilesSelected = async (files: File[]) => {
     setLoadError(null);
@@ -46,16 +40,34 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="max-w-7xl mx-auto">
-        <header className="border-b border-gray-800 bg-gray-900 py-6">
-          <div className="px-8">
-            <h1 className="text-4xl font-bold tracking-tight">Color Modeling</h1>
-            <p className="text-gray-400 mt-2">
-              Cross-substrate color profile linearity analysis
+        <header className="border-b border-gray-800 bg-gray-900 py-5">
+          <div className="px-8 space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight">Color Modeling</h1>
+            <p className="text-sm text-gray-400">
+              Cross-substrate spectral transfer · data-driven, no physical ink model
             </p>
+            <div className="mt-2 text-xs text-gray-500 max-w-4xl leading-relaxed">
+              <span className="font-semibold text-gray-300">Dataset:</span>{' '}
+              <a
+                href="https://www.epson.com/For-Work/Printers/Large-Format/SureColor-P9000-Standard-Edition-Printer/p/SCP9000SE"
+                target="_blank" rel="noopener noreferrer"
+                className="text-blue-300 hover:underline"
+              >
+                Epson SureColor SC-P9000
+              </a>
+              {' '}— 10-ink wide-format inkjet (PK/MK swap + Cyan, Vivid Magenta, Vivid
+              Light Magenta, Yellow, Light Cyan, Light Black, Light Light Black, plus
+              Green or Orange per print mode). Each ICC profile is addressed as 3-channel
+              RGB; the printer driver performs the RGB → 10-ink separation internally with
+              a proprietary LUT. <span className="text-yellow-300">We do NOT model individual
+              inks</span> — predictions are empirical regressions between substrate spectra
+              at matched RGB positions. CxF3 measurements: 905 patches × 36 wavelengths
+              (380–730 nm @ 10 nm), M0 condition.
+            </div>
           </div>
         </header>
 
-        <div className="flex h-[calc(100vh-88px)]">
+        <div className="flex h-[calc(100vh-150px)]">
           {/* Sidebar */}
           <div className="w-96 border-r border-gray-800 bg-gray-900 overflow-auto">
             <div className="p-6">
@@ -76,8 +88,6 @@ function App() {
                 </h2>
                 <ProfileList
                   profiles={profiles}
-                  selectedProfiles={selectedProfiles}
-                  onSelect={selectProfile}
                   onRemove={removeProfile}
                 />
               </div>
@@ -85,49 +95,12 @@ function App() {
           </div>
 
           {/* Main Area */}
-          <div className="flex-1 overflow-auto">
-            <div className="border-b border-gray-800 bg-gray-900 px-8 flex gap-1">
-              <TabButton active={tab === 'compare'} onClick={() => setTab('compare')}>
-                Compare (legacy)
-              </TabButton>
-              <TabButton active={tab === 'transfer'} onClick={() => setTab('transfer')}>
-                Transfer (Phase 2 — A3 + S1)
-              </TabButton>
-            </div>
-            <div className="p-8">
-              {tab === 'compare' && (
-                <ComparisonView
-                  profiles={selectedProfiles}
-                  onRemove={removeProfile}
-                />
-              )}
-              {tab === 'transfer' && <TransferView profiles={profiles} />}
-            </div>
+          <div className="flex-1 overflow-auto p-8">
+            <TransferView profiles={profiles} />
           </div>
         </div>
       </div>
     </div>
-  );
-}
-
-function TabButton({
-  active, onClick, children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-        active
-          ? 'text-gray-100 border-blue-500'
-          : 'text-gray-400 border-transparent hover:text-gray-200'
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

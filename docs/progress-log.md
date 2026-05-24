@@ -6,6 +6,68 @@
 
 ---
 
+## 2026-05-24 — UI cleanup: drop legacy Compare tab + analyser deps
+
+The "Compare (legacy)" tab and every component / analyser it depended on
+were dead in the data-driven track. They were never updated to handle the
+RGB-fronted 10-channel printer (we have no algorithm for the driver's
+proprietary RGB → 10-ink separation), so any number they produced was
+either uninterpretable or misleading. Removed.
+
+New default landing: TransferView with a printer / workflow header banner
+that names the device (Epson SureColor SC-P9000) and the caveat in plain
+text — predictions are empirical regressions, not physical models.
+
+### Deleted (21 files)
+
+Components:
+
+- `ComparisonView.tsx`, `InkLimitSection.tsx`, `GroupBreakdownTable.tsx`,
+  `InkRatioTable.tsx`, `LabScatterPlot.tsx`, `SpectralCurves.tsx`,
+  `PatchCorrelationScatter.tsx`, `PredictionAccuracyView.tsx`.
+
+Analysers:
+
+- `linearityAnalyzer{.ts,.test.ts}`, `spectralPredictor.ts`,
+  `inkRatioAnalyzer.ts`, `groupAnalyzer.ts`, `limitsAnalyzer.ts`,
+  `cynsn{.ts,.test.ts}`, `spreading{.ts,.test.ts}`,
+  `optimizer{.ts,.test.ts}`, `index.ts`.
+
+Types (`frontend/src/types/index.ts`):
+
+- `MatchedPatchPair`, `InkRatioResult`, `PatchGroupResult`,
+  `PredictionModelType`, `SpectralPredictionModel`,
+  `PatchPredictionResult`, `SpectralPredictionEvaluation`,
+  `ModelComparisonRow`, `SpectralModelComparison`, `LinearityResult`.
+
+### Modified
+
+- `frontend/src/App.tsx` — drop tab system; sole content = `TransferView`.
+  New header banner with printer link + workflow caveat ("we do NOT model
+  individual inks — predictions are empirical regressions").
+- `frontend/src/store/useProfileStore.ts` — minimal store. Dropped
+  `selectedProfiles`, `linearityResult`, `selectProfile`,
+  `setSelectedProfiles`, `clearSelection`, `setLinearityResult`,
+  `canSelectMore`. Kept: `profiles`, `isLoading`, `error`, `addProfiles`,
+  `removeProfile`, `setLoading`, `setError`, `getProfileByName`.
+- `frontend/src/components/ProfileList.tsx` — removed checkbox UI;
+  read-only list with remove button only. Hint text now says "Use the
+  Reference / Target dropdowns on the right to pick a pair."
+
+### Verification
+
+- `npx tsc --noEmit` → exit 0
+- `npx vitest run` → **91/91 passed** (was 130; −39 from deleted analyser
+  tests).
+- `npx vite build` → **197 KB JS / 63 KB gzip** (was 350 KB / 106 KB;
+  −44 % bundle).
+- Playwright headless: legacy tab count = 0, ALL + S3 neutral + D7 ON
+  renders, header banner visible.
+
+Screenshot: `docs/experiments/2026-05-24-app-cleanup-best-case.png`.
+
+---
+
 ## 2026-05-24 — Phase 7: D7 OBA-separation wrapper (analytic, no extra anchor)
 
 User-articulated insight ("у нас же есть измерения на 2х подложках"): since
