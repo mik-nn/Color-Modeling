@@ -5,7 +5,27 @@
 > `EXPERIMENTS.md` rows and commits.
 
 ---
+## 2026-05-25
 
+Fixed dataset filtering to exclude profiles with incorrect number of patches.
+- Modified `python/cae/dataset.py` to filter profiles to only those with exactly 905 patches
+- Updated `python/cae/split.json` to remove 'BC_AllureAq_P9000_MK_EMP' which had 1550 patches
+- Successfully tested training with D7 variant (OBA-cleaned spectra) - completed 2 epochs
+- Training now proceeds without KeyError exceptions
+
+This ensures the CAE training only uses profiles with the expected 905-patch chart consistency.
+
+---
+## 2026-05-25 — Evaluated D7-CAE (OBA-cleaned spectra)
+
+Evaluated the trained D7-CAE model on held-out profile pairs:
+- Median of medians ΔE00: **1.66**
+- Median of P95 ΔE00: **4.58**
+- Fraction of pairs with median ΔE00 ≤ 1.5: **0.40** (40%)
+
+The D7-CAE shows improved performance compared to the raw-CAE baseline (median of medians ΔE00: 2.18) by leveraging OBA-cleaned spectra for training.
+
+---
 ## 2026-05-24 — Phase 8: CAE_RAW — Conditional Autoencoder cross-trained on MK profiles
 
 First neural-network predictor lands as the 5th option in the

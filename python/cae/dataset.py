@@ -33,20 +33,26 @@ class ProfileBank:
 
     def __init__(self, profiles: Sequence[dict], variant: str = "raw") -> None:
         self.variant = variant
-        self.profiles = profiles
-        self.by_name = {p["full_name"]: p for p in profiles}
+        # Keep only profiles with the expected 905 patches.
+        expected_patches = 905
+        filtered = [p for p in profiles if len(p["patches"]) == expected_patches]
+        if not filtered:
+            raise ValueError(f"No profiles found with {expected_patches} patches")
+        self.profiles = filtered
+        self.by_name = {p["full_name"]: p for p in self.profiles}
         # Pre-stack spectra as (N_profiles, N_patches, L) for fast indexing.
         # All profiles in our pool share the 905-patch chart.
-        first = profiles[0]
+        first = self.profiles[0]
         self.L = len(first["paper_spectrum"])
         self.N = len(first["patches"])
-        spectra = np.zeros((len(profiles), self.N, self.L), dtype=np.float32)
-        rgb = np.zeros((len(profiles), self.N, 3), dtype=np.float32)
-        paper_specs = np.zeros((len(profiles), self.L), dtype=np.float32)
-        paper_idx_per = np.zeros(len(profiles), dtype=np.int64)
+        spectra = np.zeros((len(self.profiles), self.N, self.L), dtype=np.float32)
+        rgb = np.zeros((len(self.profiles), self.N, 3), dtype=np.float32)
+        paper_specs = np.zeros((len(self.profiles), self.L), dtype=np.float32)
+        paper_idx_per = np.zeros(len(self.profiles), dtype=np.int64)
         sample_id_order = [p["sample_id"] for p in first["patches"]]
-        for pi, prof in enumerate(profiles):
+        for pi, prof in enumerate(self.profiles):
             id_to_row = {p["sample_id"]: idx for idx, p in enumerate(prof["patches"])}
+            paper_ti = -1
             for ti, sid in enumerate(sample_id_order):
                 src = id_to_row.get(sid)
                 if src is None:
@@ -54,11 +60,19 @@ class ProfileBank:
                 pat = prof["patches"][src]
                 spectra[pi, ti] = pat["spectrum"]
                 rgb[pi, ti] = pat["rgb"]
+                r, g, b = pat["rgb"]
+                # Tolerance: some profiles label their paper as (254,254,254)
+                # or similar; track the brightest neutral as a fallback.
+                if r >= 250 and g >= 250 and b >= 250 and abs(r - g) < 5 and abs(g - b) < 5:
+                    paper_ti = ti
             paper_specs[pi] = prof["paper_spectrum"]
-            paper_idx_per[pi] = prof.get("paper_idx", 0)
+            # paper_idx in the RE-INDEXED (sample_id_order) space, not the source.
+            if paper_ti < 0:
+                raise ValueError(f"profile {prof['full_name']} has no RGB=(255,255,255) patch in shared chart")
+            paper_idx_per[pi] = paper_ti
 
         if variant == "d7":
-            for pi in range(len(profiles)):
+            for pi in range(len(self.profiles)):
                 emission = extract_oba_emission(paper_specs[pi].astype(np.float64))
                 factors = per_patch_factor(spectra[pi].astype(np.float64), int(paper_idx_per[pi]))
                 spectra[pi] = subtract_oba(spectra[pi].astype(np.float64), factors, emission).astype(np.float32)

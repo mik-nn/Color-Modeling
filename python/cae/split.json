@@ -1,10 +1,9 @@
 {
   "seed": 42,
-  "train_count": 11,
+  "train_count": 10,
   "test_count": 5,
   "train": [
     "BC_800M_P9000_mk_CanvasMatte",
-    "BC_AllureAq_P9000_MK_EMP",
     "BC_BagasseText_P9000_mk_WCRW",
     "BC_BelgianLinen_P9000_mk_CanvasMatte",
     "BC_ChromataWhite_P9000_mk_CanvasMatte",
