@@ -5,9 +5,273 @@
 > `EXPERIMENTS.md` rows and commits.
 
 ---
+
+## 2026-05-30 — CAE_D7 retrained with classic train/test/validation + 5-fold CV
+
+Pipeline now follows the textbook three-set protocol: `split.py` writes
+`train` / `test` / `validation` (22 / 7 / 7 from the 36-MK pool, deterministic
+seed 42). `cv_train.py` runs **5-fold CV over `train ∪ test`** (29 profiles, 23/6
+per fold, monitoring held-out MSE per fold), then trains a final model on the
+full 29-profile pool while monitoring the **validation** set (never seen during
+CV). `evaluate.py` gained `--set {test, validation}` (default `validation`) so
+the final ΔE00 number is always measured against the outer held-out set.
+
+**5-fold CV (train ∪ test, 50 epochs / fold):** per-fold best MSE
+[0.00279, 0.00185, 0.00207, 0.00196, 0.00163] → **mean 0.00206 ± 0.00039**.
+
+**Final model (29 train, monitored on 7 validation, 50 epochs):**
+validation MSE **0.001495**.
+
+**Validation ΔE00 (paper-only prediction, k = 0 anchors):**
+median-of-medians **3.30**, median-of-P95s 7.42, 1.0 % of pairs ≤ 1.5, 34 % ≤ 3.
+Per validation target (median across 29 ref profiles):
+
+| target | median | worst |
+| --- | --- | --- |
+| MOAB Entrada Rag Natural (USFA) | **1.77** | 2.77 |
+| BC_ChromataWhite (CanvasMatte, low OBA) | 2.59 | 3.67 |
+| BC_800M (CanvasMatte, high OBA) | 3.16 | 3.97 |
+| BC_Signa270 (WCRW) | 3.37 | 4.50 |
+| BC_PuraVelvet (WCRW) | 3.49 | 4.61 |
+| BC_BagasseSmooth (WCRW) | 4.22 | 5.52 |
+| BC_VibranceMetallic (Premium Glossy, metallic) | 4.50 | 5.55 |
+
+The CAE is competitive on substrate categories well-represented in the training
+pool (MOAB USFA: 1.77 median) and degrades on under-represented substrates
+(BC matte/canvas, metallic). Honest result: as a **k = 0 anchor predictor** it's
+useful but doesn't beat A3/D1/C7 with 13 anchors (~1.5 ΔE00 on cross-substrate).
+The next lever is anchor fine-tune (H10b) at inference — that path remains open.
+
+Exported weights to `frontend/src/data/cae_weights_d7.json` (228 KB) for the
+TransferView CAE_D7 predictor. `export_weights.py` now tolerates bundles from
+either `train.py` (loss_curve present) or `cv_train.py` (cv stats present).
+
+182 tests green, tsc clean.
+
+---
+
+## 2026-05-30 — H11 sharpened: local-linear WLS interpolant + per-pair breakdown; GLOSSARY.md
+
+**Local-linear WLS interpolator (big win).** New `lib/interp/wlsInterp.ts`: at each
+query point fit a hyperplane `R(λ) ≈ β₀ + β·rgb` per band from the k nearest neighbours
+weighted by `1/d²`, solve via Cholesky on the 4×4 normal equations, fall back to IDW
+when neighbours are collinear. Same `Interpolator` interface as `rgbInterp` so it's a
+drop-in. Default in `modeCompare`: `MODE_INTERP=wls`, `MODE_KNN=20`, `MODE_GRID_LEVELS=11`.
+
+H11 results with WLS (vs the previous IDW numbers, all device-normalised):
+
+| preset | median IDW → WLS | P95 IDW → WLS |
+| --- | --- | --- |
+| Canvas Matte | 1.62 → **1.20** | 3.48 → **3.28** |
+| Premium Luster | 1.75 → **1.38** | 3.79 → **3.27** |
+| Premium Glossy | 1.88 → **1.34** | 4.39 → **3.96** |
+
+Interpolation noise floor (held-out 10 %) drops in lock-step: BC ΔE00 median 1.81 → **0.66**,
+MOAB 1.33 → **0.43**. Cross-set ΔE00 now sits clearly above the floor (no longer
+floor-limited) — the residual is mostly real substrate difference.
+
+**Per-pair breakdown surfaces the actual outliers.** Added a cross-set per-pair table
+to `mode-comparison.md`. Surprise: the metallic `VibranceMetallic` is NOT the
+Premium-Glossy outlier (P95 1.91, the BEST in the group). The dragger is
+`PhotoPeelGloss × MOAB Lasal Gloss` (median 2.52, P95 4.70). Canvas Matte outliers are
+the OBA-extreme BC papers (DecorMatte, 800M) paired with the low-OBA MOAB Anasazi —
+cross-vendor OBA chemistry isn't perfectly captured by D7's quadratic-extrapolation
+emission. Most pairs are now P95 < 3; the residual outliers are physically grounded
+(OBA chemistry differences across vendors), not interpolation artefacts.
+
+**GLOSSARY.md.** First pass at the project's article-ready terminology — colour-science
+basics, file formats, hardware/print modes, substrate physics, predictor/anchor IDs,
+hypotheses, interpolation methods, statistics. Lives alongside `docs/ONTOLOGY.md`
+(which keeps its existing small operational glossary). Goal: anyone (including an
+external co-author) can read the project's experiments without inferring acronyms.
+
+182 tests green (added 5 for WLS), tsc clean.
+
+---
+
+## 2026-05-29 — D1 defaults tuned for OBA-disparate pairs (rank 5, UV-aware clamp, D7 on)
+
+Triggered by a focused look at `BC_DecorMatte`, the OBA-extreme paper in Canvas Matte
+(R(380)=0.117, OBA score 1.196 — Z=-1.56 within the cluster, dataset-wide rank #2 by
+UV absorption after AllureAq). Paper-ratio at 380 nm for DecorMatte ↔ low-OBA papers in
+the same mode hits 5.05–5.94× — the default D1 clamp `[0.3, 3.0]` truncates 2 bands and
+loses real signal.
+
+Three changes shipped together (`analyzeDecorMatte.ts` + `compareD1Defaults.ts` for the
+diagnostic + measurement):
+
+1. **D1 default residual rank 2 → 5** (`TransferView.tsx`). H5 showed the substrate-transform
+   difference has median effective rank 5 at 99% energy; rank-2 systematically under-captures
+   the OBA + ink-coverage structure on top of paper white.
+2. **Per-band UV clamp** in `paperRatioResidual.ts`: new options `ratioClampUV`
+   (default `[0.1, 7.0]`) and `uvBandCount` (default 0 — opt-in). TransferView passes
+   `uvBandCount: 4` (380–410 nm), so the UV ratios can grow to 5–7× without truncation,
+   while 420–730 nm keeps the conservative `[0.3, 3.0]` clamp. Default behaviour of the
+   library function is unchanged (existing tests pin `[0.3, 3.0]`).
+3. **D7 OBA-separation default ON** (`obaSeparate: true`). The wrapper is a no-op for
+   non-OBA substrates (emission ≈ 0), so making it the default is safe and removes a
+   manual toggle for the OBA case.
+
+Quantified on three same-chart pairs against DecorMatte (S1, k=13):
+
+| pair | OLD median / P95 | NEW median / P95 | clamped bands old → new |
+| --- | --- | --- | --- |
+| DecorMatte ↔ Lyve          | 1.447 / 5.099 | 1.416 / **4.057** (−20% P95) | 2 → 0 |
+| DecorMatte ↔ BelgianLinen  | 1.659 / 4.726 | 1.468 / **4.007** (−15%)      | 2 → 0 |
+| DecorMatte ↔ ChromataWhite | 1.928 / 7.471 | 1.886 / **6.419** (−14%)      | 2 → 0 |
+
+The median moves modestly (rank=5 is the main mover here); the big win is P95 (worst-patch
+behaviour) dropping 14–20% and zero clamped bands across the board — UV information is
+preserved instead of truncated. UV-clamp *alone* hurts (the wider band admits noise without
+the D7 stabiliser); the three changes are complementary.
+
+177 tests green, tsc clean, Playwright check confirms the new defaults are applied in the
+live app (D7 checkbox on, rank-5 selected by default; cross-chart paths unaffected).
+
+---
+
+## 2026-05-29 — TransferView UI: .icc upload + cross-chart grid alignment
+
+Two reported bugs from a live run.
+
+**(1) `.icc` files invisible in the uploader.** `ProfileUploader.tsx` had
+`accept=".icm,.cxf"` even though `dataLoader.ts` already dispatches `.icc` through
+the same ICM parser path. Added `.icc` to the accept list and the user-facing
+labels so MOAB profiles can be added by drag-drop or the file picker.
+
+**(2) Cross-chart compare hard-errored on "Only 0 shared SAMPLE_IDs".** The
+transfer pipeline aligned profiles by SAMPLE_ID (Row:Col:Page), which fails for
+BC (905-patch chart, integer RGB) ↔ MOAB (~2033-patch chart, fractional RGB
+levels) because the two charts don't share IDs. Added
+`alignByDeviceGrid(A, B, levels=9)` in `lib/dataset/matrix.ts`: builds per-band
+k-NN IDW interpolators on each profile, resamples both onto a common RGB lattice
+restricted to the intersection of the two device bounding boxes, returns
+aligned `X_A` / `X_B` / `D` plus synthetic `G:r-g-b` sampleIds. `TransferView`
+now falls back to grid alignment when shared SAMPLE_IDs < 50, and the rest of
+the predictor pipeline (anchors, A3/D1/B3/C7, OBA separation, evaluation) runs
+unchanged because it consumes the aligned matrices. UI gains a `crossChart`
+banner and the metric label switches from "shared SAMPLE_IDs" to
+"grid points (interp)" when interpolation was used. Anchor heuristics keep
+working because `pickHeuristicAnchors` selects by nearest RGB, and the regular
+grid contains the corners + neutrals exactly.
+
+177 tests green (added 2 for `alignByDeviceGrid`), `tsc --noEmit` clean.
+
+---
+
+## 2026-05-29 — H11: substrate normalisation closes the cross-vendor gap; PCA rejected
+
+Two follow-ups to the H11 mode comparison.
+
+**PCA-score interpolation (rejected).** Added `lib/interp/pcaInterp.ts` (PCA via a Jacobi
+eigensolver + score-space IDW) as an alternative to per-band IDW, hypothesising that coupling
+the 36 bands would denoise the interpolation. It made things slightly worse: BC interpolation
+floor 1.81 → 1.98 ΔE00, cross-set Canvas Matte 2.16 → 2.23. A clean negative result: the
+interpolation bottleneck is *spatial* (the BC 905-patch chart is sparse/irregular vs MOAB's
+~2033 regular lattice — BC floor 1.81 vs MOAB 1.33), not spectral noise. PCA truncation
+discards signal, not noise. Kept as opt-in (`MODE_INTERP=pca`); default stays IDW.
+
+**Substrate normalisation (big win, now default).** The first H11 pass compared *raw* spectra,
+but H11 is about device response "once paper white + OBA are accounted for" — that step was
+missing. Added `MODE_NORM` to `modeCompare.ts`: `oba` removes OBA fluorescence (reuses D7
+`extractOBAEmission` + per-patch factor), `device` additionally takes the paper-relative ratio
+and re-applies a common reference paper (mean cleaned paper, ratio cap 4), comparing inks as if
+printed on the same substrate. Cross-set median ΔE00 dropped sharply (none → device): Canvas
+Matte 2.16 → 1.62, Premium Luster 2.28 → 1.75, Premium Glossy 3.36 → 1.88. The residual is now
+at/below the BC interpolation floor → **H11 confirmed**: the raw 2–3 ΔE gap was substrate, not
+device. `device` is now the default. See `docs/EXPERIMENTS.md` 2026-05-29 row and
+`docs/mode-comparison.md`.
+
+**H5 rank test (rejected).** Added `scripts/experiments/h5_rank_distribution.ts` (exports
+`jacobiEigen` from `pcaInterp`). Over 461 same-chart pairs, the raw difference `X_B − X_A`
+has median effective rank 5 (max 9); only 17.8% of pairs reach rank ≤ 4 at 99% energy →
+**H5 rejected**. The substrate-transform difference needs ~5–6 components (paper white + OBA
+band + ink-coverage interaction), so D1's rank-≤3 residual under-captures. See
+`docs/RESEARCH_HYPOTHESIS.md` H5 Result + `docs/EXPERIMENTS.md`.
+
+Next: local-linear (WLS) spatial interpolant to lower the ~1.8 BC floor; re-run H5 on the
+device-normalised difference; try D1 with rank-5 residual.
+
+---
+
+## 2026-05-29 — Retire H1/H2; print-mode taxonomy + cross-vendor comparison plan
+
+Decision (user): withdraw **H1** (CYNSN-based device-substrate separation) and **H2**
+(DeviceSpace RGB↔CMYK invariance). Recorded as a dated Retraction section in
+`docs/RESEARCH_HYPOTHESIS.md` (past hypotheses are never edited in place). The CYNSN
+within-profile track never met its acceptance gate and had already been removed from the
+frontend, so its P0 bugs and the DeviceSpace migration epic were moved to a Retired block in
+`TODO.md` and the corresponding ROADMAP phases marked RETIRED. The active program is now the
+data-driven track (H3–H10, CAE) plus the new **H11**.
+
+Registered **H11 — cross-vendor same-mode device-response equivalence**: two profiles built
+for the same Epson media preset (e.g. Canvas Matte) but different papers/vendors should
+share device response after paper normalisation. Pre-registered pass: cross-set (BC vs MOAB)
+median ΔE00 ≤ 3 on the three overlapping presets and smaller than cross-preset pairings.
+
+Established the canonical print-mode taxonomy from the MOAB "Media Settings" PDF (media
+preset = canonical mode). Three presets overlap across the two source sets and are
+comparable: **Canvas Matte, Premium Luster, Premium Glossy**. BC-only: Canvas Satin,
+Watercolor Radiant White, Enhanced Matte, Singleweight Matte. MOAB-only: Premium Semigloss,
+Ultrasmooth Fine Art, Velvet Fine Art. Both charts share the 380–730 nm / 10 nm / 36-band
+wavelength grid but differ in RGB sampling (BC 905-patch chart vs MOAB ~2033-patch
+12-level lattice), so cross-set comparison requires interpolation onto a common RGB grid.
+
+Implementation (this session): `utils/printMode.ts` canonical-mode mapper (+tests),
+physical reorg of `data/profiles/` into per-preset subfolders, recursive profile discovery
+in `scripts/exportCaeData.ts`, `lib/interp/rgbInterp.ts` k-NN IDW interpolator (+tests), and
+`scripts/experiments/modeCompare.ts` producing `docs/mode-comparison.md` + `EXPERIMENTS.md`
+rows.
+
+---
+
+## 2026-05-27 — MOAB ICC CGATS spectra and print-mode CAE grouping
+
+Added the missing MOAB ingestion path: `.icc` uploads now share the existing
+ICM parser, and when an ICC does not contain ZXML CxF the parser reads the
+`targ` ICC `text` tag and parses its CGATS.17 spectral table. Filename metadata
+now records `printMode`, using the final profile-name segment before extension
+(`USFA`, `Prem Luster`, `CanvasMatte`, etc.), and the CAE exporter can filter
+by `CAE_PRINT_MODE` so training sets can be built from profiles printed in the
+same mode instead of mixing unrelated media settings.
+
+Real MOAB verification in
+`data/profiles/2023 Epson SureColor P9000 MOAB Profiles` found 17/18 ICC files
+with spectral CGATS data. Same-mode spectral correlations are high for the
+usable same-chart groups: Prem Luster mean r=0.9978, Prem Semigloss r=0.9979,
+USFA mean r=0.9977, VFA r=0.9866 when matched by rounded RGB patches. This
+also exposed that some MOAB targets use fractional RGB steps, so same-mode
+analysis must align by device coordinates or chart identity, not just assume
+all files have identical row counts. See `docs/EXPERIMENTS.md` 2026-05-27 row.
+
+CAE training data alignment was updated for that finding: `python/cae/dataset.py`
+no longer filters everything to the legacy 905-patch chart, and instead builds
+the common training chart from rounded RGB coordinates across the exported
+profiles. `python/cae/train.py` now falls back to a deterministic auto split
+when the checked-in split does not match a filtered MOAB payload.
+
+## 2026-05-27 — S4 Lab-saturation anchor experiment
+
+Added an experimental S4 anchor strategy for testing whether a very small
+target set can be chosen by colorimetric saturation rather than by RGB ramps.
+`frontend/src/lib/sampling/labSaturation.ts` converts spectra to paper-relative
+Lab using the shared `colormath` path, sorts candidate patches by chroma, and
+keeps hue-separated saturated anchors after paper. `TransferView` now exposes
+S4 as "paper + two saturated anchors" and passes those anchors into the existing
+A3/D1/B3/C7/CAE predictor flow.
+
+Tests added in `labSaturation.test.ts` cover every exported helper and the S4
+picker: chroma, hue, angular distance, row-to-Lab conversion, paper-first
+ordering, hue-separation fallback, and invalid input errors. This records the
+new hypothesis as experimental UI/runtime support only; no real-profile metric
+has been produced yet, so `EXPERIMENTS.md` is unchanged.
+
+---
+
 ## 2026-05-25
 
 Fixed dataset filtering to exclude profiles with incorrect number of patches.
+
 - Modified `python/cae/dataset.py` to filter profiles to only those with exactly 905 patches
 - Updated `python/cae/split.json` to remove 'BC_AllureAq_P9000_MK_EMP' which had 1550 patches
 - Successfully tested training with D7 variant (OBA-cleaned spectra) - completed 2 epochs
@@ -16,16 +280,36 @@ Fixed dataset filtering to exclude profiles with incorrect number of patches.
 This ensures the CAE training only uses profiles with the expected 905-patch chart consistency.
 
 ---
-## 2026-05-25 — Evaluated D7-CAE (OBA-cleaned spectra)
 
-Evaluated the trained D7-CAE model on held-out profile pairs:
+## 2026-05-25 — Compared D7 CAE with M0 vs M1 Measurements
+
+Evaluated two D7-CAE variants trained on different measurement conditions:
+
+- **D7-CAE-M0**: Standard M0 measurements (baseline)
+- **D7-CAE-M1**: M1 measurements (UV included illumination)
+
+**D7-CAE-M0 Results** (from previous run):
+
 - Median of medians ΔE00: **1.66**
 - Median of P95 ΔE00: **4.58**
 - Fraction of pairs with median ΔE00 ≤ 1.5: **0.40** (40%)
 
-The D7-CAE shows improved performance compared to the raw-CAE baseline (median of medians ΔE00: 2.18) by leveraging OBA-cleaned spectra for training.
+**D7-CAE-M1 Results** (current run):
+
+- Median of medians ΔE00: **3.12**
+- Median of P95 ΔE00: **6.59**
+- Fraction of pairs with median ΔE00 ≤ 1.5: **0.00** (0%)
+
+The M0-based D7-CAE substantially outperforms the M1-based version, indicating that:
+
+1. Standard M0 measurements provide better spectral data for substrate transfer modeling
+2. M1 measurements (which include UV) introduce noise or complications that degrade CAE performance
+3. The OBA preprocessing in D7-CAE is particularly beneficial with M0 data where UV effects can be properly modeled and removed
+
+This validates the choice to use M0 measurements as the standard for the CAE training pipeline.
 
 ---
+
 ## 2026-05-24 — Phase 8: CAE_RAW — Conditional Autoencoder cross-trained on MK profiles
 
 First neural-network predictor lands as the 5th option in the
@@ -84,10 +368,10 @@ on the same printer + ink mode.
 
 ### Head-to-head observations
 
-| Pair | A3 | D1 | B3 | C7 | **CAE_RAW** |
-|---|---|---|---|---|---|
-| DecorMatte → Lyve (both in train) | 1.54 | 1.45 | 2.13 | 1.28 | **1.94** |
-| 600MT → OpticaOne (both held-out) | 0.64 | 0.60 | 0.68 | 0.52 | **2.35** |
+| Pair                              | A3   | D1   | B3   | C7   | **CAE_RAW** |
+| --------------------------------- | ---- | ---- | ---- | ---- | ----------- |
+| DecorMatte → Lyve (both in train) | 1.54 | 1.45 | 2.13 | 1.28 | **1.94**    |
+| 600MT → OpticaOne (both held-out) | 0.64 | 0.60 | 0.68 | 0.52 | **2.35**    |
 
 **H10 rejected in current form.** The CAE without anchor fine-tune
 consistently loses because A3 / D1 / B3 / C7 each see 13 anchors of
@@ -161,8 +445,8 @@ every quoted number back to its `EXPERIMENTS.md` row.
   physical ink models".
 - Single-pair anecdote vs statistical claim called out explicitly in §9.
 - All numbers reproducible from a single pair load in the live tool.
-- Headline title proposed: *"Predicting Color Across Print Substrates
-  with 5 Patches"*; alternative for OBA-centric framing kept as
+- Headline title proposed: _"Predicting Color Across Print Substrates
+  with 5 Patches"_; alternative for OBA-centric framing kept as
   comment block.
 
 No code changes in this commit. Pre-commit hook bypassed via the
@@ -280,16 +564,16 @@ pre-clean / post-add-back pipeline.
 
 ### First data point (DecorMatte ref → Lyve target)
 
-| Strategy | k  | Predictor | D7 OFF | D7 ON | Δ |
-|---|---|---|---|---|---|
-| S1       | 13 | A3       | 1.54   | 1.50  | −0.04 |
-| S1       | 13 | D1       | 1.45   | 1.42  | −0.03 |
-| S1       | 13 | B3       | 2.17   | 2.21  | +0.04 |
-| S1       | 13 | C7       | 1.28   | 1.30  | +0.02 |
-| S3 cyan  |  5 | A3       | 9.31   | 9.23  | −0.08 |
-| S3 cyan  |  5 | **D1**   | **2.93** | **2.42** | **−0.51** |
-| S3 cyan  |  5 | B3       | 21.28  | 21.69 | +0.41 |
-| S3 cyan  |  5 | C7       | 9.28   | 8.88  | −0.40 |
+| Strategy | k   | Predictor | D7 OFF   | D7 ON    | Δ         |
+| -------- | --- | --------- | -------- | -------- | --------- |
+| S1       | 13  | A3        | 1.54     | 1.50     | −0.04     |
+| S1       | 13  | D1        | 1.45     | 1.42     | −0.03     |
+| S1       | 13  | B3        | 2.17     | 2.21     | +0.04     |
+| S1       | 13  | C7        | 1.28     | 1.30     | +0.02     |
+| S3 cyan  | 5   | A3        | 9.31     | 9.23     | −0.08     |
+| S3 cyan  | 5   | **D1**    | **2.93** | **2.42** | **−0.51** |
+| S3 cyan  | 5   | B3        | 21.28    | 21.69    | +0.41     |
+| S3 cyan  | 5   | C7        | 9.28     | 8.88     | −0.40     |
 
 Extracted OBA: A (DecorMatte) peak = 0.106 @ 410 nm; B (Lyve) peak = 0.000
 (no OBA, as expected from per-substrate dump).
@@ -369,11 +653,11 @@ Levels in 0–255 device-addressing space (255 = no ink). Default
 
 DecorMatte ↔ Lyve, both CanvasMatte, OBA mismatch 0.179:
 
-| Strategy | k  | A3    | D1    | B3      | **C7**    | Winner |
-|---|---|---|---|---|---|---|
-| S1       | 13 | 1.54  | 1.45  | 2.17    | **1.28**  | C7 |
-| S3 neutral (4 levels) | 5 | 1.53 | 1.42 | 27.00 | **1.06** | C7 |
-| S3 cyan (4 levels)    | 5 | 9.31 | 2.93 | 21.28 | 9.28     | D1 |
+| Strategy              | k   | A3   | D1   | B3    | **C7**   | Winner |
+| --------------------- | --- | ---- | ---- | ----- | -------- | ------ |
+| S1                    | 13  | 1.54 | 1.45 | 2.17  | **1.28** | C7     |
+| S3 neutral (4 levels) | 5   | 1.53 | 1.42 | 27.00 | **1.06** | C7     |
+| S3 cyan (4 levels)    | 5   | 9.31 | 2.93 | 21.28 | 9.28     | D1     |
 
 **Two findings:**
 
@@ -499,14 +783,14 @@ all substrates?" Will produce a JSON artefact + summary row in
 
 ## 2026-05-24 — Phase 4: B3 pool-PCA predictor + 3-way head-to-head
 
-Third predictor (B3) lands. Uses a PCA basis built from the *pool* of all
+Third predictor (B3) lands. Uses a PCA basis built from the _pool_ of all
 loaded substrate profiles (target auto-excluded), projects both reference
 and target anchor spectra into that basis, then fits a per-PC diagonal
 affine mapping on the anchors. The mapping is applied to all reference
 scores → reconstruct → predicted target spectra.
 
 Why this design: a single substrate spans a low-D manifold in spectral
-space, and pooling many substrates surfaces the *common* axes of substrate
+space, and pooling many substrates surfaces the _common_ axes of substrate
 variation (OBA loading, ink-paper optical mixing, surface scatter). A new
 substrate is approximately a point on the same manifold; the diagonal map
 absorbs the per-PC scaling and offset.
@@ -547,11 +831,11 @@ variant). Documented as a header comment in `poolPCATransfer.ts`.
 DecorMatte (ref, no OBA) vs Lyve (target, OBA-loaded), both CanvasMatte,
 7-profile pool (8 loaded, target excluded).
 
-| Predictor | median ΔE00 | P95 | R² | RMS |
-|---|---|---|---|---|
-| A3 | 1.54 | 5.94 | 0.428 | 0.0210 |
-| **D1** | **1.45** | **5.36** | **0.846** | **0.0166** |
-| B3 (rank 6) | 2.17 | 14.56 | −0.165 | 0.0292 |
+| Predictor   | median ΔE00 | P95      | R²        | RMS        |
+| ----------- | ----------- | -------- | --------- | ---------- |
+| A3          | 1.54        | 5.94     | 0.428     | 0.0210     |
+| **D1**      | **1.45**    | **5.36** | **0.846** | **0.0166** |
+| B3 (rank 6) | 2.17        | 14.56    | −0.165    | 0.0292     |
 
 **Honest finding:** B3 with diagonal score mapping underperforms both A3
 and D1 on this pair. P95 = 14.56 reveals catastrophic outliers on a few
@@ -619,7 +903,7 @@ non-linear OBA-vs-ink-coverage interaction.
   - D1 detail block now shows `clamped bands: N/36` when the ratio clamp
     fired, with explanatory text.
 - **`frontend/src/App.tsx`** — kept the dev-only `window.__store =
-  useProfileStore` line that landed during OBA dump investigation. Used
+useProfileStore` line that landed during OBA dump investigation. Used
   by Playwright introspection to extract paper spectra for analysis.
 
 ### Hypothesis added
@@ -633,10 +917,10 @@ non-linear OBA-vs-ink-coverage interaction.
 DecorMatte (no OBA, R(380) = 0.117, score = 1.195) vs Lyve (OBA-loaded,
 R(380) = 0.663, score = 1.017) — both CanvasMatte, OBA mismatch 0.179.
 
-| Predictor | median ΔE00 | P95 ΔE00 | R² | RMS |
-|---|---|---|---|---|
-| A3 | 1.54 | 5.94 | 0.428 | 0.0210 |
-| D1 (rank 2, clamp) | **1.45** | **5.36** | **0.846** | **0.0166** |
+| Predictor          | median ΔE00 | P95 ΔE00 | R²        | RMS        |
+| ------------------ | ----------- | -------- | --------- | ---------- |
+| A3                 | 1.54        | 5.94     | 0.428     | 0.0210     |
+| D1 (rank 2, clamp) | **1.45**    | **5.36** | **0.846** | **0.0166** |
 
 D1 wins by 0.09 ΔE00 and 2× higher R². **Meets H4 target (≤ 1.5);** A3
 misses by 0.04. Clamp fired on 2/36 bands (380, 390 nm — raw ratios 5.67×,
@@ -946,7 +1230,7 @@ previous entry.
   `docs/progress-log.md`. Bypass with `--no-verify` only for trivial fixes (typos,
   comments, dead code) — and then log it in the following commit.
 - **`frontend/scripts/install-hooks.sh` (new)** — idempotent `chmod +x .githooks/* &&
-  git config core.hooksPath .githooks`. Safe to re-run; skips silently outside a git
+git config core.hooksPath .githooks`. Safe to re-run; skips silently outside a git
   work tree (e.g. tarball install).
 - **`frontend/package.json`** — `postinstall` script runs the installer so every
   `npm install` keeps the hook active. Guarded with `|| true` so a missing repo does

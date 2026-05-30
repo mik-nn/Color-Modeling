@@ -33,31 +33,37 @@ class ProfileBank:
 
     def __init__(self, profiles: Sequence[dict], variant: str = "raw") -> None:
         self.variant = variant
-        # Keep only profiles with the expected 905 patches.
-        expected_patches = 905
-        filtered = [p for p in profiles if len(p["patches"]) == expected_patches]
+        filtered = [p for p in profiles if p.get("patches")]
         if not filtered:
-            raise ValueError(f"No profiles found with {expected_patches} patches")
+            raise ValueError("No profiles found with spectral patches")
         self.profiles = filtered
         self.by_name = {p["full_name"]: p for p in self.profiles}
-        # Pre-stack spectra as (N_profiles, N_patches, L) for fast indexing.
-        # All profiles in our pool share the 905-patch chart.
+
         first = self.profiles[0]
         self.L = len(first["paper_spectrum"])
-        self.N = len(first["patches"])
+        patch_maps = [self._patch_map(prof) for prof in self.profiles]
+        common_keys = set(patch_maps[0])
+        for patch_map in patch_maps[1:]:
+            common_keys &= set(patch_map)
+        if not common_keys:
+            raise ValueError("No common RGB patch coordinates across selected profiles")
+        sample_id_order = sorted(common_keys, key=self._rgb_sort_key)
+        self.N = len(sample_id_order)
+
+        # Pre-stack spectra as (N_profiles, N_patches, L) for fast indexing.
+        # Different sources can have different chart sizes; align by rounded
+        # RGB device coordinates rather than assuming row-index equivalence.
         spectra = np.zeros((len(self.profiles), self.N, self.L), dtype=np.float32)
         rgb = np.zeros((len(self.profiles), self.N, 3), dtype=np.float32)
         paper_specs = np.zeros((len(self.profiles), self.L), dtype=np.float32)
         paper_idx_per = np.zeros(len(self.profiles), dtype=np.int64)
-        sample_id_order = [p["sample_id"] for p in first["patches"]]
+
         for pi, prof in enumerate(self.profiles):
-            id_to_row = {p["sample_id"]: idx for idx, p in enumerate(prof["patches"])}
+            patch_map = patch_maps[pi]
             paper_ti = -1
-            for ti, sid in enumerate(sample_id_order):
-                src = id_to_row.get(sid)
-                if src is None:
-                    raise ValueError(f"profile {prof['full_name']} missing sample_id {sid}")
-                pat = prof["patches"][src]
+            brightest_neutral = (-1.0, -1)
+            for ti, key in enumerate(sample_id_order):
+                pat = patch_map[key]
                 spectra[pi, ti] = pat["spectrum"]
                 rgb[pi, ti] = pat["rgb"]
                 r, g, b = pat["rgb"]
@@ -65,10 +71,15 @@ class ProfileBank:
                 # or similar; track the brightest neutral as a fallback.
                 if r >= 250 and g >= 250 and b >= 250 and abs(r - g) < 5 and abs(g - b) < 5:
                     paper_ti = ti
+                if abs(r - g) < 5 and abs(g - b) < 5:
+                    brightness = r + g + b
+                    if brightness > brightest_neutral[0]:
+                        brightest_neutral = (brightness, ti)
             paper_specs[pi] = prof["paper_spectrum"]
-            # paper_idx in the RE-INDEXED (sample_id_order) space, not the source.
+            if paper_ti < 0 and brightest_neutral[1] >= 0:
+                paper_ti = brightest_neutral[1]
             if paper_ti < 0:
-                raise ValueError(f"profile {prof['full_name']} has no RGB=(255,255,255) patch in shared chart")
+                raise ValueError(f"profile {prof['full_name']} has no paper-like neutral patch in shared chart")
             paper_idx_per[pi] = paper_ti
 
         if variant == "d7":
@@ -86,6 +97,24 @@ class ProfileBank:
         self.rgb = rgb
         self.paper_specs = paper_specs
         self.sample_ids = sample_id_order
+
+    @staticmethod
+    def _rgb_key(patch: dict) -> str:
+        r, g, b = patch["rgb"]
+        return f"{round(r)},{round(g)},{round(b)}"
+
+    @staticmethod
+    def _rgb_sort_key(key: str) -> tuple[int, int, int]:
+        r, g, b = (int(v) for v in key.split(","))
+        return r, g, b
+
+    @classmethod
+    def _patch_map(cls, prof: dict) -> dict[str, dict]:
+        patch_map = {}
+        for patch in prof["patches"]:
+            if len(patch.get("spectrum", [])) == len(prof["paper_spectrum"]):
+                patch_map[cls._rgb_key(patch)] = patch
+        return patch_map
 
     def index_of(self, name: str) -> int:
         for i, p in enumerate(self.profiles):

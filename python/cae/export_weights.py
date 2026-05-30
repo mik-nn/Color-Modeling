@@ -55,15 +55,26 @@ def main() -> int:
         "null_id": bundle["null_id"],
         "split": bundle["split"],
         "best_test_mse": bundle["best_test_mse"],
-        "loss_curve_summary": {
-            "first_epoch": bundle["loss_curve"][0],
-            "last_epoch": bundle["loss_curve"][-1],
-            "epochs": len(bundle["loss_curve"]),
-        },
-        "test_curve_summary": {
-            "first_epoch": bundle["test_curve"][0],
-            "last_epoch": bundle["test_curve"][-1],
-        },
+        # `cv` / `validation_mse` only present when the bundle came from cv_train.py.
+        "cv": bundle.get("cv"),
+        "validation_mse": bundle.get("validation_mse"),
+        "loss_curve_summary": (
+            {
+                "first_epoch": bundle["loss_curve"][0],
+                "last_epoch": bundle["loss_curve"][-1],
+                "epochs": len(bundle["loss_curve"]),
+            }
+            if bundle.get("loss_curve")
+            else None
+        ),
+        "test_curve_summary": (
+            {
+                "first_epoch": bundle["test_curve"][0],
+                "last_epoch": bundle["test_curve"][-1],
+            }
+            if bundle.get("test_curve")
+            else None
+        ),
         "layers": layers,
     }
 

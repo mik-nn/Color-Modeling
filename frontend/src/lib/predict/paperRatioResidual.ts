@@ -70,6 +70,19 @@ export interface PaperRatioResidualOptions {
    * the user knows where to distrust D1.
    */
   ratioClamp?: readonly [number, number];
+  /**
+   * Looser clamp applied only to the first `uvBandCount` bands (the OBA region,
+   * typically 380–410 nm). Physics demands ratios up to 5–7× there because of
+   * fluorescence; clamping at 3.0 destroys the signal. Default `[0.1, 7.0]`.
+   * Ignored when `uvBandCount` is 0 (default).
+   */
+  ratioClampUV?: readonly [number, number];
+  /**
+   * Number of leading wavelength bands to treat as UV/OBA region. Default 0
+   * (no per-band clamping; uniform `ratioClamp` applies to every λ). Set to 4
+   * for 36-band 380–730 nm/10 nm spectra to cover 380–410 nm.
+   */
+  uvBandCount?: number;
 }
 
 /**
@@ -82,13 +95,19 @@ function computeRatio(
   specA: number[],
   specB: number[],
   clamp: readonly [number, number],
+  clampUV: readonly [number, number],
+  uvBandCount: number,
 ): { r: Float64Array; rUnclamped: Float64Array; clampedBands: Int32Array } {
   const L = specA.length;
   const r = new Float64Array(L);
   const rUnclamped = new Float64Array(L);
   const clampedList: number[] = [];
-  const [lo, hi] = clamp;
+  const [loDef, hiDef] = clamp;
+  const [loUV, hiUV] = clampUV;
+  const uvCount = Math.max(0, Math.min(L, uvBandCount));
   for (let l = 0; l < L; l++) {
+    const lo = l < uvCount ? loUV : loDef;
+    const hi = l < uvCount ? hiUV : hiDef;
     const a = specA[l];
     const b = specB[l];
     const raw = a > RATIO_GUARD ? b / a : 1;
@@ -192,6 +211,8 @@ export function fitPaperRatioResidual(
 
   const clamp: readonly [number, number] = options.ratioClamp
     ?? [DEFAULT_RATIO_MIN, DEFAULT_RATIO_MAX];
+  const clampUV: readonly [number, number] = options.ratioClampUV ?? [0.1, 7.0];
+  const uvBandCount = options.uvBandCount ?? 0;
 
   // Per-λ ratio from paper anchor (with clamp + diagnostics).
   const paperA = new Array<number>(L);
@@ -200,7 +221,13 @@ export function fitPaperRatioResidual(
     paperA[l] = X_A[paperRowIdx * L + l];
     paperB[l] = X_B[paperRowIdx * L + l];
   }
-  const { r, rUnclamped, clampedBands } = computeRatio(paperA, paperB, clamp);
+  const { r, rUnclamped, clampedBands } = computeRatio(
+    paperA,
+    paperB,
+    clamp,
+    clampUV,
+    uvBandCount,
+  );
 
   // Residual anchors = anchors minus the paper anchor.
   const residualIdx = anchorIdx.filter(i => i !== paperRowIdx);
@@ -339,6 +366,10 @@ export interface PaperRatioResidualRunInput {
   knnK?: number;
   /** Paper-ratio clamp. Default `[0.3, 3.0]`. See PaperRatioResidualOptions. */
   ratioClamp?: readonly [number, number];
+  /** Per-band looser clamp on UV/OBA bands. Default `[0.1, 7.0]`. */
+  ratioClampUV?: readonly [number, number];
+  /** Number of leading bands treated as UV. Default 0 (uniform clamp). */
+  uvBandCount?: number;
 }
 
 export interface PaperRatioResidualRunResult {
@@ -365,6 +396,8 @@ export function runPaperRatioResidualTransfer(
     residualRank: input.residualRank,
     knnK: input.knnK,
     ratioClamp: input.ratioClamp,
+    ratioClampUV: input.ratioClampUV,
+    uvBandCount: input.uvBandCount,
   });
   const X_pred = applyPaperRatioResidual(X_A, D, L, fit, {
     residualRank: input.residualRank,

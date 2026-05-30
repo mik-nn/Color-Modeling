@@ -1,24 +1,48 @@
 {
   "seed": 42,
-  "train_count": 10,
-  "test_count": 5,
+  "train_count": 22,
+  "test_count": 7,
+  "validation_count": 7,
   "train": [
-    "BC_800M_P9000_mk_CanvasMatte",
+    "BC_600MT_P9000_mk_WCRW",
     "BC_BagasseText_P9000_mk_WCRW",
     "BC_BelgianLinen_P9000_mk_CanvasMatte",
-    "BC_ChromataWhite_P9000_mk_CanvasMatte",
     "BC_DecorMatte_P9000_mk_CanvasMatte",
     "BC_EleganceVelvet_P9000_mk_WCRW",
     "BC_Lyve_P9000_mk_CanvasMatte",
+    "BC_OpticaOne_P9000_mk_WCRW",
     "BC_PhotoPeelMatte_P9000_mk_SWM",
-    "BC_PuraSmooth_P9000_mk_WCRW",
-    "BC_PuraVelvet_P9000_mk_WCRW"
+    "BC_VibranceLuster_P9000_PLPP260",
+    "MOAB Anasazi Canvas P9000 Exh Canvas Matte",
+    "MOAB Colorado Fiber Gloss P9000 Prem Luster",
+    "MOAB Entrada Rag Bright P9000 USFA",
+    "MOAB Entrada Rag Textured P9000 USFA",
+    "MOAB Juniper Baryta P9000 Prem Luster",
+    "MOAB Lasal Dual Semigloss P9000 Prem Semigloss",
+    "MOAB Lasal Exhibition Luster P9000 Prem Luster",
+    "MOAB Lasal Gloss P9000 Prem Glossy",
+    "MOAB Moenkopi Bizan P9000 VFA",
+    "MOAB Moenkopi Kozo P9000 USFA",
+    "MOAB Moenkopi Unryu P9000 USFA",
+    "MOAB Somerset Museum Rag P9000 USFA",
+    "MOAB Somerset Velvet P9000 VFA"
   ],
   "test": [
-    "BC_600MT_P9000_mk_WCRW",
+    "BC_AllureAq_P9000_MK_EMP",
     "BC_ArtPeelBlckt_P9000_mk_EMP",
+    "BC_PuraSmooth_P9000_mk_WCRW",
+    "BC_VibrancePhotoMatte_mk_P9000_WCRW",
+    "MOAB Colorado Fiber Satine P9000 Prem Luster",
+    "MOAB Lasal Matte P9000 USFA",
+    "MOAB Slickrock Pearl P9000 Prem Semigloss"
+  ],
+  "validation": [
+    "BC_800M_P9000_mk_CanvasMatte",
     "BC_BagasseSmooth_P9000_mk_WCRW",
-    "BC_OpticaOne_P9000_mk_WCRW",
-    "BC_VibrancePhotoMatte_mk_P9000_WCRW"
+    "BC_ChromataWhite_P9000_mk_CanvasMatte",
+    "BC_PuraVelvet_P9000_mk_WCRW",
+    "BC_Signa270_P9000_MK_WCRW",
+    "BC_VibranceMetallic_P9000_PGPP260",
+    "MOAB Entrada Rag Natural P9000 USFA"
   ]
 }

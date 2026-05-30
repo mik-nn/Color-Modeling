@@ -234,6 +234,10 @@ sequenceDiagram
 
 ## 5. Glossary
 
+> Short operational glossary below — for the full article-ready terminology
+> (predictors A3/D1/B3/C7/D7/CAE, anchor strategies S1–S4, interpolation methods,
+> hypothesis IDs, statistics, etc.) see [GLOSSARY.md](GLOSSARY.md).
+
 | Term | Definition |
 |---|---|
 | **A2B** | ICC tag mapping device colorant → PCS (XYZ or Lab). Not currently used; we go through CxF spectra instead. |

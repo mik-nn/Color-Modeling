@@ -118,6 +118,13 @@ def delta_e_00(L1, a1, b1, L2, a2, b2):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", choices=["raw", "d7"], required=True)
+    ap.add_argument(
+        "--set",
+        choices=["test", "validation"],
+        default="validation",
+        help="Which held-out split to score the targets on. 'test' = the CV inner held-out; "
+             "'validation' = the outer held-out (never seen during training/CV). Default: validation.",
+    )
     args = ap.parse_args()
 
     pt = WEIGHTS_DIR / f"cae_{args.variant}.pt"
@@ -138,10 +145,20 @@ def main() -> int:
 
     train_idx = [bank.index_of(n) for n in split["train"]]
     test_idx = [bank.index_of(n) for n in split["test"]]
+    # 'set' chooses which held-out group acts as the target pool to score against.
+    # Cross-substrate `ref` profiles always include train + test (whatever the model saw).
+    eval_set_names = split.get(args.set, [])
+    if not eval_set_names:
+        print(
+            f"split.json has no '{args.set}' key — falling back to legacy 'test' targets",
+            file=sys.stderr,
+        )
+        eval_set_names = split.get("test", [])
+    eval_target_idx = [bank.index_of(n) for n in eval_set_names if n in {p["full_name"] for p in bank.profiles}]
 
     rows = []
     with torch.no_grad():
-        for b in test_idx:
+        for b in eval_target_idx:
             paper_b = torch.from_numpy(bank.paper_specs[b]).unsqueeze(0)
             id_b = torch.tensor([null_id], dtype=torch.long)
             paper_wp_b = spectra_to_xyz(bank.paper_specs[b].astype(np.float64))

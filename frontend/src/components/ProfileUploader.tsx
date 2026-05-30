@@ -43,14 +43,14 @@ export default function ProfileUploader({ onFilesSelected, isLoading }: ProfileU
           <div className="mx-auto w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center mb-4">
             📁
           </div>
-          <p className="text-gray-300 font-medium">Drop .icm / .cxf files here</p>
+          <p className="text-gray-300 font-medium">Drop .icm / .icc / .cxf files here</p>
           <p className="text-gray-500 text-sm mt-1">or click to browse</p>
 
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".icm,.cxf"
+            accept=".icm,.icc,.cxf"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -65,7 +65,7 @@ export default function ProfileUploader({ onFilesSelected, isLoading }: ProfileU
       </div>
 
       <p className="text-xs text-gray-500 mt-3 text-center">
-        Supports .icm (BC_*.icm) and .cxf files
+        Supports .icm (BC_*.icm), .icc (MOAB *.icc), and .cxf files
       </p>
     </div>
   );

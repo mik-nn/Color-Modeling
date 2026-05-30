@@ -124,18 +124,21 @@ export function parseCxf3Xml(xmlText: string): CxfParseResult {
     }
   }
 
-  // ── Pass 2: collect Measurement objects, prefer M0 over M2 ──
-  const m0Objects: Element[] = [];
-  const m2Objects: Element[] = [];
+   // ── Pass 2: collect Measurement objects, prefer M1 over M0 over M2 ──
+   const m0Objects: Element[] = [];
+   const m1Objects: Element[] = [];
+   const m2Objects: Element[] = [];
 
-  for (let i = 0; i < allObjects.length; i++) {
-    const obj = allObjects[i];
-    const type = obj.getAttribute('ObjectType') ?? '';
-    if (type === 'M0_Measurement') m0Objects.push(obj);
-    else if (type.includes('Measurement')) m2Objects.push(obj);
-  }
+   for (let i = 0; i < allObjects.length; i++) {
+     const obj = allObjects[i];
+     const type = obj.getAttribute('ObjectType') ?? '';
+     if (type === 'M1_Measurement') m1Objects.push(obj);
+     else if (type === 'M0_Measurement') m0Objects.push(obj);
+     else if (type.includes('Measurement')) m2Objects.push(obj);
+   }
 
-  const measureObjects = m0Objects.length > 0 ? m0Objects : m2Objects;
+   const measureObjects = m1Objects.length > 0 ? m1Objects : 
+                         (m0Objects.length > 0 ? m0Objects : m2Objects);
 
   // ── Collect raw data (spectra + location + RGB) ──
   interface RawItem {

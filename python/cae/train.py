@@ -47,8 +47,20 @@ def main() -> int:
     split = load_split()
     bank = ProfileBank(payload["profiles"], variant=args.variant)
 
-    train_names = split["train"]
-    test_names = split["test"]
+    available_names = {p["full_name"] for p in bank.profiles}
+    if set(split["train"]).issubset(available_names) and set(split["test"]).issubset(available_names):
+        train_names = split["train"]
+        test_names = split["test"]
+    else:
+        names = sorted(available_names)
+        rng = np.random.default_rng(split.get("seed", SEED))
+        shuffled = list(rng.permutation(names))
+        test_count = max(1, round(len(shuffled) * 0.2)) if len(shuffled) > 2 else 1
+        test_names = shuffled[:test_count]
+        train_names = shuffled[test_count:]
+        if len(train_names) < 2:
+            raise ValueError("Need at least two training profiles after payload filtering")
+        print("split.json does not match payload profiles; using deterministic auto split")
     train_idx = [bank.index_of(n) for n in train_names]
     test_idx = [bank.index_of(n) for n in test_names]
 

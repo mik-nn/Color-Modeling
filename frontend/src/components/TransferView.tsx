@@ -15,81 +15,95 @@
 // Honest framing: empirical regression of B(λ, RGB) from A(λ, RGB). No
 // physics claim, no "primaries" interpretation on RGB-addressed datasets.
 
-import { useMemo, useState } from 'react';
-import type { ProfileData, PredictionReport } from '../types';
-import { loadProfileMatrix, alignByCommonSampleIds } from '../lib/dataset/matrix';
-import { pickHeuristicAnchors } from '../lib/sampling/heuristic';
+import { useMemo, useState } from 'react'
+import type { AnchorSet, ProfileData, PredictionReport } from '../types'
+import { loadProfileMatrix, alignByCommonSampleIds, alignByDeviceGrid } from '../lib/dataset/matrix'
+import { pickHeuristicAnchors } from '../lib/sampling/heuristic'
 import {
   runPerLambdaAffineTransfer,
   paperWPFromBrightestPatch,
-} from '../lib/predict/perLambdaAffine';
-import { runPaperRatioResidualTransfer } from '../lib/predict/paperRatioResidual';
-import { detectOBA, obaMismatch, obaMismatchSeverity, type OBAInfo } from '../lib/predict/oba';
-import { fitPoolBasis, runPoolPCATransfer } from '../lib/predict/poolPCATransfer';
-import { runPerLambdaCurveTransfer, applyPerLambdaCurve } from '../lib/predict/perLambdaCurve';
-import { evaluatePrediction } from '../lib/dataset/evaluate';
-import { runGreedyActiveAnchors, type GreedyResult } from '../lib/sampling/greedy';
-import { pickChannelRampAnchors, type RampChannel } from '../lib/sampling/channelRamp';
+} from '../lib/predict/perLambdaAffine'
+import { runPaperRatioResidualTransfer } from '../lib/predict/paperRatioResidual'
+import { detectOBA, obaMismatch, obaMismatchSeverity, type OBAInfo } from '../lib/predict/oba'
+import { fitPoolBasis, runPoolPCATransfer } from '../lib/predict/poolPCATransfer'
+import { runPerLambdaCurveTransfer, applyPerLambdaCurve } from '../lib/predict/perLambdaCurve'
+import { evaluatePrediction } from '../lib/dataset/evaluate'
+import { runGreedyActiveAnchors, type GreedyResult } from '../lib/sampling/greedy'
+import { pickChannelRampAnchors, type RampChannel } from '../lib/sampling/channelRamp'
+import { pickLabSaturationAnchors } from '../lib/sampling/labSaturation'
 import {
   extractOBAEmission,
   computeOBAFactorPerPatch,
   subtractOBA,
   addOBA,
   type OBAExtraction,
-} from '../lib/predict/obaSeparator';
-import { applyPerLambdaAffine } from '../lib/predict/perLambdaAffine';
-import { runCAETransfer, type CAEWeights } from '../lib/predict/cae';
-import caeWeightsRaw from '../data/cae_weights_raw.json';
-import caeWeightsD7 from '../data/cae_weights_d7.json';
+} from '../lib/predict/obaSeparator'
+import { applyPerLambdaAffine } from '../lib/predict/perLambdaAffine'
+import { runCAETransfer, type CAEWeights } from '../lib/predict/cae'
+import caeWeightsRaw from '../data/cae_weights_raw.json'
+import caeWeightsD7 from '../data/cae_weights_d7.json'
+import caeWeightsD7M1 from '../data/cae_weights_d7_m1.json'
 
-type PredictorKey = 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'CAE_D7' | 'A3_vs_D1' | 'ALL';
+type PredictorKey =
+  | 'A3'
+  | 'D1'
+  | 'B3'
+  | 'C7'
+  | 'CAE_RAW'
+  | 'CAE_D7'
+  | 'CAE_D7_M1'
+  | 'A3_vs_D1'
+  | 'ALL'
 
-const CAE_WEIGHTS_RAW = caeWeightsRaw as unknown as CAEWeights;
-const CAE_WEIGHTS_D7 = caeWeightsD7 as unknown as CAEWeights;
-type AnchorStrategy = 'S1' | 'S2' | 'S3';
+const CAE_WEIGHTS_RAW = caeWeightsRaw as unknown as CAEWeights
+const CAE_WEIGHTS_D7 = caeWeightsD7 as unknown as CAEWeights
+const CAE_WEIGHTS_D7_M1 = caeWeightsD7M1 as unknown as CAEWeights
+type AnchorStrategy = 'S1' | 'S2' | 'S3' | 'S4'
 
 interface Props {
-  profiles: ProfileData[];
+  profiles: ProfileData[]
 }
 
 interface PredictorRun {
-  variant: 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW';
-  report: PredictionReport;
-  perLambdaR2?: Float64Array;        // A3 only
-  residualRank?: number;             // D1 only
-  clampedBandCount?: number;         // D1 only
-  poolSize?: number;                 // B3 only
-  basisRank?: number;                // B3 only
-  greedy?: GreedyResult;             // S2 only
-  caeRefInTrain?: boolean;           // CAE only
-  caeTargetInTrain?: boolean;        // CAE only
-  caeBestTestMSE?: number;           // CAE only
+  variant: 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'CAE_D7' | 'CAE_D7_M1'
+  report: PredictionReport
+  perLambdaR2?: Float64Array // A3 only
+  residualRank?: number // D1 only
+  clampedBandCount?: number // D1 only
+  poolSize?: number // B3 only
+  basisRank?: number // B3 only
+  greedy?: GreedyResult // S2 only
+  caeRefInTrain?: boolean // CAE only
+  caeTargetInTrain?: boolean // CAE only
+  caeBestTestMSE?: number // CAE only
 }
 
 type RunResult =
   | { kind: 'error'; error: string }
   | {
-      kind: 'ok';
-      runs: PredictorRun[];
-      anchors: ReturnType<typeof pickHeuristicAnchors>;
-      alignedN: number;
-      obaRef: OBAInfo;
-      obaTarget: OBAInfo;
-      obaMismatchScore: number;
+      kind: 'ok'
+      runs: PredictorRun[]
+      anchors: AnchorSet
+      alignedN: number
+      /** True when profiles came from different charts and were aligned on a common RGB grid. */
+      crossChart: boolean
+      obaRef: OBAInfo
+      obaTarget: OBAInfo
+      obaMismatchScore: number
       /** Present only when obaSeparate=true. Per-substrate analytic emission. */
-      obaExtractionA?: OBAExtraction;
-      obaExtractionB?: OBAExtraction;
-      obaSeparateEnabled: boolean;
-    };
+      obaExtractionA?: OBAExtraction
+      obaExtractionB?: OBAExtraction
+      obaSeparateEnabled: boolean
+    }
 
 function deColor(de: number): string {
-  if (de < 1.5) return 'text-emerald-400';
-  if (de < 3.0) return 'text-yellow-400';
-  return 'text-red-400';
+  if (de < 1.5) return 'text-emerald-400'
+  if (de < 3.0) return 'text-yellow-400'
+  return 'text-red-400'
 }
 
 function fmt(n: number, d = 2): string {
-  return Number.isFinite(n) ? n.toFixed(d) : '—';
+  return Number.isFinite(n) ? n.toFixed(d) : '—'
 }
 
 /**
@@ -98,127 +112,164 @@ function fmt(n: number, d = 2): string {
  * anchor). Includes 0 (max ink) when `count ≥ 1`.
  */
 function evenlySpacedRampLevels(count: number): number[] {
-  if (count <= 0) return [];
-  if (count === 1) return [0];
-  const out: number[] = [];
+  if (count <= 0) return []
+  if (count === 1) return [0]
+  const out: number[] = []
   for (let i = 0; i < count; i++) {
     // i=0 → 192, i=last → 0, evenly spaced.
-    const v = Math.round(192 * (1 - i / (count - 1)));
-    out.push(v);
+    const v = Math.round(192 * (1 - i / (count - 1)))
+    out.push(v)
   }
-  return out;
+  return out
 }
 
 export default function TransferView({ profiles }: Props) {
-  const [refName, setRefName] = useState<string>('');
-  const [targetName, setTargetName] = useState<string>('');
-  const [predictor, setPredictor] = useState<PredictorKey>('A3_vs_D1');
-  const [residualRank, setResidualRank] = useState<number>(2);
-  const [poolBasisRank, setPoolBasisRank] = useState<number>(6);
-  const [anchorStrategy, setAnchorStrategy] = useState<AnchorStrategy>('S1');
-  const [greedyTarget, setGreedyTarget] = useState<number>(1.5);
-  const [greedyMaxK, setGreedyMaxK] = useState<number>(40);
-  const [rampChannel, setRampChannel] = useState<RampChannel>('neutral');
-  const [rampLevels, setRampLevels] = useState<number>(4);
-  const [obaSeparate, setObaSeparate] = useState<boolean>(false);
+  const [refName, setRefName] = useState<string>('')
+  const [targetName, setTargetName] = useState<string>('')
+  const [predictor, setPredictor] = useState<PredictorKey>('A3_vs_D1')
+  const [residualRank, setResidualRank] = useState<number>(5)
+  const [poolBasisRank, setPoolBasisRank] = useState<number>(6)
+  const [anchorStrategy, setAnchorStrategy] = useState<AnchorStrategy>('S1')
+  const [greedyTarget, setGreedyTarget] = useState<number>(1.5)
+  const [greedyMaxK, setGreedyMaxK] = useState<number>(40)
+  const [rampChannel, setRampChannel] = useState<RampChannel>('neutral')
+  const [rampLevels, setRampLevels] = useState<number>(4)
+  const [obaSeparate, setObaSeparate] = useState<boolean>(true)
 
-  const refProfile = profiles.find(p => p.metadata.full_name === refName);
-  const targetProfile = profiles.find(p => p.metadata.full_name === targetName);
+  const refProfile = profiles.find((p) => p.metadata.full_name === refName)
+  const targetProfile = profiles.find((p) => p.metadata.full_name === targetName)
 
   // Pool basis cache: rebuild when the set of loaded profiles changes
   // (excluding the target — pool must be independent of what we predict).
   const poolMatrices = useMemo(() => {
-    if (profiles.length < 2) return null;
+    if (profiles.length < 2) return null
     return profiles
-      .filter(p => p.metadata.full_name !== targetName)
-      .map(p => {
+      .filter((p) => p.metadata.full_name !== targetName)
+      .map((p) => {
         try {
-          return loadProfileMatrix(p);
+          return loadProfileMatrix(p)
         } catch {
-          return null;
+          return null
         }
       })
-      .filter((m): m is NonNullable<typeof m> => m !== null && m.channels === 3);
-  }, [profiles, targetName]);
+      .filter((m): m is NonNullable<typeof m> => m !== null && m.channels === 3)
+  }, [profiles, targetName])
 
   const result = useMemo<RunResult | null>(() => {
-    if (!refProfile || !targetProfile || refProfile === targetProfile) return null;
+    if (!refProfile || !targetProfile || refProfile === targetProfile) return null
     try {
-      const A = loadProfileMatrix(refProfile);
-      const B = loadProfileMatrix(targetProfile);
-      const aligned = alignByCommonSampleIds(A, B);
-      if (aligned.sampleIds.length < 50) {
-        return { kind: 'error' as const, error: `Only ${aligned.sampleIds.length} shared SAMPLE_IDs — pick profiles from the same target chart.` };
-      }
+      const A = loadProfileMatrix(refProfile)
+      const B = loadProfileMatrix(targetProfile)
+      const aligned = alignByCommonSampleIds(A, B)
+      const L = A.L
+      let N: number
+      let sampleIds: string[]
+      let X_A: Float64Array
+      let X_B: Float64Array
+      let D_B: Float64Array
+      let crossChart = false
 
-      const N = aligned.sampleIds.length;
-      const L = A.L;
-      const X_A = new Float64Array(N * L);
-      const X_B = new Float64Array(N * L);
-      const D_B = new Float64Array(N * B.channels);
-      for (let i = 0; i < N; i++) {
-        const ai = aligned.idxA[i];
-        const bi = aligned.idxB[i];
-        for (let l = 0; l < L; l++) {
-          X_A[i * L + l] = A.X[ai * L + l];
-          X_B[i * L + l] = B.X[bi * L + l];
+      if (aligned.sampleIds.length >= 50) {
+        // Same target chart — align by shared SAMPLE_IDs (exact patch match).
+        N = aligned.sampleIds.length
+        sampleIds = aligned.sampleIds
+        X_A = new Float64Array(N * L)
+        X_B = new Float64Array(N * L)
+        D_B = new Float64Array(N * B.channels)
+        for (let i = 0; i < N; i++) {
+          const ai = aligned.idxA[i]
+          const bi = aligned.idxB[i]
+          for (let l = 0; l < L; l++) {
+            X_A[i * L + l] = A.X[ai * L + l]
+            X_B[i * L + l] = B.X[bi * L + l]
+          }
+          for (let c = 0; c < B.channels; c++) {
+            D_B[i * B.channels + c] = B.D[bi * B.channels + c]
+          }
         }
-        for (let c = 0; c < B.channels; c++) {
-          D_B[i * B.channels + c] = B.D[bi * B.channels + c];
+      } else if (A.channels === 3 && B.channels === 3 && A.L === B.L) {
+        // Different charts (no shared SAMPLE_IDs) — resample both profiles onto a
+        // common RGB grid via interpolation so the transfer can still run.
+        const g = alignByDeviceGrid(A, B)
+        if (g.N < 50) {
+          return {
+            kind: 'error' as const,
+            error: `Cannot align: ${aligned.sampleIds.length} shared SAMPLE_IDs and only ${g.N} common-grid points (device gamuts barely overlap).`,
+          }
+        }
+        N = g.N
+        sampleIds = g.sampleIds
+        X_A = g.X_A
+        X_B = g.X_B
+        D_B = g.D
+        crossChart = true
+      } else {
+        return {
+          kind: 'error' as const,
+          error: `Only ${aligned.sampleIds.length} shared SAMPLE_IDs, and cross-chart alignment needs both profiles to be RGB with matching wavelength grids.`,
         }
       }
 
       const Baligned = {
-        X: X_B, D: D_B,
-        channels: B.channels, N, L,
-        wavelengths: B.wavelengths, sampleIds: aligned.sampleIds, droppedCount: 0,
-      };
+        X: X_B,
+        D: D_B,
+        channels: B.channels,
+        N,
+        L,
+        wavelengths: B.wavelengths,
+        sampleIds,
+        droppedCount: 0,
+      }
 
-      const anchors = anchorStrategy === 'S3'
-        ? pickChannelRampAnchors(Baligned, {
+      const anchors = (() => {
+        if (anchorStrategy === 'S3') {
+          return pickChannelRampAnchors(Baligned, {
             channel: rampChannel,
             levels: evenlySpacedRampLevels(rampLevels),
           })
-        : pickHeuristicAnchors(Baligned);
-      const anchorIdx = anchors.meta?.chosenIdx as number[];
-      const paperRowIdx = anchorIdx[0];
+        }
+        if (anchorStrategy === 'S4') {
+          return pickLabSaturationAnchors(Baligned, { count: 2, minHueSeparationDeg: 90 })
+        }
+        return pickHeuristicAnchors(Baligned)
+      })()
+      const anchorIdx = anchors.meta?.chosenIdx as number[]
+      const paperRowIdx = anchorIdx[0]
 
       // Paper-relative WP from the target's paper anchor spectrum.
-      const paperSpecB = new Array<number>(L);
-      const paperSpecA = new Array<number>(L);
+      const paperSpecB = new Array<number>(L)
+      const paperSpecA = new Array<number>(L)
       for (let l = 0; l < L; l++) {
-        paperSpecB[l] = X_B[paperRowIdx * L + l];
-        paperSpecA[l] = X_A[paperRowIdx * L + l];
+        paperSpecB[l] = X_B[paperRowIdx * L + l]
+        paperSpecA[l] = X_A[paperRowIdx * L + l]
       }
-      const startWL = Baligned.wavelengths[0];
-      const paperWP = paperWPFromBrightestPatch(
-        new Float64Array(paperSpecB), 1, L, startWL,
-      );
+      const startWL = Baligned.wavelengths[0]
+      const paperWP = paperWPFromBrightestPatch(new Float64Array(paperSpecB), 1, L, startWL)
 
       // OBA diagnostics for ref + target.
-      const obaRef = detectOBA(paperSpecA, { startWL });
-      const obaTarget = detectOBA(paperSpecB, { startWL });
-      const obaMm = obaMismatch(obaRef, obaTarget);
+      const obaRef = detectOBA(paperSpecA, { startWL })
+      const obaTarget = detectOBA(paperSpecB, { startWL })
+      const obaMm = obaMismatch(obaRef, obaTarget)
 
       // D7 OBA separation (optional): extract emission analytically and
       // pre-clean both matrices. All predictors below see the clean spectra.
       // At evaluation/display time we add B's OBA emission back.
-      let X_A_work: Float64Array = X_A;
-      let X_B_work: Float64Array = X_B;
-      let obaExtractionA: OBAExtraction | undefined;
-      let obaExtractionB: OBAExtraction | undefined;
-      let factorsA_local: Float64Array | undefined;
-      let factorsB_local: Float64Array | undefined;
+      let X_A_work: Float64Array = X_A
+      let X_B_work: Float64Array = X_B
+      let obaExtractionA: OBAExtraction | undefined
+      let obaExtractionB: OBAExtraction | undefined
+      let factorsA_local: Float64Array | undefined
+      let factorsB_local: Float64Array | undefined
       if (obaSeparate) {
-        obaExtractionA = extractOBAEmission(paperSpecA, { startWL });
-        obaExtractionB = extractOBAEmission(paperSpecB, { startWL });
-        factorsA_local = computeOBAFactorPerPatch(X_A, L, paperRowIdx, { startWL });
-        factorsB_local = computeOBAFactorPerPatch(X_B, L, paperRowIdx, { startWL });
-        X_A_work = subtractOBA(X_A, L, factorsA_local, obaExtractionA.emission);
-        X_B_work = subtractOBA(X_B, L, factorsB_local, obaExtractionB.emission);
+        obaExtractionA = extractOBAEmission(paperSpecA, { startWL })
+        obaExtractionB = extractOBAEmission(paperSpecB, { startWL })
+        factorsA_local = computeOBAFactorPerPatch(X_A, L, paperRowIdx, { startWL })
+        factorsB_local = computeOBAFactorPerPatch(X_B, L, paperRowIdx, { startWL })
+        X_A_work = subtractOBA(X_A, L, factorsA_local, obaExtractionA.emission)
+        X_B_work = subtractOBA(X_B, L, factorsB_local, obaExtractionB.emission)
       }
 
-      const runs: PredictorRun[] = [];
+      const runs: PredictorRun[] = []
 
       // Predictor adapters: each takes a candidate anchor list and returns a
       // PredictionReport (+ extras for the UI). Same shape used by both the
@@ -243,22 +294,23 @@ export default function TransferView({ profiles }: Props) {
         // X_pred_clean_full: N × L predicted matrix on clean scale.
         // We add B's OBA emission back, then evaluate non-anchor patches
         // against the original (un-cleaned) X_B.
-        const X_pred = factorsB_local && obaExtractionB
-          ? addOBA(X_pred_clean_full, L, factorsB_local, obaExtractionB.emission)
-          : X_pred_clean_full;
-        const anchorSet = new Set(anchorList);
-        const testIdx: number[] = [];
-        for (let i = 0; i < N; i++) if (!anchorSet.has(i)) testIdx.push(i);
-        const nTest = testIdx.length;
-        const XPredTest = new Float64Array(nTest * L);
-        const XTrueTest = new Float64Array(nTest * L);
-        const sids: string[] = new Array(nTest);
+        const X_pred =
+          factorsB_local && obaExtractionB
+            ? addOBA(X_pred_clean_full, L, factorsB_local, obaExtractionB.emission)
+            : X_pred_clean_full
+        const anchorSet = new Set(anchorList)
+        const testIdx: number[] = []
+        for (let i = 0; i < N; i++) if (!anchorSet.has(i)) testIdx.push(i)
+        const nTest = testIdx.length
+        const XPredTest = new Float64Array(nTest * L)
+        const XTrueTest = new Float64Array(nTest * L)
+        const sids: string[] = new Array(nTest)
         for (let t = 0; t < nTest; t++) {
-          const src = testIdx[t];
-          sids[t] = aligned.sampleIds[src];
+          const src = testIdx[t]
+          sids[t] = sampleIds[src]
           for (let l = 0; l < L; l++) {
-            XPredTest[t * L + l] = X_pred[src * L + l];
-            XTrueTest[t * L + l] = X_B[src * L + l];
+            XPredTest[t * L + l] = X_pred[src * L + l]
+            XTrueTest[t * L + l] = X_B[src * L + l]
           }
         }
         return evaluatePrediction({
@@ -271,53 +323,68 @@ export default function TransferView({ profiles }: Props) {
           paperWP,
           refProfile: refProfile.metadata.full_name,
           targetProfile: targetProfile.metadata.full_name,
-        });
-      };
+        })
+      }
 
       const runA3 = (idx: number[]) => {
         const base = runPerLambdaAffineTransfer({
-          X_A: X_A_work, X_B: X_B_work,
-          sampleIds: aligned.sampleIds, anchorIdx: idx, L,
+          X_A: X_A_work,
+          X_B: X_B_work,
+          sampleIds: sampleIds,
+          anchorIdx: idx,
+          L,
           paperWP,
           refProfile: refProfile.metadata.full_name,
           targetProfile: targetProfile.metadata.full_name,
-        });
+        })
         if (obaSeparate) {
           // Build the full N×L prediction on clean scale by re-applying the fit.
-          const X_pred_clean = applyPerLambdaAffine(X_A_work, L, base.fit);
-          return { ...base, report: evalWithOBABack(X_pred_clean, idx, 'A3') };
+          const X_pred_clean = applyPerLambdaAffine(X_A_work, L, base.fit)
+          return { ...base, report: evalWithOBABack(X_pred_clean, idx, 'A3') }
         }
-        return base;
-      };
+        return base
+      }
       const runD1 = (idx: number[]) => {
         const base = runPaperRatioResidualTransfer({
-          X_A: X_A_work, X_B: X_B_work, D: D_B,
-          sampleIds: aligned.sampleIds, anchorIdx: idx,
-          paperRowIdx: idx[0] ?? paperRowIdx, L,
+          X_A: X_A_work,
+          X_B: X_B_work,
+          D: D_B,
+          sampleIds: sampleIds,
+          anchorIdx: idx,
+          paperRowIdx: idx[0] ?? paperRowIdx,
+          L,
           paperWP,
           refProfile: refProfile.metadata.full_name,
           targetProfile: targetProfile.metadata.full_name,
           residualRank,
-        });
+          // Per-band UV clamp [0.1, 7.0] on 380-410 nm (first 4 bands of a
+          // 380-730 nm / 10 nm spectrum). Physics demands ratios up to 5-7×
+          // there on OBA-disparate substrates; the default [0.3, 3.0] clamp
+          // destroys the signal.
+          uvBandCount: 4,
+        })
         if (obaSeparate) {
-          return { ...base, report: evalWithOBABack(base.X_pred, idx, 'D1') };
+          return { ...base, report: evalWithOBABack(base.X_pred, idx, 'D1') }
         }
-        return base;
-      };
+        return base
+      }
       const runC7 = (idx: number[]) => {
         const base = runPerLambdaCurveTransfer({
-          X_A: X_A_work, X_B: X_B_work,
-          sampleIds: aligned.sampleIds, anchorIdx: idx, L,
+          X_A: X_A_work,
+          X_B: X_B_work,
+          sampleIds: sampleIds,
+          anchorIdx: idx,
+          L,
           paperWP,
           refProfile: refProfile.metadata.full_name,
           targetProfile: targetProfile.metadata.full_name,
-        });
+        })
         if (obaSeparate) {
-          const X_pred_clean = applyPerLambdaCurve(X_A_work, L, base.fit);
-          return { ...base, report: evalWithOBABack(X_pred_clean, idx, 'C7') };
+          const X_pred_clean = applyPerLambdaCurve(X_A_work, L, base.fit)
+          return { ...base, report: evalWithOBABack(X_pred_clean, idx, 'C7') }
         }
-        return base;
-      };
+        return base
+      }
 
       // B3 needs a pool basis; build once outside the closure so the greedy
       // loop doesn't re-run SVD per iteration.
@@ -327,195 +394,265 @@ export default function TransferView({ profiles }: Props) {
       // the same emission shape as B for all pool profiles. Imperfect but
       // sufficient because OBA emission shape is similar across substrates
       // (peak position fixed at ~440 nm), only amplitude differs.
-      const b3Ready = !!poolMatrices && poolMatrices.length >= 2;
-      const poolXs: Float64Array[] = [];
-      const poolNs: number[] = [];
+      const b3Ready = !!poolMatrices && poolMatrices.length >= 2
+      const poolXs: Float64Array[] = []
+      const poolNs: number[] = []
       if (b3Ready) {
         for (const m of poolMatrices!) {
           if (obaSeparate && obaExtractionB) {
-            const f = computeOBAFactorPerPatch(m.X, L, 0, { startWL });
-            poolXs.push(subtractOBA(m.X, L, f, obaExtractionB.emission));
+            const f = computeOBAFactorPerPatch(m.X, L, 0, { startWL })
+            poolXs.push(subtractOBA(m.X, L, f, obaExtractionB.emission))
           } else {
-            poolXs.push(m.X);
+            poolXs.push(m.X)
           }
-          poolNs.push(m.N);
+          poolNs.push(m.N)
         }
       }
       const b3Basis = b3Ready
         ? fitPoolBasis({ matrices: poolXs, rowCounts: poolNs, L, p: Math.min(poolBasisRank, L) })
-        : null;
+        : null
       const runB3 = (idx: number[]) => {
-        if (!b3Basis) throw new Error('B3 unavailable: need ≥ 2 pool profiles');
+        if (!b3Basis) throw new Error('B3 unavailable: need ≥ 2 pool profiles')
         const base = runPoolPCATransfer({
           basis: b3Basis,
           X_ref: X_A_work,
           X_target: X_B_work,
-          sampleIds: aligned.sampleIds,
-          anchorIdx: idx, L,
+          sampleIds: sampleIds,
+          anchorIdx: idx,
+          L,
           paperWP,
           refProfile: refProfile.metadata.full_name,
           targetProfile: targetProfile.metadata.full_name,
-        });
+        })
         if (obaSeparate) {
-          return { ...base, report: evalWithOBABack(base.X_pred, idx, 'B3') };
+          return { ...base, report: evalWithOBABack(base.X_pred, idx, 'B3') }
         }
-        return base;
-      };
+        return base
+      }
 
-      type Variant = 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW';
-      const wantA3 = predictor === 'A3' || predictor === 'A3_vs_D1' || predictor === 'ALL';
-      const wantD1 = predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL';
-      const wantB3 = (predictor === 'B3' || predictor === 'ALL') && b3Ready;
-      const wantC7 = predictor === 'C7' || predictor === 'ALL';
-       const wantCAE_RAW = predictor === 'CAE_RAW' || predictor === 'ALL';
-       const wantCAE_D7 = predictor === 'CAE_D7' || predictor === 'ALL';
+      type Variant = 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'CAE_D7' | 'CAE_D7_M1'
+      const wantA3 = predictor === 'A3' || predictor === 'A3_vs_D1' || predictor === 'ALL'
+      const wantD1 = predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL'
+      const wantB3 = (predictor === 'B3' || predictor === 'ALL') && b3Ready
+      const wantC7 = predictor === 'C7' || predictor === 'ALL'
+      const wantCAE_RAW = predictor === 'CAE_RAW' || predictor === 'ALL'
+      const wantCAE_D7 = predictor === 'CAE_D7' || predictor === 'ALL'
+      const wantCAE_D7_M1 = predictor === 'CAE_D7_M1' || predictor === 'ALL'
 
-       const runCAE_RAW = (idx: number[]) => runCAETransfer({
-         weights: CAE_WEIGHTS_RAW,
-         X_A, X_B, D: D_B,
-         paper_A: paperSpecA, paper_B: paperSpecB,
-         sampleIds: aligned.sampleIds, anchorIdx: idx, paperRowIdx, L,
-         paperWP,
-         refProfile: refProfile.metadata.full_name,
-         targetProfile: targetProfile.metadata.full_name,
-       });
-       
-       const runCAE_D7 = (idx: number[]) => runCAETransfer({
-         weights: CAE_WEIGHTS_D7,
-         X_A, X_B, D: D_B,
-         paper_A: paperSpecA, paper_B: paperSpecB,
-         sampleIds: aligned.sampleIds, anchorIdx: idx, paperRowIdx, L,
-         paperWP,
-         refProfile: refProfile.metadata.full_name,
-         targetProfile: targetProfile.metadata.full_name,
-       });
+      const runCAE_RAW = (idx: number[]) => {
+        return runCAETransfer({
+          weights: CAE_WEIGHTS_RAW,
+          X_A,
+          X_B,
+          D: D_B,
+          paper_A: paperSpecA,
+          paper_B: paperSpecB,
+          sampleIds: sampleIds,
+          anchorIdx: idx,
+          paperRowIdx,
+          L,
+          paperWP,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+        })
+      }
 
-       const dispatch = (v: Variant, idx: number[]) => {
-         if (v === 'A3') return { ...runA3(idx), variant: 'A3' as const };
-         if (v === 'D1') return { ...runD1(idx), variant: 'D1' as const };
-         if (v === 'C7') return { ...runC7(idx), variant: 'C7' as const };
-         if (v === 'CAE_RAW') return { ...runCAE_RAW(idx), variant: 'CAE_RAW' as const };
-         if (v === 'CAE_D7') return { ...runCAE_D7(idx), variant: 'CAE_D7' as const };
-         return { ...runB3(idx), variant: 'B3' as const };
-       };
+      const runCAE_D7 = (idx: number[]) => {
+        return runCAETransfer({
+          weights: CAE_WEIGHTS_D7,
+          X_A,
+          X_B,
+          D: D_B,
+          paper_A: paperSpecA,
+          paper_B: paperSpecB,
+          sampleIds: sampleIds,
+          anchorIdx: idx,
+          paperRowIdx,
+          L,
+          paperWP,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+        })
+      }
 
-      const variants: Variant[] = [];
-      if (wantA3) variants.push('A3');
-      if (wantD1) variants.push('D1');
-      if (wantB3) variants.push('B3');
-      if (wantC7) variants.push('C7');
-      if (wantCAE) variants.push('CAE_RAW');
+      const runCAE_D7_M1 = (idx: number[]) => {
+        return runCAETransfer({
+          weights: CAE_WEIGHTS_D7_M1,
+          X_A,
+          X_B,
+          D: D_B,
+          paper_A: paperSpecA,
+          paper_B: paperSpecB,
+          sampleIds: sampleIds,
+          anchorIdx: idx,
+          paperRowIdx,
+          L,
+          paperWP,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+        })
+      }
+
+      const dispatch = (v: Variant, idx: number[]) => {
+        if (v === 'A3') return { ...runA3(idx), variant: 'A3' as const }
+        if (v === 'D1') return { ...runD1(idx), variant: 'D1' as const }
+        if (v === 'C7') return { ...runC7(idx), variant: 'C7' as const }
+        if (v === 'CAE_RAW') return { ...runCAE_RAW(idx), variant: 'CAE_RAW' as const }
+        if (v === 'CAE_D7') return { ...runCAE_D7(idx), variant: 'CAE_D7' as const }
+        if (v === 'CAE_D7_M1') return { ...runCAE_D7_M1(idx), variant: 'CAE_D7_M1' as const }
+        return { ...runB3(idx), variant: 'B3' as const }
+      }
+
+      const variants: Variant[] = []
+      if (wantA3) variants.push('A3')
+      if (wantD1) variants.push('D1')
+      if (wantB3) variants.push('B3')
+      if (wantC7) variants.push('C7')
+      if (wantCAE_RAW) variants.push('CAE_RAW')
+      if (wantCAE_D7) variants.push('CAE_D7')
+      if (wantCAE_D7_M1) variants.push('CAE_D7_M1')
 
       for (const v of variants) {
         if (anchorStrategy === 'S2') {
           const greedy = runGreedyActiveAnchors({
             predict: (a) => dispatch(v, a).report,
             seedAnchors: anchorIdx,
-            sampleIds: aligned.sampleIds,
+            sampleIds: sampleIds,
             targetMedianDE: greedyTarget,
             maxK: greedyMaxK,
-          });
+          })
           // Re-run dispatch once with final anchors to capture per-variant extras.
-          const finalRun = dispatch(v, greedy.finalAnchors);
-          const base: PredictorRun = { variant: v, report: finalRun.report, greedy };
-          if (v === 'A3') base.perLambdaR2 = (finalRun as ReturnType<typeof runA3>).fit.rSquaredPerLambda;
+          const finalRun = dispatch(v, greedy.finalAnchors)
+          const base: PredictorRun = { variant: v, report: finalRun.report, greedy }
+          if (v === 'A3')
+            base.perLambdaR2 = (finalRun as ReturnType<typeof runA3>).fit.rSquaredPerLambda
           if (v === 'D1') {
-            const f = (finalRun as ReturnType<typeof runD1>).fit;
-            base.residualRank = f.residualRank;
-            base.clampedBandCount = f.clampedBands.length;
+            const f = (finalRun as ReturnType<typeof runD1>).fit
+            base.residualRank = f.residualRank
+            base.clampedBandCount = f.clampedBands.length
           }
           if (v === 'B3') {
-            const r = finalRun as ReturnType<typeof runB3>;
-            base.basisRank = r.p;
-            base.poolSize = poolMatrices!.length;
+            const r = finalRun as ReturnType<typeof runB3>
+            base.basisRank = r.p
+            base.poolSize = poolMatrices!.length
           }
-           if (v === 'CAE_RAW') {
-             const c = finalRun as ReturnType<typeof runCAE>;
-             base.caeRefInTrain = c.refInTrain;
-             base.caeTargetInTrain = c.targetInTrain;
-             base.caeBestTestMSE = CAE_WEIGHTS_RAW.best_test_mse;
-           }
-           if (v === 'CAE_D7') {
-             const c = finalRun as ReturnType<typeof runCAE>;
-             base.caeRefInTrain = c.refInTrain;
-             base.caeTargetInTrain = c.targetInTrain;
-             base.caeBestTestMSE = CAE_WEIGHTS_D7.best_test_mse;
-           }
-          runs.push(base);
+          if (v === 'CAE_RAW') {
+            const c = finalRun as ReturnType<typeof runCAETransfer>
+            base.caeRefInTrain = c.refInTrain
+            base.caeTargetInTrain = c.targetInTrain
+            base.caeBestTestMSE = CAE_WEIGHTS_RAW.best_test_mse
+          }
+          if (v === 'CAE_D7') {
+            const c = finalRun as ReturnType<typeof runCAETransfer>
+            base.caeRefInTrain = c.refInTrain
+            base.caeTargetInTrain = c.targetInTrain
+            base.caeBestTestMSE = CAE_WEIGHTS_D7.best_test_mse
+          }
+          if (v === 'CAE_D7_M1') {
+            const c = finalRun as ReturnType<typeof runCAETransfer>
+            base.caeRefInTrain = c.refInTrain
+            base.caeTargetInTrain = c.targetInTrain
+            base.caeBestTestMSE = CAE_WEIGHTS_D7_M1.best_test_mse
+          }
+          runs.push(base)
         } else {
-          const r = dispatch(v, anchorIdx);
-          const base: PredictorRun = { variant: v, report: r.report };
-          if (v === 'A3') base.perLambdaR2 = (r as ReturnType<typeof runA3>).fit.rSquaredPerLambda;
+          const r = dispatch(v, anchorIdx)
+          const base: PredictorRun = { variant: v, report: r.report }
+          if (v === 'A3') base.perLambdaR2 = (r as ReturnType<typeof runA3>).fit.rSquaredPerLambda
           if (v === 'D1') {
-            const f = (r as ReturnType<typeof runD1>).fit;
-            base.residualRank = f.residualRank;
-            base.clampedBandCount = f.clampedBands.length;
+            const f = (r as ReturnType<typeof runD1>).fit
+            base.residualRank = f.residualRank
+            base.clampedBandCount = f.clampedBands.length
           }
           if (v === 'B3') {
-            const br = r as ReturnType<typeof runB3>;
-            base.basisRank = br.p;
-            base.poolSize = poolMatrices!.length;
+            const br = r as ReturnType<typeof runB3>
+            base.basisRank = br.p
+            base.poolSize = poolMatrices!.length
           }
-           if (v === 'CAE_RAW') {
-             const c = r as ReturnType<typeof runCAE>;
-             base.caeRefInTrain = c.refInTrain;
-             base.caeTargetInTrain = c.targetInTrain;
-             base.caeBestTestMSE = CAE_WEIGHTS_RAW.best_test_mse;
-           }
-           if (v === 'CAE_D7') {
-             const c = r as ReturnType<typeof runCAE>;
-             base.caeRefInTrain = c.refInTrain;
-             base.caeTargetInTrain = c.targetInTrain;
-             base.caeBestTestMSE = CAE_WEIGHTS_D7.best_test_mse;
-           }
-          runs.push(base);
+          if (v === 'CAE_RAW') {
+            const c = r as ReturnType<typeof runCAETransfer>
+            base.caeRefInTrain = c.refInTrain
+            base.caeTargetInTrain = c.targetInTrain
+            base.caeBestTestMSE = CAE_WEIGHTS_RAW.best_test_mse
+          }
+          if (v === 'CAE_D7') {
+            const c = r as ReturnType<typeof runCAETransfer>
+            base.caeRefInTrain = c.refInTrain
+            base.caeTargetInTrain = c.targetInTrain
+            base.caeBestTestMSE = CAE_WEIGHTS_D7.best_test_mse
+          }
+          if (v === 'CAE_D7_M1') {
+            const c = r as ReturnType<typeof runCAETransfer>
+            base.caeRefInTrain = c.refInTrain
+            base.caeTargetInTrain = c.targetInTrain
+            base.caeBestTestMSE = CAE_WEIGHTS_D7_M1.best_test_mse
+          }
+          runs.push(base)
         }
       }
 
       return {
         kind: 'ok' as const,
-        runs, anchors, alignedN: N,
-        obaRef, obaTarget, obaMismatchScore: obaMm,
-        obaExtractionA, obaExtractionB,
+        runs,
+        anchors,
+        alignedN: N,
+        crossChart,
+        obaRef,
+        obaTarget,
+        obaMismatchScore: obaMm,
+        obaExtractionA,
+        obaExtractionB,
         obaSeparateEnabled: obaSeparate,
-      };
+      }
     } catch (e) {
-      return { kind: 'error' as const, error: e instanceof Error ? e.message : String(e) };
+      return { kind: 'error' as const, error: e instanceof Error ? e.message : String(e) }
     }
-  }, [refProfile, targetProfile, predictor, residualRank, poolMatrices, poolBasisRank,
-      anchorStrategy, greedyTarget, greedyMaxK, rampChannel, rampLevels, obaSeparate]);
+  }, [
+    refProfile,
+    targetProfile,
+    predictor,
+    residualRank,
+    poolMatrices,
+    poolBasisRank,
+    anchorStrategy,
+    greedyTarget,
+    greedyMaxK,
+    rampChannel,
+    rampLevels,
+    obaSeparate,
+  ])
 
   if (profiles.length < 2) {
     return (
       <div className="p-6 text-gray-400">
         Load at least two profiles to run cross-substrate transfer.
       </div>
-    );
+    )
   }
 
   // Per-profile OBA score for dropdown labels — paper patch detection.
   const profileObaLabel = (p: ProfileData): string => {
-    const paper = p.raw.find(m =>
-      m.RGB_R === 255 && m.RGB_G === 255 && m.RGB_B === 255 && m.spectra,
-    );
-    if (!paper || !paper.spectra) return p.metadata.full_name;
+    const paper = p.raw.find(
+      (m) => m.RGB_R === 255 && m.RGB_G === 255 && m.RGB_B === 255 && m.spectra,
+    )
+    if (!paper || !paper.spectra) return p.metadata.full_name
     try {
-      const startWL = paper.wavelengths?.[0] ?? 380;
-      const info = detectOBA(paper.spectra, { startWL });
-      return `${p.metadata.full_name}  (OBA ${info.score.toFixed(2)})`;
+      const startWL = paper.wavelengths?.[0] ?? 380
+      const info = detectOBA(paper.spectra, { startWL })
+      return `${p.metadata.full_name}  (OBA ${info.score.toFixed(2)})`
     } catch {
-      return p.metadata.full_name;
+      return p.metadata.full_name
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h2 className="text-xl font-bold mb-1">Cross-substrate transfer (Phase 2 + 3)</h2>
         <p className="text-sm text-gray-400">
-          Predicts the full target profile from the reference profile + 13 measured anchors
-          on the target (paper, 6 RGB primaries, black, 5 neutrals). Metrics on the 905 − 13 =
-          892 held-out patches under paper-relative D50/2°.
+          Predicts the full target profile from the reference profile + 13 measured anchors on the
+          target (paper, 6 RGB primaries, black, 5 neutrals). Metrics on the 905 − 13 = 892 held-out
+          patches under paper-relative D50/2°.
         </p>
       </div>
 
@@ -524,11 +661,11 @@ export default function TransferView({ profiles }: Props) {
           <span className="text-xs uppercase tracking-wider text-gray-500">Reference (full)</span>
           <select
             value={refName}
-            onChange={e => setRefName(e.target.value)}
+            onChange={(e) => setRefName(e.target.value)}
             className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
           >
             <option value="">— pick reference —</option>
-            {profiles.map(p => (
+            {profiles.map((p) => (
               <option key={p.metadata.full_name} value={p.metadata.full_name}>
                 {profileObaLabel(p)}
               </option>
@@ -536,14 +673,16 @@ export default function TransferView({ profiles }: Props) {
           </select>
         </label>
         <label className="block">
-          <span className="text-xs uppercase tracking-wider text-gray-500">Target (only anchors)</span>
+          <span className="text-xs uppercase tracking-wider text-gray-500">
+            Target (only anchors)
+          </span>
           <select
             value={targetName}
-            onChange={e => setTargetName(e.target.value)}
+            onChange={(e) => setTargetName(e.target.value)}
             className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
           >
             <option value="">— pick target —</option>
-            {profiles.map(p => (
+            {profiles.map((p) => (
               <option key={p.metadata.full_name} value={p.metadata.full_name}>
                 {profileObaLabel(p)}
               </option>
@@ -557,38 +696,50 @@ export default function TransferView({ profiles }: Props) {
           <span className="text-xs uppercase tracking-wider text-gray-500">Predictor</span>
           <select
             value={predictor}
-            onChange={e => setPredictor(e.target.value as PredictorKey)}
+            onChange={(e) => setPredictor(e.target.value as PredictorKey)}
             className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
           >
             <option value="ALL">All predictors (A3 / D1 / B3 / C7 / CAE_RAW)</option>
             <option value="A3_vs_D1">A3 vs D1 (head-to-head)</option>
             <option value="A3">A3 — per-λ affine (baseline)</option>
             <option value="D1">D1 — paper-ratio + PCA residual</option>
-            <option value="B3">B3 — pool-PCA (basis from {poolMatrices?.length ?? 0} profiles)</option>
+            <option value="B3">
+              B3 — pool-PCA (basis from {poolMatrices?.length ?? 0} profiles)
+            </option>
             <option value="C7">C7 — per-λ monotone curve</option>
-             <option value="CAE_RAW">CAE_RAW — Conditional Autoencoder (cross-trained MK, raw spectra)</option>
-             <option value="CAE_D7">CAE_D7 — Conditional Autoencoder (cross-trained MK, OBA-cleaned spectra)</option>
+            <option value="CAE_RAW">
+              CAE_RAW — Conditional Autoencoder (cross-trained MK, raw spectra)
+            </option>
+            <option value="CAE_D7">
+              CAE_D7 — Conditional Autoencoder (cross-trained MK, OBA-cleaned spectra, M0)
+            </option>
+            <option value="CAE_D7_M1">
+              CAE_D7_M1 — Conditional Autoencoder (cross-trained MK, OBA-cleaned spectra, M1)
+            </option>
           </select>
         </label>
         <label className="block">
           <span className="text-xs uppercase tracking-wider text-gray-500">D1 residual rank</span>
           <select
             value={residualRank}
-            onChange={e => setResidualRank(Number(e.target.value))}
+            onChange={(e) => setResidualRank(Number(e.target.value))}
             disabled={!(predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL')}
             className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm disabled:opacity-40"
           >
             <option value={1}>1</option>
-            <option value={2}>2 (default)</option>
+            <option value={2}>2 (legacy)</option>
             <option value={3}>3</option>
             <option value={4}>4</option>
+            <option value={5}>5 (default)</option>
+            <option value={6}>6</option>
+            <option value={8}>8</option>
           </select>
         </label>
         <label className="block">
           <span className="text-xs uppercase tracking-wider text-gray-500">B3 basis rank</span>
           <select
             value={poolBasisRank}
-            onChange={e => setPoolBasisRank(Number(e.target.value))}
+            onChange={(e) => setPoolBasisRank(Number(e.target.value))}
             disabled={!(predictor === 'B3' || predictor === 'ALL')}
             className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm disabled:opacity-40"
           >
@@ -605,11 +756,13 @@ export default function TransferView({ profiles }: Props) {
             <input
               type="checkbox"
               checked={obaSeparate}
-              onChange={e => setObaSeparate(e.target.checked)}
+              onChange={(e) => setObaSeparate(e.target.checked)}
               className="accent-blue-500"
             />
             <span className={obaSeparate ? 'text-emerald-300' : 'text-gray-400'}>
-              {obaSeparate ? 'ON — predictors run on OBA-clean spectra' : 'OFF — predictors see raw spectra'}
+              {obaSeparate
+                ? 'ON — predictors run on OBA-clean spectra'
+                : 'OFF — predictors see raw spectra'}
             </span>
           </div>
         </label>
@@ -617,12 +770,15 @@ export default function TransferView({ profiles }: Props) {
           <span className="text-xs uppercase tracking-wider text-gray-500">Anchor strategy</span>
           <select
             value={anchorStrategy}
-            onChange={e => setAnchorStrategy(e.target.value as AnchorStrategy)}
+            onChange={(e) => setAnchorStrategy(e.target.value as AnchorStrategy)}
             className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
           >
             <option value="S1">S1 — forced (13 fixed anchors)</option>
             <option value="S2">S2 — greedy adaptive (S1 seed + grow)</option>
             <option value="S3">S3 — single-channel ramp (paper + N ramp anchors)</option>
+            <option value="S4">
+              S4 — three anchors: paper + two along dominant directions at fixed chroma
+            </option>
           </select>
         </label>
       </div>
@@ -630,12 +786,10 @@ export default function TransferView({ profiles }: Props) {
       {anchorStrategy === 'S3' && (
         <div className="grid grid-cols-2 gap-4 p-3 rounded-lg border border-gray-800 bg-gray-900/60">
           <label className="block">
-            <span className="text-xs uppercase tracking-wider text-gray-500">
-              S3 ramp channel
-            </span>
+            <span className="text-xs uppercase tracking-wider text-gray-500">S3 ramp channel</span>
             <select
               value={rampChannel}
-              onChange={e => setRampChannel(e.target.value as RampChannel)}
+              onChange={(e) => setRampChannel(e.target.value as RampChannel)}
               className="mt-1 w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
             >
               <option value="neutral">neutral gray (R=G=B)</option>
@@ -644,8 +798,8 @@ export default function TransferView({ profiles }: Props) {
               <option value="Y">yellow (R=G=255, B varies)</option>
             </select>
             <p className="text-[11px] text-gray-500 mt-1">
-              Channel ramp to use as anchors. Tests the hypothesis that
-              substrate transform is shared across inks.
+              Channel ramp to use as anchors. Tests the hypothesis that substrate transform is
+              shared across inks.
             </p>
           </label>
           <label className="block">
@@ -655,18 +809,18 @@ export default function TransferView({ profiles }: Props) {
             <div className="mt-1 flex items-center gap-3">
               <input
                 type="range"
-                min={1} max={8} step={1}
+                min={1}
+                max={8}
+                step={1}
                 value={rampLevels}
-                onChange={e => setRampLevels(Number(e.target.value))}
+                onChange={(e) => setRampLevels(Number(e.target.value))}
                 className="flex-1"
               />
-              <span className="font-mono text-sm text-gray-200 w-12 text-right">
-                {rampLevels}
-              </span>
+              <span className="font-mono text-sm text-gray-200 w-12 text-right">{rampLevels}</span>
             </div>
             <p className="text-[11px] text-gray-500 mt-1">
-              Total anchors = paper + N = {1 + rampLevels}. Compare to S1's
-              13. Lower k = lower measurement burden if hypothesis holds.
+              Total anchors = paper + N = {1 + rampLevels}. Compare to S1's 13. Lower k = lower
+              measurement burden if hypothesis holds.
             </p>
           </label>
         </div>
@@ -681,9 +835,11 @@ export default function TransferView({ profiles }: Props) {
             <div className="mt-1 flex items-center gap-3">
               <input
                 type="range"
-                min={0.5} max={5.0} step={0.1}
+                min={0.5}
+                max={5.0}
+                step={0.1}
                 value={greedyTarget}
-                onChange={e => setGreedyTarget(Number(e.target.value))}
+                onChange={(e) => setGreedyTarget(Number(e.target.value))}
                 className="flex-1"
               />
               <span className="font-mono text-sm text-gray-200 w-12 text-right">
@@ -701,14 +857,14 @@ export default function TransferView({ profiles }: Props) {
             <div className="mt-1 flex items-center gap-3">
               <input
                 type="range"
-                min={15} max={80} step={1}
+                min={15}
+                max={80}
+                step={1}
                 value={greedyMaxK}
-                onChange={e => setGreedyMaxK(Number(e.target.value))}
+                onChange={(e) => setGreedyMaxK(Number(e.target.value))}
                 className="flex-1"
               />
-              <span className="font-mono text-sm text-gray-200 w-12 text-right">
-                {greedyMaxK}
-              </span>
+              <span className="font-mono text-sm text-gray-200 w-12 text-right">{greedyMaxK}</span>
             </div>
             <p className="text-[11px] text-gray-500 mt-1">
               Hard cap on greedy iterations. Each iter ≈ one predictor refit.
@@ -725,6 +881,14 @@ export default function TransferView({ profiles }: Props) {
 
       {result && result.kind === 'ok' && result.runs.length > 0 && (
         <div className="space-y-6">
+          {result.crossChart && (
+            <div className="bg-amber-950/40 border border-amber-700/60 rounded-lg p-3 text-sm text-amber-200">
+              Cross-chart mode: profiles have no shared SAMPLE_IDs, so both were
+              resampled onto a common 9×9×9 RGB lattice via per-band k-NN IDW
+              interpolation ({result.alignedN} grid points). Read ΔE00 above the
+              interpolation noise floor (~1.5–2 ΔE00 on sparse charts like BC 905).
+            </div>
+          )}
           <OBAMismatchTile
             obaRef={result.obaRef}
             obaTarget={result.obaTarget}
@@ -749,7 +913,7 @@ export default function TransferView({ profiles }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {result.runs.map(run => (
+                  {result.runs.map((run) => (
                     <tr key={run.variant} className="border-t border-gray-800">
                       <td className="py-2 font-mono">{run.variant}</td>
                       <td className={`text-right py-2 font-mono ${deColor(run.report.medianDE00)}`}>
@@ -770,40 +934,60 @@ export default function TransferView({ profiles }: Props) {
                 </tbody>
               </table>
               {(() => {
-                if (result.runs.length < 2) return null;
+                if (result.runs.length < 2) return null
                 const sorted = [...result.runs].sort(
                   (u, v) => u.report.medianDE00 - v.report.medianDE00,
-                );
-                const winner = sorted[0];
-                const runnerUp = sorted[1];
-                const delta = runnerUp.report.medianDE00 - winner.report.medianDE00;
+                )
+                const winner = sorted[0]
+                const runnerUp = sorted[1]
+                const delta = runnerUp.report.medianDE00 - winner.report.medianDE00
                 return (
                   <div className="mt-3 text-xs text-gray-400">
                     Winner on median ΔE00:{' '}
-                    <span className="text-emerald-400 font-semibold">{winner.variant}</span>{' '}
-                    by {delta.toFixed(2)} ΔE00 over {runnerUp.variant}.
+                    <span className="text-emerald-400 font-semibold">{winner.variant}</span> by{' '}
+                    {delta.toFixed(2)} ΔE00 over {runnerUp.variant}.
                   </div>
-                );
+                )
               })()}
             </div>
           )}
 
-          {result.runs.map(run => (
+          {result.runs.map((run) => (
             <div key={run.variant} className="space-y-3">
-              <h3 className="text-sm uppercase tracking-wider text-gray-500">{run.report.variant}</h3>
+              <h3 className="text-sm uppercase tracking-wider text-gray-500">
+                {run.report.variant}
+              </h3>
               <div className="grid grid-cols-4 gap-3">
-                <Metric label="median ΔE00" value={fmt(run.report.medianDE00)} cls={deColor(run.report.medianDE00)} />
-                <Metric label="P95 ΔE00" value={fmt(run.report.p95DE00)} cls={deColor(run.report.p95DE00)} />
-                <Metric label="mean R²" value={fmt(run.report.meanSpectralR2, 3)} cls="text-gray-200" />
+                <Metric
+                  label="median ΔE00"
+                  value={fmt(run.report.medianDE00)}
+                  cls={deColor(run.report.medianDE00)}
+                />
+                <Metric
+                  label="P95 ΔE00"
+                  value={fmt(run.report.p95DE00)}
+                  cls={deColor(run.report.p95DE00)}
+                />
+                <Metric
+                  label="mean R²"
+                  value={fmt(run.report.meanSpectralR2, 3)}
+                  cls="text-gray-200"
+                />
                 <Metric label="mean RMS" value={fmt(run.report.meanRMS, 4)} cls="text-gray-200" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <Metric label="anchors (k)" value={String(run.report.k)} cls="text-gray-200" />
                 <Metric label="held-out" value={String(run.report.nTest)} cls="text-gray-200" />
-                <Metric label="shared SAMPLE_IDs" value={String(result.alignedN)} cls="text-gray-200" />
+                <Metric
+                  label={result.crossChart ? 'grid points (interp)' : 'shared SAMPLE_IDs'}
+                  value={String(result.alignedN)}
+                  cls={result.crossChart ? 'text-amber-300' : 'text-gray-200'}
+                />
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Worst 5 patches</div>
+                <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">
+                  Worst 5 patches
+                </div>
                 <div className="text-xs font-mono text-gray-400">
                   {run.report.worstPatchSampleIds.join(', ')}
                 </div>
@@ -816,7 +1000,16 @@ export default function TransferView({ profiles }: Props) {
                   <div className="grid grid-cols-6 gap-2 text-xs font-mono">
                     {Array.from(run.perLambdaR2).map((r2, l) => (
                       <div key={l} className="text-gray-400">
-                        λ{380 + l * 10}: <span className={r2 > 0.9 ? 'text-emerald-400' : r2 > 0.6 ? 'text-yellow-400' : 'text-red-400'}>
+                        λ{380 + l * 10}:{' '}
+                        <span
+                          className={
+                            r2 > 0.9
+                              ? 'text-emerald-400'
+                              : r2 > 0.6
+                                ? 'text-yellow-400'
+                                : 'text-red-400'
+                          }
+                        >
                           {r2.toFixed(2)}
                         </span>
                       </div>
@@ -827,18 +1020,17 @@ export default function TransferView({ profiles }: Props) {
               {run.residualRank !== undefined && (
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-400 space-y-1">
                   <div>
-                    D1 used PCA residual rank <span className="text-gray-200 font-mono">{run.residualRank}</span>{' '}
-                    fit on {run.report.k - 1} non-paper anchors. Lower-rank residual = stronger
-                    smoothness assumption on the substrate transform.
+                    D1 used PCA residual rank{' '}
+                    <span className="text-gray-200 font-mono">{run.residualRank}</span> fit on{' '}
+                    {run.report.k - 1} non-paper anchors. Lower-rank residual = stronger smoothness
+                    assumption on the substrate transform.
                   </div>
                   {run.clampedBandCount !== undefined && run.clampedBandCount > 0 && (
                     <div>
                       Paper-ratio clamp activated on{' '}
-                      <span className="text-yellow-300 font-mono">
-                        {run.clampedBandCount} / 36
-                      </span>{' '}
-                      wavelengths (default bounds [0.3, 3.0]). Typically signals
-                      OBA mismatch in 380–410 nm — distrust D1 at those bands.
+                      <span className="text-yellow-300 font-mono">{run.clampedBandCount} / 36</span>{' '}
+                      wavelengths (default bounds [0.3, 3.0]). Typically signals OBA mismatch in
+                      380–410 nm — distrust D1 at those bands.
                     </div>
                   )}
                 </div>
@@ -868,14 +1060,14 @@ export default function TransferView({ profiles }: Props) {
                   <div className="text-[11px] text-gray-400">
                     Per-iter medianΔE00:{' '}
                     <span className="font-mono text-gray-200">
-                      {run.greedy.trajectory.map(s => s.report.medianDE00.toFixed(2)).join(' → ')}
+                      {run.greedy.trajectory.map((s) => s.report.medianDE00.toFixed(2)).join(' → ')}
                     </span>
                   </div>
                   {run.greedy.addedOrder.length > 0 && (
                     <div className="text-[11px] text-gray-400">
                       Added patches ({run.greedy.addedOrder.length} rows):{' '}
                       <span className="font-mono text-gray-200">
-                        {run.greedy.addedOrder.map(rowIdx => `r${rowIdx}`).join(', ')}
+                        {run.greedy.addedOrder.map((rowIdx) => `r${rowIdx}`).join(', ')}
                       </span>
                     </div>
                   )}
@@ -884,23 +1076,25 @@ export default function TransferView({ profiles }: Props) {
               {run.caeBestTestMSE !== undefined && (
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-400 space-y-1">
                   <div>
-                    CAE cross-trained on 11 / 16 MK profiles (70 / 30 split, seed 42).
-                    Best held-out MSE on training: <span className="font-mono text-gray-200">{run.caeBestTestMSE.toFixed(5)}</span>.
+                    CAE cross-trained on 11 / 16 MK profiles (70 / 30 split, seed 42). Best held-out
+                    MSE on training:{' '}
+                    <span className="font-mono text-gray-200">{run.caeBestTestMSE.toFixed(5)}</span>
+                    .
                   </div>
                   <div>
                     Reference profile in training pool:{' '}
                     <span className={run.caeRefInTrain ? 'text-emerald-300' : 'text-yellow-300'}>
                       {run.caeRefInTrain ? 'yes' : 'no (held-out — substrate id = null)'}
-                    </span>.
-                    Target in training pool:{' '}
+                    </span>
+                    . Target in training pool:{' '}
                     <span className={run.caeTargetInTrain ? 'text-emerald-300' : 'text-yellow-300'}>
                       {run.caeTargetInTrain ? 'yes' : 'no (held-out — substrate id = null)'}
-                    </span>.
+                    </span>
+                    .
                   </div>
                   <div>
-                    No anchor fine-tuning yet — substrate identity comes purely from the
-                    paper-white spectrum. Few-shot anchor adaptation queued for the next
-                    revision.
+                    No anchor fine-tuning yet — substrate identity comes purely from the paper-white
+                    spectrum. Few-shot anchor adaptation queued for the next revision.
                   </div>
                 </div>
               )}
@@ -908,14 +1102,14 @@ export default function TransferView({ profiles }: Props) {
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-400 space-y-1">
                   <div>
                     B3 basis built from{' '}
-                    <span className="text-gray-200 font-mono">{run.poolSize}</span>{' '}
-                    pool profiles (target excluded), truncated to rank{' '}
+                    <span className="text-gray-200 font-mono">{run.poolSize}</span> pool profiles
+                    (target excluded), truncated to rank{' '}
                     <span className="text-gray-200 font-mono">{run.basisRank ?? '—'}</span>.
                   </div>
                   <div>
-                    B3 does NOT use the reference profile — it captures cross-substrate
-                    structure shared across the pool. With fewer than 5 pool profiles,
-                    or with substrates very unlike the target, B3 degrades to noise.
+                    B3 does NOT use the reference profile — it captures cross-substrate structure
+                    shared across the pool. With fewer than 5 pool profiles, or with substrates very
+                    unlike the target, B3 degrades to noise.
                   </div>
                 </div>
               )}
@@ -928,19 +1122,19 @@ export default function TransferView({ profiles }: Props) {
             </div>
             <div className="text-xs font-mono text-gray-400 flex flex-wrap gap-2">
               {result.anchors.sampleIds.map((id, i) => {
-                const label = (result.anchors.meta?.labels as string[])[i];
+                const label = (result.anchors.meta?.labels as string[])[i]
                 return (
                   <span key={id} className="px-2 py-0.5 bg-gray-800 rounded">
                     {label}: <span className="text-gray-200">{id}</span>
                   </span>
-                );
+                )
               })}
             </div>
           </div>
         </div>
       )}
     </div>
-  );
+  )
 }
 
 function Metric({ label, value, cls }: { label: string; value: string; cls: string }) {
@@ -949,12 +1143,12 @@ function Metric({ label, value, cls }: { label: string; value: string; cls: stri
       <div className="text-xs uppercase tracking-wider text-gray-500">{label}</div>
       <div className={`text-2xl font-mono mt-1 ${cls}`}>{value}</div>
     </div>
-  );
+  )
 }
 
 function OBAExtractionTile({ a, b }: { a: OBAExtraction; b: OBAExtraction }) {
   // Compact per-λ emission strip for both substrates, 380–460 nm.
-  const obaBandIdx = [0, 1, 2, 3, 4, 5, 6, 7, 8]; // 380..460 nm @ 10 nm
+  const obaBandIdx = [0, 1, 2, 3, 4, 5, 6, 7, 8] // 380..460 nm @ 10 nm
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-2">
       <div className="text-xs uppercase tracking-wider text-gray-500">
@@ -966,9 +1160,10 @@ function OBAExtractionTile({ a, b }: { a: OBAExtraction; b: OBAExtraction }) {
             Reference paper · peak {a.peakAmplitude.toFixed(3)} @ {380 + a.peakLambdaIdx * 10} nm
           </div>
           <div className="font-mono text-gray-300 flex flex-wrap gap-x-3 gap-y-1">
-            {obaBandIdx.map(i => (
+            {obaBandIdx.map((i) => (
               <span key={i}>
-                λ{380 + i * 10}: <span className={a.emission[i] > 0.02 ? 'text-emerald-300' : 'text-gray-500'}>
+                λ{380 + i * 10}:{' '}
+                <span className={a.emission[i] > 0.02 ? 'text-emerald-300' : 'text-gray-500'}>
                   {a.emission[i].toFixed(3)}
                 </span>
               </span>
@@ -980,9 +1175,10 @@ function OBAExtractionTile({ a, b }: { a: OBAExtraction; b: OBAExtraction }) {
             Target paper · peak {b.peakAmplitude.toFixed(3)} @ {380 + b.peakLambdaIdx * 10} nm
           </div>
           <div className="font-mono text-gray-300 flex flex-wrap gap-x-3 gap-y-1">
-            {obaBandIdx.map(i => (
+            {obaBandIdx.map((i) => (
               <span key={i}>
-                λ{380 + i * 10}: <span className={b.emission[i] > 0.02 ? 'text-emerald-300' : 'text-gray-500'}>
+                λ{380 + i * 10}:{' '}
+                <span className={b.emission[i] > 0.02 ? 'text-emerald-300' : 'text-gray-500'}>
                   {b.emission[i].toFixed(3)}
                 </span>
               </span>
@@ -995,59 +1191,80 @@ function OBAExtractionTile({ a, b }: { a: OBAExtraction; b: OBAExtraction }) {
         substrate_base is a degree-2 polynomial fit to R_paper over λ ∈ [460, 730].
       </p>
     </div>
-  );
+  )
 }
 
 function OBAMismatchTile({
-  obaRef, obaTarget, mismatch,
+  obaRef,
+  obaTarget,
+  mismatch,
 }: {
-  obaRef: OBAInfo;
-  obaTarget: OBAInfo;
-  mismatch: number;
+  obaRef: OBAInfo
+  obaTarget: OBAInfo
+  mismatch: number
 }) {
-  const severity = obaMismatchSeverity(mismatch);
-  const cls = severity === 'low'
-    ? 'border-emerald-700 bg-emerald-950'
-    : severity === 'moderate'
-      ? 'border-yellow-700 bg-yellow-950'
-      : 'border-red-700 bg-red-950';
-  const valueCls = severity === 'low'
-    ? 'text-emerald-300'
-    : severity === 'moderate'
-      ? 'text-yellow-300'
-      : 'text-red-300';
-  const advice = severity === 'low'
-    ? 'Substrates have comparable OBA loading. D1 paper-ratio is reliable across all 36 bands.'
-    : severity === 'moderate'
-      ? 'Moderate OBA mismatch. Expect ratio clamp to activate at 1–3 short-wavelength bands.'
-      : 'Strong OBA mismatch. D1 paper-ratio explodes at 380–410 nm without the clamp; with the clamp, expect a few clamped bands and biased prediction in the UV-blue region. A3 may also be unreliable since its per-λ slope cannot capture the non-linear OBA-vs-ink-coverage interaction.';
+  const severity = obaMismatchSeverity(mismatch)
+  const cls =
+    severity === 'low'
+      ? 'border-emerald-700 bg-emerald-950'
+      : severity === 'moderate'
+        ? 'border-yellow-700 bg-yellow-950'
+        : 'border-red-700 bg-red-950'
+  const valueCls =
+    severity === 'low'
+      ? 'text-emerald-300'
+      : severity === 'moderate'
+        ? 'text-yellow-300'
+        : 'text-red-300'
+  const advice =
+    severity === 'low'
+      ? 'Substrates have comparable OBA loading. D1 paper-ratio is reliable across all 36 bands.'
+      : severity === 'moderate'
+        ? 'Moderate OBA mismatch. Expect ratio clamp to activate at 1–3 short-wavelength bands.'
+        : 'Strong OBA mismatch. D1 paper-ratio explodes at 380–410 nm without the clamp; with the clamp, expect a few clamped bands and biased prediction in the UV-blue region. A3 may also be unreliable since its per-λ slope cannot capture the non-linear OBA-vs-ink-coverage interaction.'
 
   return (
     <div className={`border rounded-lg p-4 ${cls}`}>
       <div className="grid grid-cols-3 gap-3 items-end">
         <div>
           <div className="text-xs uppercase tracking-wider text-gray-400">OBA mismatch</div>
-          <div className={`text-3xl font-mono mt-1 ${valueCls}`}>
-            {mismatch.toFixed(3)}
+          <div className={`text-3xl font-mono mt-1 ${valueCls}`}>{mismatch.toFixed(3)}</div>
+          <div className="text-xs text-gray-400 mt-1">
+            Severity: <span className={valueCls}>{severity}</span>
           </div>
-          <div className="text-xs text-gray-400 mt-1">Severity: <span className={valueCls}>{severity}</span></div>
         </div>
         <div className="text-xs text-gray-300 space-y-0.5">
           <div className="text-gray-500 uppercase tracking-wider">Reference</div>
-          <div>OBA score: <span className="text-gray-100 font-mono">{obaRef.score.toFixed(3)}</span></div>
-          <div>R(380): <span className="text-gray-100 font-mono">{obaRef.r380.toFixed(3)}</span></div>
-          <div>R(440): <span className="text-gray-100 font-mono">{obaRef.r440.toFixed(3)}</span></div>
-          <div>R(550): <span className="text-gray-100 font-mono">{obaRef.r550.toFixed(3)}</span></div>
+          <div>
+            OBA score: <span className="text-gray-100 font-mono">{obaRef.score.toFixed(3)}</span>
+          </div>
+          <div>
+            R(380): <span className="text-gray-100 font-mono">{obaRef.r380.toFixed(3)}</span>
+          </div>
+          <div>
+            R(440): <span className="text-gray-100 font-mono">{obaRef.r440.toFixed(3)}</span>
+          </div>
+          <div>
+            R(550): <span className="text-gray-100 font-mono">{obaRef.r550.toFixed(3)}</span>
+          </div>
         </div>
         <div className="text-xs text-gray-300 space-y-0.5">
           <div className="text-gray-500 uppercase tracking-wider">Target</div>
-          <div>OBA score: <span className="text-gray-100 font-mono">{obaTarget.score.toFixed(3)}</span></div>
-          <div>R(380): <span className="text-gray-100 font-mono">{obaTarget.r380.toFixed(3)}</span></div>
-          <div>R(440): <span className="text-gray-100 font-mono">{obaTarget.r440.toFixed(3)}</span></div>
-          <div>R(550): <span className="text-gray-100 font-mono">{obaTarget.r550.toFixed(3)}</span></div>
+          <div>
+            OBA score: <span className="text-gray-100 font-mono">{obaTarget.score.toFixed(3)}</span>
+          </div>
+          <div>
+            R(380): <span className="text-gray-100 font-mono">{obaTarget.r380.toFixed(3)}</span>
+          </div>
+          <div>
+            R(440): <span className="text-gray-100 font-mono">{obaTarget.r440.toFixed(3)}</span>
+          </div>
+          <div>
+            R(550): <span className="text-gray-100 font-mono">{obaTarget.r550.toFixed(3)}</span>
+          </div>
         </div>
       </div>
       <p className="text-xs text-gray-300 mt-3">{advice}</p>
     </div>
-  );
+  )
 }

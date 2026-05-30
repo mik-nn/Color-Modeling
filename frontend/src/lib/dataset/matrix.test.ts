@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadProfileMatrix, alignByCommonSampleIds } from './matrix';
+import { loadProfileMatrix, alignByCommonSampleIds, alignByDeviceGrid } from './matrix';
 import type { Measurement, ProfileData } from '../../types';
 
 function mkPatch(sampleId: string, rgb: [number, number, number], spectra: number[]): Measurement {
@@ -87,5 +87,51 @@ describe('alignByCommonSampleIds', () => {
     expect(aligned.sampleIds).toEqual(['R2C2P1', 'R3C3P1']);
     expect(aligned.idxA.length).toBe(2);
     expect(aligned.idxB.length).toBe(2);
+  });
+});
+
+describe('alignByDeviceGrid', () => {
+  // Build a profile covering the RGB cube corners + neutrals.
+  function cubeProfile(name: string, scale: number): ProfileData {
+    const spec = (r: number, g: number, b: number) =>
+      Array.from({ length: 6 }, (_, l) => scale * (0.1 + 0.001 * (r + g + b + l)));
+    const corners: [string, [number, number, number]][] = [
+      ['R1C1P1', [0, 0, 0]], ['R1C2P1', [255, 0, 0]], ['R1C3P1', [0, 255, 0]],
+      ['R1C4P1', [0, 0, 255]], ['R2C1P1', [255, 255, 0]], ['R2C2P1', [255, 0, 255]],
+      ['R2C3P1', [0, 255, 255]], ['R2C4P1', [255, 255, 255]], ['R3C1P1', [128, 128, 128]],
+      ['R3C2P1', [64, 64, 64]], ['R3C3P1', [192, 192, 192]],
+    ];
+    return mkProfile(
+      name,
+      corners.map(([id, rgb]) => mkPatch(id, rgb, spec(rgb[0], rgb[1], rgb[2]))),
+    );
+  }
+
+  it('resamples both profiles onto a common RGB grid (synthetic G:r-g-b ids)', () => {
+    const a = loadProfileMatrix(cubeProfile('A', 1.0));
+    const b = loadProfileMatrix(cubeProfile('B', 1.2));
+    const g = alignByDeviceGrid(a, b, 3); // 3³ = 27 points
+    expect(g.channels).toBe(3);
+    expect(g.L).toBe(6);
+    expect(g.N).toBe(27);
+    expect(g.X_A.length).toBe(27 * 6);
+    expect(g.X_B.length).toBe(27 * 6);
+    expect(g.D.length).toBe(27 * 3);
+    expect(g.sampleIds[0]).toMatch(/^G:/);
+    // First grid point is (0,0,0), last is (255,255,255).
+    expect([g.D[0], g.D[1], g.D[2]]).toEqual([0, 0, 0]);
+    expect([g.D[26 * 3], g.D[26 * 3 + 1], g.D[26 * 3 + 2]]).toEqual([255, 255, 255]);
+  });
+
+  it('throws on mismatched wavelength counts', () => {
+    const a = loadProfileMatrix(cubeProfile('A', 1.0));
+    const bProfile = cubeProfile('B', 1.0);
+    // Truncate B's spectra to 5 bands.
+    bProfile.raw.forEach((m) => {
+      m.spectra = m.spectra!.slice(0, 5);
+      m.wavelengths = m.wavelengths!.slice(0, 5);
+    });
+    const b = loadProfileMatrix(bProfile);
+    expect(() => alignByDeviceGrid(a, b)).toThrow(/wavelength count mismatch/);
   });
 });

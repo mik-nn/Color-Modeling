@@ -143,6 +143,18 @@ on the ratio).
 `scripts/experiments/h5_rank_distribution.ts` — SVD over all pairs, output JSON
 histogram of (rank required for 99 % energy) + summary in `docs/EXPERIMENTS.md`.
 
+### Result (2026-05-29) — REJECTED
+
+461 same-chart pairs (BC-BC + MOAB-MOAB, matched by rounded RGB, ≥100 patches),
+raw difference `X_B − X_A`, eigenvalues of `DᵀD`: **median effective rank 5, max 9**.
+Only **17.8 %** of pairs have r ≤ 4 (acceptance needs ≥ 90 %); 16.7 % require r > 6
+(falsification needs ≤ 10 %). **H5 is rejected at 99 % energy.** The substrate-transform
+difference needs ~5–6 components, not ≤ 4 — consistent with paper-white shift (1) +
+OBA band structure (1–2) + ink-coverage interaction (2–3). Implication: D1's rank-≤3
+residual under-captures; a richer residual (rank ~5) or A3's per-λ affine is better matched.
+Note this is on the *raw* difference (substrate included); the device-normalised difference
+is expected to be lower-rank.
+
 ---
 
 ## H6 — Pool-PCA basis vs reference-only PCA basis (2026-05, data-driven)
@@ -279,6 +291,56 @@ inference reduces median ΔE00 by ≥ 0.5 on held-out pairs.
 
 CAE_D7 (CAE trained on OBA-cleaned spectra, OBA re-added at output) beats
 CAE_RAW on OBA-mismatched held-out pairs (mismatch ≥ 0.10) by ≥ 0.2 ΔE00.
+
+---
+
+## Retraction (2026-05-29) — H1 + H2 withdrawn
+
+Per the header rule, past hypotheses are not edited; this section records that **H1**
+(device-substrate separation via CYNSN / affine transform) and **H2** (DeviceSpace RGB↔CMYK
+invariance) are **withdrawn** as active research targets.
+
+Reason: the CYNSN within-profile track that H1's falsification gate and H2's synthetic
+cross-validation both depend on never converged to its acceptance criterion and was removed
+from the frontend in the 2026-05-24 cleanup. The project's research is carried by the
+data-driven track (H3–H10, CAE). The CYNSN-correctness P0 work in `TODO.md` and the
+DeviceSpace migration epic are moved to a "Retired" block and are no longer gating.
+
+This does not retract H3–H10. Those remain active.
+
+---
+
+## H11 — Cross-vendor same-mode device-response equivalence (2026-05-29, data-driven)
+
+Two ICC profiles built for the **same Epson media preset** (e.g. Canvas Matte) but on
+different papers and/or from different vendors (Breathing Color vs MOAB) share the same
+underlying **device response** once the substrate (paper white + OBA) is accounted for.
+
+### Formal statement
+
+Resample each profile's measured `RGB → R(λ)` onto a common regular RGB lattice (the two
+source charts use different RGB sampling but the identical 380–730 nm / 10 nm / 36-band
+wavelength grid). After paper-relative normalisation, the residual device response of two
+same-preset profiles agrees within a bounded ΔE00; cross-preset profiles do not.
+
+### Acceptance & falsification (pre-registered)
+
+- **Pass:** for the three overlapping presets (Canvas Matte, Premium Luster, Premium
+  Glossy), cross-set (BC vs MOAB) median ΔE00 on the common grid is **≤ 3** and is
+  **smaller than** the median ΔE00 between profiles of two *different* presets.
+- **Reject:** cross-set median ΔE00 > 5 on any overlapping preset, OR same-preset cross-set
+  ΔE00 is not smaller than a random cross-preset pairing (no preset signal).
+
+### Caveats
+
+- All ΔE00 must be read above the interpolation noise floor (LOO RMS on each chart).
+- Substrate (paper white / OBA) differences are expected to dominate the residual; H11 is
+  about the *device* response after paper normalisation, not raw spectra.
+
+### Tests
+
+`frontend/scripts/experiments/modeCompare.ts` — within-mode + cross-set ΔE00 over all 10
+presets; summary rows in `docs/EXPERIMENTS.md`, full tables in `docs/mode-comparison.md`.
 
 ---
 

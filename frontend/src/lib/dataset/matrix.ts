@@ -5,6 +5,14 @@
 // device value across all profiles built from the identical target chart.
 
 import type { Measurement, ProfileData } from '../../types';
+import {
+  buildInterpolator,
+  regularGrid,
+  boundingBox,
+  intersectBox,
+  inBox,
+  type InterpPoint,
+} from '../interp/rgbInterp';
 
 export interface ProfileMatrices {
   /** N×L spectral reflectance, row-major; rows ordered by sortedSampleIds. */
@@ -154,4 +162,87 @@ export function alignByCommonSampleIds(
     idxA: Int32Array.from(idxA),
     idxB: Int32Array.from(idxB),
   };
+}
+
+export interface AlignedGrid {
+  /** Synthetic IDs of the form `G:r-g-b` for each grid point. */
+  sampleIds: string[];
+  /** N×L reflectance for profile A, resampled onto the common grid. */
+  X_A: Float64Array;
+  /** N×L reflectance for profile B, resampled onto the common grid. */
+  X_B: Float64Array;
+  /** N×3 grid device values (RGB 0–255). */
+  D: Float64Array;
+  channels: 3;
+  N: number;
+  L: number;
+}
+
+/**
+ * Align two RGB profiles that were measured on DIFFERENT charts (no shared
+ * SAMPLE_IDs — e.g. a 905-patch BC chart vs a ~2033-patch MOAB lattice with
+ * fractional RGB steps). Both profiles are resampled onto a common regular RGB
+ * lattice via per-band k-NN IDW interpolation, producing aligned (X_A, X_B, D)
+ * matrices with the same row meaning. Drop-in source for the same downstream
+ * predictor pipeline that `alignByCommonSampleIds` feeds.
+ *
+ * The grid is restricted to the intersection of both profiles' device bounding
+ * boxes to avoid extrapolating outside either chart's sampled gamut.
+ */
+export function alignByDeviceGrid(
+  a: ProfileMatrices,
+  b: ProfileMatrices,
+  levels = 9,
+): AlignedGrid {
+  if (a.channels !== 3 || b.channels !== 3) {
+    throw new Error('alignByDeviceGrid: both profiles must be RGB (3-channel)');
+  }
+  if (a.L !== b.L) {
+    throw new Error(`alignByDeviceGrid: wavelength count mismatch (${a.L} vs ${b.L})`);
+  }
+  const L = a.L;
+
+  const toPoints = (m: ProfileMatrices): InterpPoint[] => {
+    const pts: InterpPoint[] = new Array(m.N);
+    for (let i = 0; i < m.N; i++) {
+      pts[i] = {
+        rgb: [m.D[i * 3], m.D[i * 3 + 1], m.D[i * 3 + 2]],
+        spectrum: Array.from(m.X.subarray(i * L, i * L + L)),
+      };
+    }
+    return pts;
+  };
+
+  const ptsA = toPoints(a);
+  const ptsB = toPoints(b);
+  const box = intersectBox(boundingBox(ptsA), boundingBox(ptsB));
+  if (!box) {
+    return { sampleIds: [], X_A: new Float64Array(0), X_B: new Float64Array(0), D: new Float64Array(0), channels: 3, N: 0, L };
+  }
+
+  const interpA = buildInterpolator(ptsA);
+  const interpB = buildInterpolator(ptsB);
+  const grid = regularGrid(levels).filter((p) => inBox(p, box));
+  const N = grid.length;
+
+  const X_A = new Float64Array(N * L);
+  const X_B = new Float64Array(N * L);
+  const D = new Float64Array(N * 3);
+  const sampleIds: string[] = new Array(N);
+
+  for (let i = 0; i < N; i++) {
+    const g = grid[i];
+    const sa = interpA.query(g);
+    const sb = interpB.query(g);
+    for (let l = 0; l < L; l++) {
+      X_A[i * L + l] = sa[l];
+      X_B[i * L + l] = sb[l];
+    }
+    D[i * 3] = g[0];
+    D[i * 3 + 1] = g[1];
+    D[i * 3 + 2] = g[2];
+    sampleIds[i] = `G:${Math.round(g[0])}-${Math.round(g[1])}-${Math.round(g[2])}`;
+  }
+
+  return { sampleIds, X_A, X_B, D, channels: 3, N, L };
 }

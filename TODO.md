@@ -5,40 +5,6 @@
 
 ---
 
-## P0 — CYNSN correctness (blocks Phase 2 acceptance)
-
-- [ ] **Bug 2 — CYNSN-2 grid/spreading mismatch**
-      `trainCYNSN3` calls `buildGridFromColorants3` inside `loss()`, so the optimiser
-      never sees `grid_cynsn2`. Fix: pass `grid_cynsn2` into `trainCYNSN3` and consume it
-      directly inside `loss()`. For CYNSN-2, only `spreading` (and optionally `n`) should
-      remain free; the grid itself is fixed from measurements.
-      See `docs/cynsn-pipeline.md`.
-- [ ] **Bug 1 — `n` hard cap at 10**
-      Raise to 30 or replace with a soft penalty `max(0, n - 20)²`. Re-validate that
-      training does not blow up on substrates with naturally low `n`.
-- [ ] **Phase 2 acceptance run** — after both fixes, run `runCYNSNComparison` on all 27
-      P9000 profiles; aim for median ΔE00 < 2 on at least 20 of them. Append the result
-      table to `docs/EXPERIMENTS.md`.
-
-## P1 — DeviceSpace migration (epic)
-
-The `DeviceSpace` discriminator and `device: DeviceValue` field were added to
-`types/index.ts` along with `toCMY`, `toCMYK`, `deriveDevice` helpers. Parsers populate
-`device` alongside legacy fields. Next:
-
-- [ ] Port `cynsn.ts` to read `m.device` via `toCMY()` instead of direct `RGB_R/G/B`
-      access. Branch when `device.space === 'cmyk'` (treat K accordingly).
-- [ ] Port `limitsAnalyzer.ts` ramp detection to consume `device` (RGB ramps today are
-      hard-coded `R==255 && B==255` patterns).
-- [ ] Port `groupAnalyzer.ts` and `inkRatioAnalyzer.ts` similarly.
-- [ ] Port `linearityAnalyzer.ts` — currently a CMYK-fuzzy-match shell that runs on RGB
-      via `MatchedPatchPair`. Either rewrite for DeviceSpace or delete if redundant with
-      CYNSN.
-- [ ] When every analyser uses `device`, deprecate `RGB_*` / `CMYK_*` fields with a
-      compiler error (remove from `Measurement`).
-- [ ] Add a synthetic-fixture cross-validation test: same data encoded as RGB and as
-      CMYK should produce ΔE00 < 0.5 between CYNSN predictions (H2 acceptance).
-
 ## P1 — Cleaning pipeline
 
 - [ ] Implement MAD outlier detection on spectra in `dataLoader.ts` (currently
@@ -85,3 +51,20 @@ The `DeviceSpace` discriminator and `device: DeviceValue` field were added to
 
 - **Local Node v12.** Cannot run vitest/vite. Use `nvm use 20` or rely on CI
   (GitHub Actions, Node 20). The `engines` field enforces `node >= 18`.
+
+---
+
+## Retired (2026-05-29 — H1 / H2 withdrawn)
+
+H1 (CYNSN device-substrate separation) and H2 (DeviceSpace RGB↔CMYK invariance) were
+withdrawn; see `docs/RESEARCH_HYPOTHESIS.md` Retraction (2026-05-29). The following are no
+longer gating and are not planned:
+
+- ~~CYNSN correctness: Bug 2 (`grid_cynsn2` ignored in `trainCYNSN3` loss), Bug 1 (`n` cap
+  10→30), Phase-2 acceptance run on 27 profiles.~~
+- ~~DeviceSpace migration epic: port `cynsn`/`limitsAnalyzer`/`groupAnalyzer`/
+  `inkRatioAnalyzer`/`linearityAnalyzer` to `m.device`; remove legacy `RGB_*`/`CMYK_*`
+  fields; H2 synthetic RGB-vs-CMYK fixture test.~~
+
+Code already merged (DeviceSpace types/helpers in `types/index.ts`, CYNSN modules) stays as
+inert scaffolding; revive only if a CMYK dataset arrives.

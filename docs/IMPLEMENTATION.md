@@ -21,20 +21,30 @@ picker.
 
 ### 2.1 Entry & state
 
-| File | Role |
-|---|---|
-| `App.tsx` | Layout: `ProfileUploader` + `ProfileList` + `ComparisonView`. Dispatches uploads to `dataLoader`. |
-| `store/useProfileStore.ts` | Zustand: `profiles`, `selectedProfiles` (max 2), `linearityResult`, selection actions. |
+| File                       | Role                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `App.tsx`                  | Layout: `ProfileUploader` + `ProfileList` + `ComparisonView`. Dispatches uploads to `dataLoader`. |
+| `store/useProfileStore.ts` | Zustand: `profiles`, `selectedProfiles` (max 2), `linearityResult`, selection actions.            |
 
 ### 2.2 I/O
 
-| File | Role |
-|---|---|
-| `lib/dataLoader.ts` | File-type dispatch (`.icm` → `icmParser`, `.cxf` → `cxfParser`). Wraps the result in `ProfileData` with a placeholder cleaning pipeline. |
-| `lib/iccTagScanner.ts` | `extractZxmlCxfXml(buffer)`: locates the ZXML tag in an ICC profile, skips 12 bytes (4 data-type + 4 reserved + 4 unknown), `pako.inflate`s the rest, returns CxF XML. |
-| `lib/parsers/icmParser.ts` | Parses ICC header (validates magic, reads tag count at byte 128), uses `extractZxmlCxfXml`, hands XML to `parseCxf3Xml`. Legacy synthetic-fallback path remains; do not extend it. |
-| `lib/parsers/cxfParser.ts` | `parseCxf3Xml(xml)`: walks `cc:CxF` namespace, extracts `cc:Object/cc:ColorValues` per patch. Handles both M0 (`SpectralData`) and Lab-only objects. Multiple attribute naming conventions tolerated. |
-| `lib/cgatsExport.ts` | CGATS.17 ASCII export. Fields: `SAMPLE_ID RGB_R RGB_G RGB_B LAB_L LAB_A LAB_B`. |
+| File                         | Role                                                                                                                                                                                                                                               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/dataLoader.ts`          | File-type dispatch (`.icm` / `.icc` → `icmParser`, `.cxf` → `cxfParser`). Wraps the result in `ProfileData` with a placeholder cleaning pipeline.                                                                                                  |
+| `lib/iccTagScanner.ts`       | `extractZxmlCxfXml(buffer)`: locates the ZXML tag in an ICC profile, skips 12 bytes (4 data-type + 4 reserved + 4 unknown), `pako.inflate`s the rest, returns CxF XML. `extractIccTextTag(buffer, sig)` reads ICC `text` tags such as MOAB `targ`. |
+| `lib/parsers/icmParser.ts`   | Parses ICC header (validates magic, reads tag count at byte 128), tries ZXML CxF first, then falls back to CGATS.17 text in the `targ` ICC tag. Legacy synthetic-fallback path remains; do not extend it.                                          |
+| `lib/parsers/cxfParser.ts`   | `parseCxf3Xml(xml)`: walks `cc:CxF` namespace, extracts `cc:Object/cc:ColorValues` per patch. Handles both M0 (`SpectralData`) and Lab-only objects. Multiple attribute naming conventions tolerated.                                              |
+| `lib/parsers/cgatsParser.ts` | `parseCgats17Text(text)`: reads CGATS.17 `BEGIN_DATA_FORMAT` / `BEGIN_DATA` tables with `RGB_R/G/B` and `SPECTRAL_NM_*` columns, normalises percent reflectance to 0–1, derives D50 Lab from spectra.                                              |
+| `lib/cgatsExport.ts`         | CGATS.17 ASCII export. Fields: `SAMPLE_ID RGB_R RGB_G RGB_B LAB_L LAB_A LAB_B`.                                                                                                                                                                    |
+| `utils/filenameParser.ts`    | Extracts profile metadata from BC underscore names and MOAB space-separated names. For CAE grouping, `metadata.printMode` is the final filename segment before extension (`USFA`, `Prem Luster`, `CanvasMatte`, etc.).                             |
+| `scripts/exportCaeData.ts`   | One-shot exporter for Python CAE input. Recursively walks `data/profiles/` (now per-preset subfolders), accepts `.icm` and `.icc`, emits `print_mode`, and supports `CAE_PRINT_MODE` / `CAE_INK_MODE` filters for same-mode training sets.          |
+| `utils/printMode.ts`         | `canonicalPrintMode(file\|meta)` → Epson media preset (`CanvasMatte`, `PremiumLuster`, …). Maps BC abbreviations (CanvasMatte, PLPP260, WCRW…) and MOAB names (Exh Canvas Matte, Prem Luster, USFA…) onto one canonical taxonomy; throws on unknown media. Exposes `ALL_PRESETS` and `OVERLAPPING_PRESETS` (the 3 cross-vendor presets). |
+| `lib/interp/rgbInterp.ts`    | Scattered RGB→spectrum interpolation (per-band k-NN IDW in normalised RGB) to put profiles measured on different RGB charts onto a common lattice. `buildInterpolator`, `regularGrid`, `boundingBox`/`intersectBox`/`inBox`, `looRms` (interpolation noise floor).                                                                       |
+| `lib/interp/wlsInterp.ts`    | **Default** mode-comparison interpolant. Per-band local-linear weighted-least-squares: fit `R(λ) ≈ β₀ + β·rgb` from k weighted neighbours, solve via Cholesky on the 4×4 normal equations, IDW fallback on collinear neighbours. Drops the BC chart's interpolation noise floor from ~1.8 ΔE00 (IDW) to ~0.7 ΔE00.                       |
+| `lib/interp/pcaInterp.ts`    | Opt-in (`MODE_INTERP=pca`). PCA in spectrum space (Jacobi eigensolver) + score-space IDW. Exports `jacobiEigen` for reuse by H5 SVD experiment. Negative result on this dataset — kept as a research tool. |
+| `lib/dataset/matrix.ts`      | `loadProfileMatrix` builds `(X, D)` matrices. `alignByCommonSampleIds` returns the shared-ID intersection for same-chart pairs; `alignByDeviceGrid` (cross-chart fallback) resamples both profiles onto a common RGB lattice via `wlsInterp`, returning the same aligned shape so the predictor pipeline runs unchanged.                |
+| `scripts/reorgByMode.ts`     | Reorganises `data/profiles/` into per-Epson-preset subfolders via `canonicalPrintMode` (`git mv` tracked, `mv` untracked). Dry-run by default; `--apply` executes.                                                                                 |
+| `scripts/experiments/modeCompare.ts` | H11 print-mode comparison. Per-preset profile tables (paper Lab, OBA) + within-mode and cross-set BC↔MOAB ΔE00 on the common grid. Writes `docs/mode-comparison.md` + a JSON dump.                                                          |
 
 **Duplicate to remove (TODO):** `lib/cxFParser.ts` (137 lines) and
 `utils/cxfParser.test.ts` are leftovers from the old layout. The canonical paths are
@@ -54,26 +64,34 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 
 ### 2.4 Analysers
 
-| File | Purpose |
-|---|---|
-| `lib/analyzers/limitsAnalyzer.ts` | Per-channel ink-limit detection. `computeRampErrors` walks each primary ramp (C/M/Y) and 2-ink combos (CY/MY/CM), compares measured spectra to Yule-Nielsen (n = 2) interpolation between paper and primary endpoint, returns the first ink level where ΔE76 > 6. |
-| `lib/analyzers/linearityAnalyzer.ts` | **Legacy.** Cross-profile linearity via Pearson r / R² / slope stability. Originally CMYK-fuzzy-match; current code path uses RGB via `MatchedPatchPair`. Slated for either rewrite under DeviceSpace abstraction or removal — see `TODO.md`. |
-| `lib/analyzers/groupAnalyzer.ts` | Per-patch-group breakdown (primaries / neutrals / mixed). Used by the UI breakdown table. |
-| `lib/analyzers/inkRatioAnalyzer.ts` | `T(λ) = R_ink / R_paper`. Per-channel Pearson r / MAD / scale CV — diagnostic for multiplicative substrate effects. |
-| `lib/analyzers/spectralPredictor.ts` | Per-wavelength polynomial / YN / XYZ-affine predictors. Fits on a calibration subset, evaluates on test subset, returns `SpectralModelComparison` row. |
-| `lib/analyzers/spreading.ts` | Polynomial dot-gain: `u_eff = a·u² + (1-a)·u` per channel. Constraints: `f(0)=0, f(1)=1`, monotone iff `a ≥ -0.5`. |
-| `lib/analyzers/optimizer.ts` | Nelder-Mead simplex (pure TS, no deps). Used by `trainCYNSN3`. |
-| `lib/analyzers/cynsn.ts` | 3D CYNSN model — see §3. |
+| File                                 | Purpose                                                                                                                                                                                                                                                           |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/analyzers/limitsAnalyzer.ts`    | Per-channel ink-limit detection. `computeRampErrors` walks each primary ramp (C/M/Y) and 2-ink combos (CY/MY/CM), compares measured spectra to Yule-Nielsen (n = 2) interpolation between paper and primary endpoint, returns the first ink level where ΔE76 > 6. |
+| `lib/analyzers/linearityAnalyzer.ts` | **Legacy.** Cross-profile linearity via Pearson r / R² / slope stability. Originally CMYK-fuzzy-match; current code path uses RGB via `MatchedPatchPair`. Slated for either rewrite under DeviceSpace abstraction or removal — see `TODO.md`.                     |
+| `lib/analyzers/groupAnalyzer.ts`     | Per-patch-group breakdown (primaries / neutrals / mixed). Used by the UI breakdown table.                                                                                                                                                                         |
+| `lib/analyzers/inkRatioAnalyzer.ts`  | `T(λ) = R_ink / R_paper`. Per-channel Pearson r / MAD / scale CV — diagnostic for multiplicative substrate effects.                                                                                                                                               |
+| `lib/analyzers/spectralPredictor.ts` | Per-wavelength polynomial / YN / XYZ-affine predictors. Fits on a calibration subset, evaluates on test subset, returns `SpectralModelComparison` row.                                                                                                            |
+| `lib/analyzers/spreading.ts`         | Polynomial dot-gain: `u_eff = a·u² + (1-a)·u` per channel. Constraints: `f(0)=0, f(1)=1`, monotone iff `a ≥ -0.5`.                                                                                                                                                |
+| `lib/analyzers/optimizer.ts`         | Nelder-Mead simplex (pure TS, no deps). Used by `trainCYNSN3`.                                                                                                                                                                                                    |
+| `lib/analyzers/cynsn.ts`             | 3D CYNSN model — see §3.                                                                                                                                                                                                                                          |
+
+### 2.4.1 Anchor sampling
+
+| File                            | Purpose                                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `lib/sampling/heuristic.ts`     | S1 forced anchor set: paper, RGB corners, black, and neutrals.                                                                       |
+| `lib/sampling/channelRamp.ts`   | S3 single-channel / neutral ramp anchors for testing shared per-λ substrate transforms.                                              |
+| `lib/sampling/labSaturation.ts` | S4 experimental Lab-saturation anchors: paper plus high-chroma patches selected after spectral → Lab conversion with hue separation. |
 
 ### 2.5 UI components
 
-| Component | What it shows |
-|---|---|
-| `ProfileUploader` | Drag-and-drop with visual feedback. |
-| `ProfileList` | Loaded profiles, selection radios (max 2). |
-| `ComparisonView` | The hub. Renders metadata cards, `LabScatterPlot`, `SpectralCurves`, `InkLimitSection`, `GroupBreakdownTable`, `InkRatioTable`, `PredictionAccuracyView`, `PatchCorrelationScatter`, plus the CYNSN comparison table. |
-| `InkLimitSection` | Slider per channel; downstream analyses re-filter when limits change. |
-| `MetricCard` | Reusable metric tile with colour-coded values. |
+| Component         | What it shows                                                                                                                                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ProfileUploader` | Drag-and-drop with visual feedback.                                                                                                                                                                                   |
+| `ProfileList`     | Loaded profiles, selection radios (max 2).                                                                                                                                                                            |
+| `ComparisonView`  | The hub. Renders metadata cards, `LabScatterPlot`, `SpectralCurves`, `InkLimitSection`, `GroupBreakdownTable`, `InkRatioTable`, `PredictionAccuracyView`, `PatchCorrelationScatter`, plus the CYNSN comparison table. |
+| `InkLimitSection` | Slider per channel; downstream analyses re-filter when limits change.                                                                                                                                                 |
+| `MetricCard`      | Reusable metric tile with colour-coded values.                                                                                                                                                                        |
 
 ---
 
@@ -93,16 +111,16 @@ Y = (255 - B) / 255
 
 ### 3.2 8 Neugebauer primaries (3D CMY)
 
-| v | C | M | Y | RGB | Name |
-|---|---|---|---|---|---|
-| 0 | 0 | 0 | 0 | 255,255,255 | Paper |
-| 1 | 0 | 0 | 1 | 255,255,  0 | Yellow |
-| 2 | 0 | 1 | 0 | 255,  0,255 | Magenta |
-| 3 | 0 | 1 | 1 | 255,  0,  0 | Red |
-| 4 | 1 | 0 | 0 |   0,255,255 | Cyan |
-| 5 | 1 | 0 | 1 |   0,255,  0 | Green |
-| 6 | 1 | 1 | 0 |   0,  0,255 | Blue |
-| 7 | 1 | 1 | 1 |   0,  0,  0 | Black (CMY-stack) |
+| v   | C   | M   | Y   | RGB         | Name              |
+| --- | --- | --- | --- | ----------- | ----------------- |
+| 0   | 0   | 0   | 0   | 255,255,255 | Paper             |
+| 1   | 0   | 0   | 1   | 255,255, 0  | Yellow            |
+| 2   | 0   | 1   | 0   | 255, 0,255  | Magenta           |
+| 3   | 0   | 1   | 1   | 255, 0, 0   | Red               |
+| 4   | 1   | 0   | 0   | 0,255,255   | Cyan              |
+| 5   | 1   | 0   | 1   | 0,255, 0    | Green             |
+| 6   | 1   | 1   | 0   | 0, 0,255    | Blue              |
+| 7   | 1   | 1   | 1   | 0, 0, 0     | Black (CMY-stack) |
 
 Extracted from measured patches via `extractNeugebauerPrimaries3` (KNN, tolerance 0.10).
 
@@ -140,7 +158,16 @@ formula. **Known issue:** training loop ignores the measured-grid override (see
 
 ---
 
-## 4. Testing
+## 4. CAE Python Training Data
+
+| File                    | Purpose                                                                                                                                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `python/cae/dataset.py` | `ProfileBank` loads exported JSON profiles, aligns them by common rounded RGB device coordinates, and stacks spectra/paper whites for CAE training. It no longer assumes the legacy 905-patch BC chart.             |
+| `python/cae/train.py`   | Trains raw/D7 CAE variants. If `split.json` does not match the filtered export payload, it creates a deterministic 80/20 split from available profile names so same-mode MOAB exports can train without hand edits. |
+
+---
+
+## 5. Testing
 
 - `lib/colormath.test.ts` — `xyzToLab`, `deltaE00` (ISO 11664-6 reference pairs).
 - `lib/analyzers/cynsn.test.ts` — `demichel3`, `findCell3`, grid builder, train/eval.
@@ -148,6 +175,9 @@ formula. **Known issue:** training loop ignores the measured-grid override (see
 - `lib/analyzers/spreading.test.ts` — endpoint constraints, monotonicity.
 - `lib/analyzers/linearityAnalyzer.test.ts` — basic linearity, fuzzy match (legacy).
 - `lib/parsers/cxfParser.test.ts` — XML / Sample / spectral data.
+- `lib/parsers/cgatsParser.test.ts` — ICC text-tag CGATS tables, percent reflectance,
+  missing spectral columns.
+- `lib/iccTagScanner.test.ts` — ICC `text` tag extraction for `targ`-style payloads.
 - `utils/filenameParser.test.ts` — filename parsing.
 
 `npm test` runs the full suite via Vitest. Local Node 12 cannot execute Vitest; rely on CI
@@ -155,13 +185,13 @@ formula. **Known issue:** training loop ignores the measured-grid override (see
 
 ---
 
-## 5. Known issues & deprecations
+## 6. Known issues & deprecations
 
-| Item | Status |
-|---|---|
-| `lib/cxFParser.ts`, `utils/cxfParser.test.ts` | Duplicates of canonical paths; delete in next refactor. |
-| `linearityAnalyzer.ts` | Legacy CMYK fuzzy-match path. Either port to DeviceSpace or remove. |
-| `icmParser` synthetic-fallback path | Deprecated. Do not extend. |
-| Mixed `RGB_*` / `CMYK_*` fields on `Measurement` | Migrating to single `device: DeviceValue` discriminator. |
-| CYNSN-2 grid/spreading mismatch | Documented in `docs/cynsn-pipeline.md` Bug 2; fix queued. |
-| YN n-cap at 10 in CYNSN training | Documented as Bug 1; raise cap to 30. |
+| Item                                             | Status                                                              |
+| ------------------------------------------------ | ------------------------------------------------------------------- |
+| `lib/cxFParser.ts`, `utils/cxfParser.test.ts`    | Duplicates of canonical paths; delete in next refactor.             |
+| `linearityAnalyzer.ts`                           | Legacy CMYK fuzzy-match path. Either port to DeviceSpace or remove. |
+| `icmParser` synthetic-fallback path              | Deprecated. Do not extend.                                          |
+| Mixed `RGB_*` / `CMYK_*` fields on `Measurement` | Migrating to single `device: DeviceValue` discriminator.            |
+| CYNSN-2 grid/spreading mismatch                  | Documented in `docs/cynsn-pipeline.md` Bug 2; fix queued.           |
+| YN n-cap at 10 in CYNSN training                 | Documented as Bug 1; raise cap to 30.                               |
