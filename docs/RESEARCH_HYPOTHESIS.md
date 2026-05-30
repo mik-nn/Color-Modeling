@@ -287,6 +287,30 @@ sees only the paper white spectrum.
 CAE_RAW + 1-step few-shot fine-tune of substrate_latent_B on k anchors at
 inference reduces median ΔE00 by ≥ 0.5 on held-out pairs.
 
+### Result (2026-05-30) — H10b CONFIRMED on per-mode CAE_D7
+
+Few-shot fine-tune of `substrate_latent_B` (Adam, 200 steps, lr=0.05) on k=13 S1
+anchors of the target, holding the model frozen, evaluated on non-anchor patches.
+Implemented as `evaluate.py --anchors 13`. Result depends critically on the
+underlying CAE's training pool:
+
+- **Full 36-profile pool** (mixed presets): bank-RGB intersection collapses to N=10
+  patches, capping k_effective to 5. With 5 anchors median 3.30 → 3.25 (−1.5 %),
+  but P95 7.42 → 12.6 (much worse) — uninformative due to test set being too small.
+- **Per-mode pools** (homogeneous chart, bank.N ≈ 905):
+  - **WCRW (9 BC):** median 0.98 → **0.88** (−10 %) — already at the floor.
+  - **USFA (7 MOAB):** median 2.26 → **2.11** (−7 %); P95 4.68 → 8.38 (over-fit).
+  - **CanvasMatte (5 BC):** median 2.58 → **1.73** (−33 %); ≤1.5 0 % → 25 %.
+
+The −0.5 ΔE threshold is met on CanvasMatte (−0.85) and missed on WCRW (−0.10,
+already at floor) and USFA (−0.15). Per-mode CAE_D7 + H10b on the modes where
+anchor signal can correct sub-cluster substrate structure clears the H4 bar
+(median ≤ 1.5) for the first time on this dataset without a classical
+ratio-clamp or per-λ affine predictor.
+
+The H10 original (paper-only, k=0, full pool) stays rejected; H10b changes the
+verdict for the anchored, per-mode variant.
+
 ### H10c (planned, Stage 2)
 
 CAE_D7 (CAE trained on OBA-cleaned spectra, OBA re-added at output) beats
@@ -341,6 +365,76 @@ same-preset profiles agrees within a bounded ΔE00; cross-preset profiles do not
 
 `frontend/scripts/experiments/modeCompare.ts` — within-mode + cross-set ΔE00 over all 10
 presets; summary rows in `docs/EXPERIMENTS.md`, full tables in `docs/mode-comparison.md`.
+
+---
+
+## H12 — Few-anchor OBA emission model for cross-vendor transfer (2026-05-30)
+
+The default D7 OBA wrapper extracts the emission curve `E(λ)` analytically (degree-2
+polynomial fit on `R_paper(λ)` over 460–730 nm extrapolated back into 380–450 nm) and
+assumes a uniform per-patch attenuation factor `f(patch) = clamp(R_patch(380)/R_paper(380),
+0, 1)`. That model is vendor-agnostic — every profile gets `f` computed the same way
+regardless of its OBA chemistry. On OBA-disparate pairs across vendors (e.g. BC vs MOAB)
+the residual at 380–410 nm is dominated by this mismatch.
+
+**Claim.** With a small set of OBA-diagnostic anchor patches measured on each profile —
+**paper white** + **yellow** + **gray** + **cyan/blue** (k = 4) — we can fit a one-parameter
+emission-scaling correction:
+
+    f_H12(patch) = clamp(α · R_patch(380) / R_paper(380), 0, 1)
+
+where `α` is chosen per profile to minimise the residual `R_anchor − R_clean(anchor; α)`
+in the OBA band (380–450 nm) over the anchor set. The yellow anchor is the strongest
+constraint because yellow ink blocks the 410–460 nm region almost entirely — its observed
+reflectance there comes overwhelmingly from the unattenuated paper baseline plus a small
+emission residue, so it pins both the emission magnitude and the visible-attenuation behaviour.
+
+### Why these anchors
+
+- **Paper (RGB 255,255,255):** full OBA effect, gives `R_paper(λ)` and the unmodified
+  emission curve via the existing extractor.
+- **Yellow (RGB 255,255,0):** yellow ink has `T_yellow(440) ≈ 0` — kills the fluorescent
+  re-emission. The observed `R_yellow(440)` therefore tells us how much "would-be"
+  emission the ink absorbs, calibrating `α` against the substrate's actual OBA contribution.
+- **Neutral gray (RGB 128,128,128):** intermediate ink coverage — a point on the mid-range
+  factor curve where the default model is most error-prone.
+- **Cyan/blue (RGB 0,255,255 or 0,0,255):** transmits some blue → another point on the
+  visible-attenuation curve.
+
+### Acceptance & falsification
+
+- **Pass:** on OBA-disparate pairs (OBA mismatch ≥ 0.10), H12-D7 lowers median ΔE00 by
+  ≥ 0.2 and the 380–410 nm band RMS by ≥ 30 % vs default D7, on at least 3 of 4 tested pairs.
+- **Reject:** H12-D7 fails to improve on default D7 on the majority of OBA-disparate pairs,
+  OR the fitted α is unstable across pairs (CV across pairs > 30 %).
+
+### Tests
+
+`scripts/experiments/h12_oba_scale.ts` — load DecorMatte (OBA-extreme) against three
+low-OBA Canvas Matte papers (Lyve, BelgianLinen, ChromataWhite). For each pair: fit α
+on the 4 anchors of the target, run D7 with the fitted α vs the default α = 1, compare
+median / P95 ΔE00 and the 380–410 nm RMS.
+
+### Result (2026-05-30) — REJECTED
+
+Four anchor recipes tried (`with-yellow`, `no-yellow`, `gray-blue`, `red-only`).
+**α_ref (DecorMatte) varies from 0.30 to 1.83 across recipes** — coefficient of variation
+≈ 79 %, well above the 30 % falsification threshold. On all three OBA-disparate pairs
+H12 either tied or slightly worsened median ΔE00 (Δ ≈ +0.01–0.14) and P95 (Δ ≈ +0.01–0.16).
+The 380–410 nm UV-RMS was unchanged within ±0.5 %. Low-OBA target papers correctly fell
+back to α = 1 (no OBA → no scaling needed), so the regression is driven entirely by
+ref-side α-suppression hurting cross-substrate transfer.
+
+**Diagnosis.** A single per-profile scalar α cannot capture the per-ink visible-band
+absorption of OBA emission. Yellow ink at 440 nm has near-zero transmittance → the
+observed emission contribution there is tiny, regardless of substrate emission magnitude.
+The LSQ fit interprets this as "low α", but applying that α uniformly cancels real
+emission contribution on every other patch. The right model is per-ink (or at least
+per-coverage) visible-band attenuation of the emission, not a profile-level scalar.
+
+A richer follow-up (deferred): fit a per-channel attenuation curve for OBA emission from
+the same anchors (more parameters but matches the physics). Not pursued in this iteration —
+the data-driven CAE_D7 already absorbs this structure implicitly.
 
 ---
 

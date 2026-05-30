@@ -40,8 +40,8 @@ def main() -> int:
     with open(DATA_FILE) as fh:
         payload = json.load(fh)
     names = sorted(p["full_name"] for p in payload["profiles"])
-    if len(names) < 9:
-        print(f"too few profiles ({len(names)}); need ≥ 9 for a 3-way split", file=sys.stderr)
+    if len(names) < 5:
+        print(f"too few profiles ({len(names)}); need ≥ 5 for a 3-way split", file=sys.stderr)
         return 1
 
     rng = random.Random(SEED)

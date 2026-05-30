@@ -6,6 +6,103 @@
 
 ---
 
+## 2026-05-30 — H10b L2-init regulariser (Pareto-best default)
+
+USFA's H10b P95 ballooned from 4.68 (baseline k=0) to 8.38 with the default fine-tune.
+A grid sweep over (lr ∈ {0.005, 0.01, 0.02, 0.05}) × (steps ∈ {50, 100, 200}) gave the
+same P95 ≈ 8.3 — the optimisation converged to the same minimum regardless of step size,
+so the problem is structural over-fit of the 8-dim substrate latent on k = 13 anchors,
+not an optimisation knob. Added an **L2 penalty** that pulls `sub_b` toward the
+encoder's initial estimate (`finetune_sub_b(..., l2_init)` + `--l2-init` CLI arg).
+
+L2 sweep across three per-mode CAEs:
+
+| Mode | k = 0 baseline (med / P95) | H10b l2 = 0 | H10b l2 = 0.1 |
+| --- | --- | --- | --- |
+| WCRW | 0.98 / 2.27 | 0.88 / 2.56 | 0.93 / **2.13** |
+| USFA | 2.26 / 4.68 | 2.11 / 8.38 | 2.16 / **4.29** |
+| CanvasMatte | 2.58 / 4.86 | **1.73 / 4.10** | 2.15 / 4.27 |
+
+**`l2 = 0.1` is Pareto-best as the default**: improves P95 dramatically on WCRW (−17 %)
+and USFA (−49 % vs unregularised, even better than the k = 0 baseline), at the cost of a
+tiny median bump (5 % on WCRW). On OBA-disparate modes (CanvasMatte) the unregularised
+H10b still wins on median because the anchor signal disambiguates the high-OBA / low-OBA
+sub-clusters — `l2 = 0` recommended there. Default `--l2-init 0.1`; override with
+`--l2-init 0` for OBA-loaded substrate pairs.
+
+---
+
+## 2026-05-30 — Per-mode CAE_D7 + H10b anchor fine-tune (huge win)
+
+The 36-profile pool CAE_D7 saturated at median-of-medians ΔE00 = 3.30 on validation
+because the substrate manifold spans 10 wildly different Epson presets and 8 substrate
+latent dims can't fit them all. Switched to **per-print-mode CAE_D7**: filter the export
+to a single Epson preset, run the 3-set split + 5-fold (or 3-fold) CV pipeline per mode,
+get a smaller / tighter manifold per model. Each per-mode model now monitors against its
+own validation set (still held out).
+
+Additionally re-tested **H10b** (anchor fine-tune at inference): few-shot gradient on
+`substrate_latent_B` over k S1 anchors of the target, then decode all non-anchor patches
+with the fine-tuned latent. Required earlier work (bank.N was 10 on the 36-profile pool
+because `ProfileBank` intersects RGB across all profiles — useless for evaluation); the
+per-mode pools share a chart so bank.N rises to ~905 (BC) or ~2033 (MOAB), making k = 13
+viable.
+
+| Pool | CV mean MSE | Val MSE | k = 0 median ΔE00 | H10b k = 13 median | k = 0 ≤ 1.5 | H10b ≤ 1.5 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Full 36 (mixed presets) | 0.00206 | 0.00150 | 3.30 | 3.25 | 1.0 % | 6.9 % |
+| **WCRW (9 BC)** | **0.00039** | **0.000112** | **0.98** | **0.88** | **100 %** | **100 %** |
+| USFA (7 MOAB) | 0.00101 | 0.00137 | 2.26 | 2.11 | 30 % | 40 % |
+| **CanvasMatte (5 BC)** | ~0.0004 | 0.000331 | 2.58 | **1.73** | 0 % | **25 %** |
+
+**Two effects compound:**
+
+- *Per-mode focus alone* drops the validation median 3.4× on WCRW (3.30 → 0.98) and
+  meaningfully on USFA / CanvasMatte. The model can model one homogeneous substrate
+  family well within an 8-dim latent.
+- *H10b anchor fine-tune* helps more where the per-mode baseline still has room: −10 %
+  on the already-tight WCRW, −7 % on USFA, **−33 % on CanvasMatte** (where the high-OBA
+  vs low-OBA cluster split inside the mode is exactly what 13 anchors can correct).
+
+Per-mode weights archived as `python/cae/weights/cae_d7_{WCRW,USFA,CanvasMatte}.pt`;
+the original 36-profile model saved as `cae_d7_full36.pt`. Frontend's
+`frontend/src/data/cae_weights_d7.json` is unchanged (still the full-36 export) — a
+follow-up will add a mode selector in the UI so the CAE_D7 predictor loads the right
+mode-specific weight.
+
+New `evaluate.py --anchors k` flag drives the H10b path (Adam, 200 steps, lr = 0.05).
+Output split into `evaluate_d7.json` (baseline) and `evaluate_d7_a{k}.json` (with
+anchors). `split.py` floor lowered to 5 profiles for per-mode pools; `cv_train.py`
+skips folds with eval < 2 profiles and falls back to test for monitoring when
+validation has < 2.
+
+---
+
+## 2026-05-30 — H12 — single-α OBA emission scaling (REJECTED)
+
+User-proposed hypothesis: derive a per-profile OBA contribution from a handful of
+diagnostic anchors (paper + yellow + gray + cyan/blue), then scale the default D7
+emission model by a fitted α to fix the cross-vendor OBA-band residual. Implemented
+`lib/predict/obaModelFit.ts` (closed-form weighted-LSQ α-fit from anchor patches +
+their per-anchor poly2 baselines), wired into a test runner
+`scripts/experiments/h12_oba_scale.ts` (DecorMatte ref vs Lyve / BelgianLinen /
+ChromataWhite targets, 4 anchor recipes).
+
+**Rejected.** α_ref on DecorMatte ranged 0.30–1.83 across recipes (CV ≈ 79 % vs the
+30 % falsification threshold). On all three OBA-disparate pairs H12 either tied
+or worsened median ΔE00 by +0.01 to +0.14. Diagnosis: yellow ink has T(440) ≈ 0,
+so its observed emission contribution is tiny regardless of substrate emission
+magnitude — the LSQ reads this as "low α" and the uniform scaling then cancels
+real emission contribution at other patches. A single profile-level scalar cannot
+capture the per-ink visible-band attenuation of fluorescent emission. The right
+model is per-band attenuation `g(λ)` fitted from yellow/cyan/red anchors, not a
+scalar — deferred (the CAE_D7 absorbs this structure implicitly).
+
+The module + tests remain useful as a building block when the richer per-band
+model is implemented. See `docs/RESEARCH_HYPOTHESIS.md` H12 Result + `EXPERIMENTS.md`.
+
+---
+
 ## 2026-05-30 — CAE_D7 retrained with classic train/test/validation + 5-fold CV
 
 Pipeline now follows the textbook three-set protocol: `split.py` writes

@@ -129,6 +129,9 @@ def main() -> int:
     for k in range(args.folds):
         fold_eval = folds[k]
         fold_train_names = [n for n in pool if n not in fold_eval]
+        if len(fold_eval) < 2 or len(fold_train_names) < 2:
+            print(f"fold {k + 1}/{args.folds}  skipped — eval={len(fold_eval)} train={len(fold_train_names)} (need ≥ 2 each for pair-based loss)")
+            continue
         train_idx = [bank.index_of(n) for n in fold_train_names]
         eval_idx = [bank.index_of(n) for n in fold_eval]
         t0 = time.time()
@@ -153,7 +156,17 @@ def main() -> int:
     # Final model: train on the full pool, monitor on validation (still held out).
     print(f"\nFinal model: training on full pool ({len(pool)}), monitoring validation ({len(val_names)})")
     pool_idx = [bank.index_of(n) for n in pool]
-    val_idx = [bank.index_of(n) for n in val_names] if val_names else pool_idx[:1]
+    # If validation has fewer than 2 profiles, the pair-based eval can't form even
+    # one (ref, target) pair → fall back to test profiles for monitoring.
+    if len(val_names) >= 2:
+        val_idx = [bank.index_of(n) for n in val_names]
+    else:
+        fallback = [n for n in split.get("test", []) if n in available]
+        print(f"validation has {len(val_names)} profile(s) — falling back to test ({len(fallback)}) for monitoring")
+        val_idx = [bank.index_of(n) for n in fallback]
+        if len(val_idx) < 2:
+            print("test fallback also < 2 — using train pool for monitoring (loose)")
+            val_idx = pool_idx[:2]
     t0 = time.time()
     best_val_mse, best_state, id_table, n_ids, null_id = train_one(
         bank, pool_idx, val_idx, pool, args.epochs, verbose=True,

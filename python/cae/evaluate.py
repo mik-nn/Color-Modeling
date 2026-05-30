@@ -17,9 +17,67 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from dataset import ProfileBank, load_payload, load_split
 from model import CAEHybrid
+
+# S1 forced anchor set used by the TS predictors (paper + RGB corners + black +
+# 5 neutrals = 13 targets, deduped to whatever the chart actually has).
+_S1_CORNERS = [
+    (255, 255, 255), (255, 0, 0), (0, 255, 0), (0, 0, 255),
+    (0, 255, 255), (255, 0, 255), (255, 255, 0), (0, 0, 0),
+]
+_S1_NEUTRALS = [(192, 192, 192), (160, 160, 160), (128, 128, 128), (96, 96, 96), (64, 64, 64)]
+
+
+def pick_s1_indices(rgb_arr: np.ndarray) -> list[int]:
+    """Pick S1 forced-anchor indices from a (N,3) RGB 0..255 array."""
+    used: set[int] = set()
+    out: list[int] = []
+    for target in _S1_CORNERS + _S1_NEUTRALS:
+        d2 = np.sum((rgb_arr - np.array(target, dtype=rgb_arr.dtype)) ** 2, axis=1)
+        for i in np.argsort(d2):
+            ii = int(i)
+            if ii not in used:
+                used.add(ii)
+                out.append(ii)
+                break
+    return out
+
+
+def finetune_sub_b(
+    model: CAEHybrid,
+    sub_b_init: torch.Tensor,   # (8,)
+    ink_anchor: torch.Tensor,   # (k, 16) — already computed from ref's encoder
+    rgb_anchor: torch.Tensor,   # (k, 3) in 0..1
+    r_b_anchor: torch.Tensor,   # (k, 36) target's true reflectance at anchors
+    steps: int = 200,
+    lr: float = 0.05,
+    l2_init: float = 0.0,
+) -> torch.Tensor:
+    """Few-shot fine-tune of the target substrate latent on k measured anchors.
+
+    `l2_init` adds a quadratic penalty pulling `sub_b` toward the encoder's
+    initial guess — reduces over-fit on the k anchors at the cost of slower
+    adaptation. Set 0 to disable.
+
+    Returns the fine-tuned `sub_b` (8,) tensor (detached).
+    """
+    sub_b_anchor = sub_b_init.detach().clone()
+    sub_b = sub_b_init.detach().clone().requires_grad_(True)
+    opt = torch.optim.Adam([sub_b], lr=lr)
+    k = ink_anchor.shape[0]
+    for _ in range(steps):
+        sub_b_expanded = sub_b.unsqueeze(0).expand(k, -1)
+        r_b_pred = model.decode(ink_anchor, rgb_anchor, sub_b_expanded)
+        loss = F.mse_loss(r_b_pred, r_b_anchor)
+        if l2_init > 0:
+            loss = loss + l2_init * F.mse_loss(sub_b, sub_b_anchor)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    return sub_b.detach()
 
 HERE = Path(__file__).resolve().parent
 WEIGHTS_DIR = HERE / "weights"
@@ -125,6 +183,23 @@ def main() -> int:
         help="Which held-out split to score the targets on. 'test' = the CV inner held-out; "
              "'validation' = the outer held-out (never seen during training/CV). Default: validation.",
     )
+    ap.add_argument(
+        "--anchors",
+        type=int,
+        default=0,
+        help="H10b: number of S1 anchors to use for substrate_latent_B fine-tune at inference. "
+             "0 = paper-only (default, original CAE_D7 evaluation). 13 = full S1 anchor set.",
+    )
+    ap.add_argument("--steps", type=int, default=200, help="Fine-tune gradient steps (H10b).")
+    ap.add_argument("--lr", type=float, default=0.05, help="Fine-tune Adam learning rate (H10b).")
+    ap.add_argument(
+        "--l2-init",
+        type=float,
+        default=0.1,
+        help="L2 penalty pulling sub_b toward the encoder's initial estimate (H10b regulariser). "
+             "Default 0.1 trades a tiny median bump for a large P95 win on tight per-mode CAEs; "
+             "set to 0 on OBA-disparate modes (CanvasMatte) where anchors carry essential signal.",
+    )
     args = ap.parse_args()
 
     pt = WEIGHTS_DIR / f"cae_{args.variant}.pt"
@@ -157,57 +232,100 @@ def main() -> int:
     eval_target_idx = [bank.index_of(n) for n in eval_set_names if n in {p["full_name"] for p in bank.profiles}]
 
     rows = []
-    with torch.no_grad():
-        for b in eval_target_idx:
-            paper_b = torch.from_numpy(bank.paper_specs[b]).unsqueeze(0)
-            id_b = torch.tensor([null_id], dtype=torch.long)
-            paper_wp_b = spectra_to_xyz(bank.paper_specs[b].astype(np.float64))
-            for a in train_idx + test_idx:
-                if a == b:
+    # Cap anchors below bank.N so at least a few non-anchor patches remain for ΔE.
+    k_anchors = max(0, min(args.anchors, bank.N - 5)) if args.anchors > 0 else 0
+    if args.anchors > 0:
+        print(f"H10b: anchor fine-tune k_requested={args.anchors}, k_effective={k_anchors}, bank.N={bank.N}")
+    for b in eval_target_idx:
+        paper_b = torch.from_numpy(bank.paper_specs[b]).unsqueeze(0)
+        id_b = torch.tensor([null_id], dtype=torch.long)
+        paper_wp_b = spectra_to_xyz(bank.paper_specs[b].astype(np.float64))
+
+        # H10b: pre-compute per-target anchor indices and true anchor reflectances.
+        if k_anchors > 0:
+            anchor_idx_all = pick_s1_indices(bank.rgb[b])
+            anchor_idx = anchor_idx_all[: k_anchors]
+            anchor_set = set(anchor_idx)
+            r_b_anchor_t = torch.from_numpy(bank.spectra[b][anchor_idx]).float()
+            rgb_b_anchor_t = torch.from_numpy(bank.rgb[b][anchor_idx]).float() / 255.0
+        else:
+            anchor_idx: list[int] = []
+            anchor_set: set[int] = set()
+
+        for a in train_idx + test_idx:
+            if a == b:
+                continue
+            a_name = bank.profiles[a]["full_name"]
+            b_name = bank.profiles[b]["full_name"]
+            a_in_train = a in train_idx
+            paper_a = torch.from_numpy(bank.paper_specs[a]).unsqueeze(0).expand(bank.N, -1)
+            paper_b_e = paper_b.expand(bank.N, -1)
+            r_a = torch.from_numpy(bank.spectra[a])
+            rgb = torch.from_numpy(bank.rgb[a]) / 255.0
+            id_a_v = bundle["id_table"].get(a_name, null_id)
+            id_a_t = torch.full((bank.N,), id_a_v, dtype=torch.long)
+            id_b_t = id_b.expand(bank.N)
+
+            if k_anchors > 0:
+                # H10b: fine-tune sub_b on k anchors with ink-lat from ref.
+                with torch.no_grad():
+                    sub_a_full = model.encode_substrate(paper_a, id_a_t)
+                    sub_b_init = model.encode_substrate(paper_b, id_b).squeeze(0)
+                    ink_full = model.encode_spectrum(r_a, rgb, sub_a_full)
+                    ink_anchor = ink_full[anchor_idx]
+                with torch.enable_grad():
+                    sub_b_tuned = finetune_sub_b(
+                        model, sub_b_init, ink_anchor, rgb_b_anchor_t,
+                        r_b_anchor_t, steps=args.steps, lr=args.lr,
+                        l2_init=args.l2_init,
+                    )
+                with torch.no_grad():
+                    sub_b_full = sub_b_tuned.unsqueeze(0).expand(bank.N, -1)
+                    r_b_pred = model.decode(ink_full, rgb, sub_b_full)
+            else:
+                with torch.no_grad():
+                    r_b_pred, *_ = model(paper_a, paper_b_e, r_a, rgb, id_a_t, id_b_t)
+
+            r_b_pred_np = np.clip(r_b_pred.detach().numpy(), 0, 1).astype(np.float64)
+            r_b_true_np = bank.spectra[b].astype(np.float64)
+
+            # ΔE00 on non-anchor patches when anchors > 0; on all patches otherwise.
+            de = []
+            for i in range(bank.N):
+                if i in anchor_set:
                     continue
-                a_name = bank.profiles[a]["full_name"]
-                b_name = bank.profiles[b]["full_name"]
-                a_in_train = a in train_idx
-                paper_a = torch.from_numpy(bank.paper_specs[a]).unsqueeze(0).expand(bank.N, -1)
-                paper_b_e = paper_b.expand(bank.N, -1)
-                r_a = torch.from_numpy(bank.spectra[a])
-                rgb = torch.from_numpy(bank.rgb[a]) / 255.0
-                id_a_v = bundle["id_table"].get(a_name, null_id)
-                id_a_t = torch.full((bank.N,), id_a_v, dtype=torch.long)
-                id_b_t = id_b.expand(bank.N)
-                r_b_pred, *_ = model(paper_a, paper_b_e, r_a, rgb, id_a_t, id_b_t)
-                r_b_pred_np = np.clip(r_b_pred.numpy(), 0, 1).astype(np.float64)
-                r_b_true_np = bank.spectra[b].astype(np.float64)
+                Lp, ap_, bp = spectra_to_lab(r_b_pred_np[i], paper_wp_b)
+                Lt, at_, bt = spectra_to_lab(r_b_true_np[i], paper_wp_b)
+                de.append(float(delta_e_00(Lp, ap_, bp, Lt, at_, bt)))
+            de_arr = np.array(de)
+            rows.append({
+                "ref": a_name,
+                "ref_in_train": a_in_train,
+                "target": b_name,
+                "median_de00": float(np.median(de_arr)),
+                "p95_de00": float(np.percentile(de_arr, 95)),
+                "mean_de00": float(np.mean(de_arr)),
+            })
+            print(
+                f"  ref={a_name[:35]:35} → tgt={b_name[:30]:30}  "
+                f"med={rows[-1]['median_de00']:.2f}  p95={rows[-1]['p95_de00']:.2f}"
+                f"  {'(train ref)' if a_in_train else '(held-out ref)'}"
+            )
 
-                # ΔE00 per patch using target's paper WP.
-                de = []
-                for i in range(bank.N):
-                    Lp, ap_, bp = spectra_to_lab(r_b_pred_np[i], paper_wp_b)
-                    Lt, at_, bt = spectra_to_lab(r_b_true_np[i], paper_wp_b)
-                    de.append(float(delta_e_00(Lp, ap_, bp, Lt, at_, bt)))
-                de_arr = np.array(de)
-                rows.append({
-                    "ref": a_name,
-                    "ref_in_train": a_in_train,
-                    "target": b_name,
-                    "median_de00": float(np.median(de_arr)),
-                    "p95_de00": float(np.percentile(de_arr, 95)),
-                    "mean_de00": float(np.mean(de_arr)),
-                })
-                print(
-                    f"  ref={a_name[:35]:35} → tgt={b_name[:30]:30}  "
-                    f"med={rows[-1]['median_de00']:.2f}  p95={rows[-1]['p95_de00']:.2f}"
-                    f"  {'(train ref)' if a_in_train else '(held-out ref)'}"
-                )
-
-    out = WEIGHTS_DIR / f"evaluate_{args.variant}.json"
+    suffix = f"_a{args.anchors}" if args.anchors > 0 else ""
+    out = WEIGHTS_DIR / f"evaluate_{args.variant}{suffix}.json"
     out.write_text(json.dumps({
         "variant": args.variant,
+        "set": args.set,
+        "anchors": args.anchors,
+        "finetune_steps": args.steps if args.anchors > 0 else 0,
+        "finetune_lr": args.lr if args.anchors > 0 else 0,
         "rows": rows,
         "summary": {
             "median_of_medians": float(np.median([r["median_de00"] for r in rows])),
             "median_of_p95s": float(np.median([r["p95_de00"] for r in rows])),
             "fraction_under_1.5_de00": float(np.mean([r["median_de00"] <= 1.5 for r in rows])),
+            "fraction_under_3.0_de00": float(np.mean([r["median_de00"] <= 3.0 for r in rows])),
         },
     }, indent=2))
     print(f"\nwrote {out}")

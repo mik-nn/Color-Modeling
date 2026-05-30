@@ -41,8 +41,15 @@ import {
 import { applyPerLambdaAffine } from '../lib/predict/perLambdaAffine'
 import { runCAETransfer, type CAEWeights } from '../lib/predict/cae'
 import caeWeightsRaw from '../data/cae_weights_raw.json'
-import caeWeightsD7 from '../data/cae_weights_d7.json'
 import caeWeightsD7M1 from '../data/cae_weights_d7_m1.json'
+// Per-mode CAE_D7 weight bundles. Each is trained on a single Epson media preset
+// (homogeneous chart, narrower substrate manifold → much lower validation MSE).
+// `cae_weights_d7.json` stays as the legacy 36-profile mixed-pool fallback.
+import caeWeightsD7WCRW from '../data/cae_weights_d7_WCRW.json'
+import caeWeightsD7USFA from '../data/cae_weights_d7_USFA.json'
+import caeWeightsD7CanvasMatte from '../data/cae_weights_d7_CanvasMatte.json'
+import caeWeightsD7Full36 from '../data/cae_weights_d7_full36.json'
+import { canonicalPrintMode, EpsonPreset } from '../utils/printMode'
 
 type PredictorKey =
   | 'A3'
@@ -56,8 +63,37 @@ type PredictorKey =
   | 'ALL'
 
 const CAE_WEIGHTS_RAW = caeWeightsRaw as unknown as CAEWeights
-const CAE_WEIGHTS_D7 = caeWeightsD7 as unknown as CAEWeights
 const CAE_WEIGHTS_D7_M1 = caeWeightsD7M1 as unknown as CAEWeights
+
+// Registry of per-mode CAE_D7 bundles keyed by canonical Epson preset.
+// Each was trained on a single preset (homogeneous chart, narrow substrate
+// manifold) — much lower validation MSE than the 36-profile mixed-pool fallback.
+const CAE_D7_BY_MODE: Partial<Record<EpsonPreset, CAEWeights>> = {
+  WatercolorRadiantWhite: caeWeightsD7WCRW as unknown as CAEWeights,
+  UltrasmoothFineArt: caeWeightsD7USFA as unknown as CAEWeights,
+  CanvasMatte: caeWeightsD7CanvasMatte as unknown as CAEWeights,
+}
+const CAE_WEIGHTS_D7_FULL36 = caeWeightsD7Full36 as unknown as CAEWeights
+
+function pickCaeD7Bundle(
+  refProfile: ProfileData | null,
+  targetProfile: ProfileData | null,
+): { weights: CAEWeights; mode: 'full36' | EpsonPreset; matched: boolean } {
+  if (!refProfile || !targetProfile) {
+    return { weights: CAE_WEIGHTS_D7_FULL36, mode: 'full36', matched: false }
+  }
+  try {
+    const refPreset = canonicalPrintMode(refProfile.metadata)
+    const tgtPreset = canonicalPrintMode(targetProfile.metadata)
+    if (refPreset === tgtPreset) {
+      const bundle = CAE_D7_BY_MODE[refPreset]
+      if (bundle) return { weights: bundle, mode: refPreset, matched: true }
+    }
+  } catch {
+    // canonicalPrintMode throws on unknown media → fall through.
+  }
+  return { weights: CAE_WEIGHTS_D7_FULL36, mode: 'full36', matched: false }
+}
 type AnchorStrategy = 'S1' | 'S2' | 'S3' | 'S4'
 
 interface Props {
@@ -87,6 +123,9 @@ type RunResult =
       alignedN: number
       /** True when profiles came from different charts and were aligned on a common RGB grid. */
       crossChart: boolean
+      /** Which CAE_D7 weight bundle was used: per-mode preset name, or 'full36' fallback. */
+      caeD7Mode: 'full36' | EpsonPreset
+      caeD7ModeMatched: boolean
       obaRef: OBAInfo
       obaTarget: OBAInfo
       obaMismatchScore: number
@@ -457,9 +496,10 @@ export default function TransferView({ profiles }: Props) {
         })
       }
 
+      const caeD7Bundle = pickCaeD7Bundle(refProfile, targetProfile)
       const runCAE_D7 = (idx: number[]) => {
         return runCAETransfer({
-          weights: CAE_WEIGHTS_D7,
+          weights: caeD7Bundle.weights,
           X_A,
           X_B,
           D: D_B,
@@ -546,7 +586,7 @@ export default function TransferView({ profiles }: Props) {
             const c = finalRun as ReturnType<typeof runCAETransfer>
             base.caeRefInTrain = c.refInTrain
             base.caeTargetInTrain = c.targetInTrain
-            base.caeBestTestMSE = CAE_WEIGHTS_D7.best_test_mse
+            base.caeBestTestMSE = caeD7Bundle.weights.best_test_mse
           }
           if (v === 'CAE_D7_M1') {
             const c = finalRun as ReturnType<typeof runCAETransfer>
@@ -579,7 +619,7 @@ export default function TransferView({ profiles }: Props) {
             const c = r as ReturnType<typeof runCAETransfer>
             base.caeRefInTrain = c.refInTrain
             base.caeTargetInTrain = c.targetInTrain
-            base.caeBestTestMSE = CAE_WEIGHTS_D7.best_test_mse
+            base.caeBestTestMSE = caeD7Bundle.weights.best_test_mse
           }
           if (v === 'CAE_D7_M1') {
             const c = r as ReturnType<typeof runCAETransfer>
@@ -597,6 +637,8 @@ export default function TransferView({ profiles }: Props) {
         anchors,
         alignedN: N,
         crossChart,
+        caeD7Mode: caeD7Bundle.mode,
+        caeD7ModeMatched: caeD7Bundle.matched,
         obaRef,
         obaTarget,
         obaMismatchScore: obaMm,
@@ -888,6 +930,21 @@ export default function TransferView({ profiles }: Props) {
               interpolation ({result.alignedN} grid points). Read ΔE00 above the
               interpolation noise floor (~1.5–2 ΔE00 on sparse charts like BC 905).
             </div>
+          )}
+          {(predictor === 'CAE_D7' || predictor === 'ALL') && (
+            result.caeD7ModeMatched ? (
+              <div className="bg-emerald-950/40 border border-emerald-700/60 rounded-lg p-3 text-sm text-emerald-200">
+                CAE_D7: using per-mode weights <b>{result.caeD7Mode}</b> (trained on
+                that Epson preset only). Lower validation MSE than the 36-profile
+                mixed-pool fallback.
+              </div>
+            ) : (
+              <div className="bg-gray-900/60 border border-gray-700 rounded-lg p-3 text-sm text-gray-300">
+                CAE_D7: using <b>full36</b> mixed-pool weights (no per-mode bundle
+                for this ref/target preset, or they differ). Mode-specific weights
+                available for Canvas Matte, WCRW, USFA.
+              </div>
+            )
           )}
           <OBAMismatchTile
             obaRef={result.obaRef}
