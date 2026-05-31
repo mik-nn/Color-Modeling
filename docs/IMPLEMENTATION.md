@@ -62,7 +62,7 @@ picker.
 
 Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 
-### 2.4 Analysers
+### 2.4 Single-profile analysers
 
 | File                                 | Purpose                                                                                                                                                                                                                                                           |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -73,15 +73,25 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 | `lib/analyzers/spectralPredictor.ts` | Per-wavelength polynomial / YN / XYZ-affine predictors. Fits on a calibration subset, evaluates on test subset, returns `SpectralModelComparison` row.                                                                                                            |
 | `lib/analyzers/spreading.ts`         | Polynomial dot-gain: `u_eff = a·u² + (1-a)·u` per channel. Constraints: `f(0)=0, f(1)=1`, monotone iff `a ≥ -0.5`.                                                                                                                                                |
 | `lib/analyzers/optimizer.ts`         | Nelder-Mead simplex (pure TS, no deps). Used by `trainCYNSN3`.                                                                                                                                                                                                    |
-| `lib/analyzers/cynsn.ts`             | 3D CYNSN model — see §3.                                                                                                                                                                                                                                          |
+| `lib/analyzers/cynsn.ts`             | **Retired (2026-05-29).** 3D CYNSN model — kept for reference but removed from UI (Phase 2 withdrawn, H1 retracted). Replaced by data-driven transfer predictors.                                                                                                   |
 
-### 2.4.1 Anchor sampling
+### 2.4.1 Cross-substrate transfer predictors (Phase 2′ — data-driven)
 
-| File                            | Purpose                                                                                                                              |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `lib/sampling/heuristic.ts`     | S1 forced anchor set: paper, RGB corners, black, and neutrals.                                                                       |
-| `lib/sampling/channelRamp.ts`   | S3 single-channel / neutral ramp anchors for testing shared per-λ substrate transforms.                                              |
-| `lib/sampling/labSaturation.ts` | S4 experimental Lab-saturation anchors: paper plus high-chroma patches selected after spectral → Lab conversion with hue separation. |
+| File                               | Predictor | Purpose                                                                                                                                                                              |
+| ---------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lib/predict/perLambdaAffine.ts`   | **A3** | Per-wavelength affine: `R_B(λ) ≈ α(λ) · R_A(λ) + β(λ)`. 72 free params. Baseline empirical model; no structural assumption.                                                         |
+| `lib/predict/paperRatioResidual.ts` | **D1** | Paper-relative ratio + rank-≤3 PCA residual. Exploits multiplicative substrate model: `R_B ≈ (R_paper_B / R_paper_A) ⊙ R_A + PCA residual` (H4). Works best on non-OBA pairs. |
+| `lib/predict/poolPCATransfer.ts`   | **B3** | Pool-PCA basis (all 27 profiles) vs reference-only PCA. Chosen when paper-white ΔE76 > 5; tests H6.                                                                                |
+| `lib/predict/perLambdaCurve.ts`    | **C7** | Per-λ monotone curve fitted from anchors. Paired with S3 ramp anchors; minimal-measurement cross-substrate (H9). Fits `f_λ(A→B)` per wavelength, applies uniformly.                 |
+| `lib/predict/cae.ts`               | **CAE_D7** | Conditional Autoencoder, trained per-print-mode on D7-cleaned profiles (commit 706a51b). Architecture: substrate encoder [paper(36) + ID(N)] → 8-dim latent; spectrum encoder [R(36) + RGB(3) + sub_lat(8)] → 16-dim latent; decoder → R(36). H10b: fine-tune `substrate_latent_B` on k=13 S1 anchors at inference (Adam, 200 steps, lr=0.05). Per-mode pools (WCRW/USFA/CanvasMatte) + L2 regularisation (`--l2-init 0.1` default). |
+
+### 2.4.2 Anchor sampling strategies
+
+| File                           | Strategy | Purpose                                                                                                                                          |
+| ------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lib/sampling/heuristic.ts`    | **S1** | Forced set: paper + RGB corners (8) + black + neutrals. Total k=13. Baseline; comprehensive coverage.                                          |
+| `lib/sampling/channelRamp.ts`  | **S3** | Single-channel or neutral ramps (k=5). For H9: test if per-λ substrate transform `f_λ` shared across inks. Neutral ramps work; cyan ramps fail. |
+| `lib/sampling/labSaturation.ts` | **S4** | Lab-saturation anchors: paper + high-chroma patches. Experimental; rejected on OBA-disparate pairs (H12).                                       |
 
 ### 2.5 UI components
 

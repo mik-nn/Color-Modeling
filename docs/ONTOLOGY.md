@@ -124,11 +124,11 @@ $$R(\lambda) = \left( \sum_v w_v \cdot R_v(\lambda)^{1/n} \right)^n$$
 where $w_v$ are the Demichel weights and $R_v(\lambda)$ are the primary spectra. Parameter
 space: `(spreading[3], n_exponent)` → 4 reals optimised by Nelder-Mead on mean ΔE00 loss.
 
-### 2.10 CYNSN-2 Model
-Cellular Yule-Nielsen with one subdivision of the colorant cube → 27 nodes (3×3×3 in CMY).
+### 2.10 CYNSN-2 Model (retired 2026-05-29)
+**Withdrawn.** Cellular Yule-Nielsen with one subdivision of the colorant cube → 27 nodes (3×3×3 in CMY).
 Nodes near measured patches (tolerance 0.08) are overridden with measured spectra. The
 remaining nodes are filled by YNSN-style primary formula. See `docs/cynsn-pipeline.md` for
-the full flow and known bugs.
+the full flow. Removed from UI; Phase 2 withdrawn, H1 retracted; replaced by data-driven transfer.
 
 ### 2.11 InkLimits
 Per-channel maximum ink load before ΔE departs from the YN-predicted ramp. Computed by
@@ -232,11 +232,57 @@ sequenceDiagram
 
 ---
 
-## 5. Glossary
+## 5. Cross-substrate transfer
+
+### 5.1 Predictor notation
+
+Empirical spectral predictors tested in Phase 2′ (data-driven track, H3–H10):
+
+| Code | Name | Params | Principle |
+|---|---|---|---|
+| **A3** | Per-λ affine | 72 (α, β per λ) | `R_B(λ) ≈ α(λ)·R_A(λ) + β(λ)`. No assumption; most flexible. |
+| **D1** | Paper-ratio + PCA residual | 36 + 3 | Multiplicative substrate: `R_B ≈ (white_B / white_A) ⊙ R_A + PCA residual` (H4). Works on non-OBA pairs. |
+| **B3** | Pool-PCA | 36 + 3 | PCA basis from all 27 profiles, not reference-only. Chosen if paper-white ΔE76 > 5 (H6). |
+| **C7** | Per-λ monotone curve | ~36 | Per-λ function `f_λ(A→B)` fitted from anchors. Universal transform; minimal-measurement design (H9). |
+| **CAE_D7** | Conditional Autoencoder | ~64k | Per-print-mode neural model (commit 706a51b). Substrate encoder (paper + mode ID) → 8-dim latent; spectrum encoder → 16-dim ink latent; decoder → spectrum. H10b: fine-tune substrate latent on k=13 S1 anchors at inference. |
+
+### 5.2 Anchor sampling strategies
+
+| Code | Name | Size | Method |
+|---|---|---|---|
+| **S1** | Forced corners | k=13 | Paper + RGB corners (8) + black + neutrals. Baseline; guaranteed coverage. |
+| **S3** | Single-channel ramp | k=5 | E.g. neutral gray ramp (cyan + magenta + yellow balanced). Tests H9 "per-λ transform is shared". Cyan-only ramps fail (transparent at 380–410 nm). |
+| **S4** | Lab-saturation | k=8–13 | High-chroma anchors from spectral → Lab. Experimental; rejected on OBA-disparate pairs (H12). |
+
+### 5.3 Conditional Autoencoder (CAE_D7)
+
+Architecture (neural network, trained in Python on `python/cae/`):
+
+**Substrate encoder** (reference profile):
+- Input: paper reflectance (36) + substrate ID one-hot (N, with 30% dropout)
+- FC(47 → 32) → ReLU → FC(32 → 8)
+- Output: 8-dim substrate latent `sub_lat_A`
+
+**Spectrum encoder** (target/calibration patch):
+- Input: measured target spectrum (36) + RGB device (3) + `sub_lat_A` (8)
+- FC(47 → 64) → ReLU → FC(64 → 16)
+- Output: 16-dim ink latent `ink_lat_B`
+
+**Decoder** (reconstruction):
+- Input: `ink_lat_B` (16) + RGB (3) + `sub_lat_B` (8) — fine-tuned at inference
+- FC(27 → 64) → ReLU → FC(64 → 36)
+- Output: predicted target spectrum R(λ)
+
+**Training** (Python): cross-substrate pairs (A, B) sampled from train set. Loss: MSE + 0.1 L2 on substrate latent (pulls toward initialization). Per-print-mode pools (WCRW, USFA, CanvasMatte) train separately to fit tighter manifold.
+
+**H10b fine-tune** (at inference, pure TS in `frontend/src/lib/predict/cae.ts`): hold model frozen, run Adam (200 steps, lr=0.05) on `sub_lat_B` using k=13 S1 anchors of the target. Reduces median ΔE00 by 0.5–1.0 on held-out pairs.
+
+---
+
+## 6. Glossary
 
 > Short operational glossary below — for the full article-ready terminology
-> (predictors A3/D1/B3/C7/D7/CAE, anchor strategies S1–S4, interpolation methods,
-> hypothesis IDs, statistics, etc.) see [GLOSSARY.md](GLOSSARY.md).
+> (interpolation methods, hypothesis IDs, statistics, etc.) see [GLOSSARY.md](GLOSSARY.md).
 
 | Term | Definition |
 |---|---|

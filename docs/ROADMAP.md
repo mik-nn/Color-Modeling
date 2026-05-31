@@ -32,50 +32,34 @@
 - [x] Yule-Nielsen-based ink-limit detection with `n = 2` interpolation
       (`limitsAnalyzer`).
 
-## Phase 2 — CYNSN within-profile model (June 2026) — **RETIRED (2026-05-29, H1 withdrawn)**
+## Phase 2 — CYNSN within-profile model — **RETIRED (2026-05-29)**
 
-> Superseded by the data-driven track below. The CYNSN physics model never met its
-> acceptance gate and was removed from the frontend; H1 is withdrawn (see
-> `docs/RESEARCH_HYPOTHESIS.md` Retraction). The `[x]` items below remain as historical
-> record; the `[ ]` items are cancelled.
+> Physics-based Cellular Yule-Nielsen Spectral Neugebauer. Never met acceptance gate
+> (median ΔE00 < 2). Removed from frontend; H1 retracted. Kept as historical reference in
+> `lib/analyzers/cynsn.ts`. Replaced by Phase 2′ data-driven track.
 
-**Goal (historical):** predict R(λ) from device values for a single profile using
-physics-based Cellular Yule-Nielsen Spectral Neugebauer (CYNSN).
+**Historical goal:** predict R(λ) from device values using CYNSN physics.
 
-- [x] Port Python CYNSN to TypeScript, 3D CMY (K = 0):
-  - `colormath.ts`: `xyzToLab`, `spectraToLab`, CIEDE2000 `deltaE00`.
-  - `spreading.ts`: polynomial dot-gain, `pack/unpackTheta3`, monotonicity penalty.
-  - `optimizer.ts`: Nelder-Mead simplex (pure TS).
-  - `cynsn.ts`: `demichel3`, `findCell3`, `buildGridFromColorants3`, `buildGridFromData3`,
-    `predictSpectra3`, `extractNeugebauerPrimaries3`, `trainCYNSN3`, `evaluateCYNSN3`,
-    `runCYNSNComparison`.
-- [x] Wire into `ComparisonView` — "Within-profile CYNSN prediction" table per profile,
-      columns: model / `n_exponent` / median ΔE00 / P95 ΔE00 / RMS.
-- [x] Fix primary-extraction collapse (commit f8cb1e8) and add measured-grid override path
-      for CYNSN-2.
-- [ ] ~~Fix Bug 2 (`grid_cynsn2` ignored in `trainCYNSN3` loss)~~ — cancelled.
-- [ ] ~~Fix Bug 1 (`n` cap 10→30)~~ — cancelled.
-- [ ] ~~Acceptance: median ΔE00 < 2 on ≥ 20 of 27~~ — cancelled.
+- [x] Port CYNSN to TypeScript, 3D CMY (K = 0) — `colormath.ts`, `spreading.ts`,
+      `optimizer.ts`, `cynsn.ts`, Nelder-Mead simplex.
+- [x] Wire into `ComparisonView` — "Within-profile CYNSN prediction" table.
+- [x] Fix primary-extraction collapse (commit f8cb1e8).
+- [x] Retired 2026-05-29. See `docs/RESEARCH_HYPOTHESIS.md` Retraction for H1.
 
 ## Phase 3 — Cross-substrate transfer (CYNSN parameter delta) — **RETIRED (2026-05-29)**
 
-> Withdrawn with H1. Replaced by the data-driven cross-substrate transfer track below.
+> Withdrawn with H1. Superseded by Phase 2′ data-driven transfer.
 
-- [ ] ~~Per-channel primary delta between ref/target CYNSN fits~~ — cancelled.
-- [ ] ~~8-primary calibration A→B within median ΔE00 < 3~~ — cancelled.
-- [ ] ~~Few-shot adaptation: min patches for ΔE00 < 3~~ — cancelled.
+## Phase 2′ — Data-driven transfer (H3–H10) — **IN PROGRESS (as of 2026-05-30)**
 
-## Phase 2′ — Data-driven transfer (active; H3–H10) — **IN PROGRESS**
+Empirical spectral predictors + Conditional Autoencoder. Best results: CAE_D7 median
+1.66 ΔE00 over held-out cross-substrate pairs on per-mode training (H10b confirmed).
 
-Replaces the retired CYNSN track. Predict cross-substrate spectra from anchors via empirical
-predictors (A3 per-λ affine, D1 paper-ratio+PCA, C7 per-λ monotone) and a Conditional
-Autoencoder (CAE_D7). Best results so far on single pairs: C7+S3-neutral 1.06 ΔE00;
-CAE_D7 median-of-medians 1.66 over held-out pairs (see `docs/EXPERIMENTS.md`).
-
-- [x] A3 / D1 / B3 / C7 predictors + anchor strategies S1–S4.
-- [x] CAE_RAW, CAE_D7, CAE_D7_M1 (cross-trained MK profiles; OBA-cleaned variant).
-- [ ] Batch runner over all directed pairs to test H4 (≥80% ≤1.5) / H8 / H9 properly.
-- [ ] H10b anchor fine-tune (fair CAE-vs-classical comparison).
+- [x] A3 / D1 / B3 / C7 predictors + anchor strategies S1–S4 (`lib/predict/`, `lib/sampling/`).
+- [x] CAE_RAW, CAE_D7, per-mode variants (commit 706a51b: `python/cae/cv_train.py`, per-preset pools).
+- [x] H10b anchor fine-tune (in `lib/predict/cae.ts`; Adam, 200 steps, lr=0.05).
+- [ ] Batch runner over all 702 directed pairs to test H4 (≥80% ≤1.5) / H8 / H9 fully.
+- [ ] UI mode selector for per-mode CAE_D7 weight loading (`frontend/src/data/cae_weights_d7_*.json`).
 
 ## Phase 2″ — Print-mode taxonomy + cross-vendor comparison (H11) — **CONFIRMED**
 
