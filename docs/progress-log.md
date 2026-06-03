@@ -6,6 +6,35 @@
 
 ---
 
+## 2026-06-03 — CAE_D7_3ANCHOR + learnable descriptor framework for Premium Luster
+
+**Part 1: CAE_D7_3ANCHOR** — Lab-direction 3-anchor selector (complete, working).
+User provides angle1/angle2/chroma in UI → selector finds closest patches in a/b* space → CAE inference + anchor fine-tuning.
+Results show k=3 is experimental but foundation laid.
+
+**Part 2: Learnable substrate descriptor** — Core framework for fixing CAE on small-mode datasets (Premium Luster: 3 profiles).
+Replace one-hot profile ID encoding with computed features: **OBA Score + Paper White-point (5 scalars)**.
+
+Changes:
+- `frontend/src/lib/colormath.ts`: `extractSubstrateDescriptor(paper) → [OBA, WP_X, WP_Y, WP_Z]` (normalized)
+- `frontend/src/lib/predict/caeTrain.ts`: New file. `CAEForwardLearnable` (forward pass with descriptor),
+  `trainCAELearnable(input)` async loop (loss computation, non-blocking via setTimeout).
+- Weights initialized randomly, export/import JSON ready.
+
+**Why this fixes Premium Luster:**
+- Old CAE: 44-dim one-hot(44) with only 3 training examples → memorization, bad generalization.
+- New CAE: 4-dim descriptor (OBA + WP) → encodes substrate *properties* not *identity* → zero-shot on unseen profiles.
+
+**Next steps (not done yet):**
+1. TransferView integration: UI sliders for anchor_count / chroma / train params, "Train" button, loss curve display.
+2. SGD backprop: implement full gradient computation (currently loss-only).
+3. Export/import UI: download weights JSON, re-load from file.
+4. Test on Premium Luster pairs vs D1 to validate the hypothesis.
+
+**Status:** Commit `178eeff` — foundation layer complete. Ready for TransferView wiring.
+
+---
+
 ## 2026-06-03 — CAE_D7_3ANCHOR predictor: 3-anchor Lab-direction selector
 
 Implemented a new predictor mode `CAE_D7_3ANCHOR` that selects anchors automatically via Lab
