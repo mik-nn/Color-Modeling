@@ -329,3 +329,44 @@ export function runCAETransfer(input: CAERunInput): CAERunResult {
 
   return { X_pred, report, refInTrain, targetInTrain, idA, idB, anchorFineTuned }
 }
+
+// ─── Anchor Residuals Builder ──────────────────────────────────────────────
+
+export interface BuildAnchorResidualsInput {
+  weights: CAEWeights
+  X_A: Float64Array
+  X_B: Float64Array
+  D: Float64Array
+  paper_A: number[]
+  paper_B: number[]
+  anchorIdx: number[] | Int32Array
+  L: number
+  refProfile: string
+  targetProfile: string
+}
+
+export function buildAnchorResiduals(
+  input: BuildAnchorResidualsInput,
+): NonNullable<CAERunInput['anchorResiduals']> {
+  const { weights, X_A, X_B, D, paper_A, paper_B, anchorIdx, L, refProfile, targetProfile } =
+    input
+  const idA = weights.id_table[refProfile] ?? weights.null_id
+  const idB = weights.id_table[targetProfile] ?? weights.null_id
+  const fwd = new CAEForward(weights)
+  const subA = fwd.encodeSubstrate(paper_A, idA)
+  const subB = fwd.encodeSubstrate(paper_B, idB)
+  const rgb = new Float64Array(3)
+  return Array.from(anchorIdx).map((k) => {
+    rgb[0] = D[k * 3] / 255
+    rgb[1] = D[k * 3 + 1] / 255
+    rgb[2] = D[k * 3 + 2] / 255
+    const rA = X_A.slice(k * L, k * L + L)
+    const rB = X_B.slice(k * L, k * L + L)
+    return {
+      subA: Float64Array.from(subA),
+      subB: Float64Array.from(subB),
+      inkLat_A: fwd.encodeSpectrum(rA, rgb, subA),
+      inkLat_B: fwd.encodeSpectrum(rB, rgb, subB),
+    }
+  })
+}

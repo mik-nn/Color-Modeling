@@ -99,6 +99,14 @@ def main() -> int:
     ap.add_argument("--variant", choices=["raw", "d7"], required=True)
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
+    ap.add_argument(
+        "--export-suffix",
+        type=str,
+        default=None,
+        help="If set, also auto-export weights JSON to "
+             "frontend/src/data/cae_weights_<variant>_<suffix>.json (used to deploy "
+             "per-mode bundles without manual cp + export_weights.py calls).",
+    )
     args = ap.parse_args()
 
     WEIGHTS_DIR.mkdir(exist_ok=True)
@@ -113,9 +121,16 @@ def main() -> int:
     pool = sorted(set(split.get("train", [])) | set(split.get("test", [])))
     pool = [n for n in pool if n in available]
     val_names = [n for n in split.get("validation", []) if n in available]
-    if len(pool) < args.folds:
-        print(f"pool too small ({len(pool)}) for {args.folds}-fold CV", file=sys.stderr)
+    if len(pool) < 2:
+        print(f"pool too small ({len(pool)}) — need ≥ 2 profiles to train", file=sys.stderr)
         return 1
+    if len(pool) < args.folds:
+        capped = max(2, len(pool))
+        print(
+            f"pool too small ({len(pool)}) for {args.folds}-fold CV — using {capped} folds (LOO-style)",
+            file=sys.stderr,
+        )
+        args.folds = capped
 
     rng = np.random.default_rng(SEED)
     shuffled = list(rng.permutation(pool))
@@ -185,8 +200,8 @@ def main() -> int:
             "folds": args.folds,
             "epochs": args.epochs,
             "per_fold_mse": [float(m) for m in mses],
-            "mean_mse": float(mses.mean()),
-            "std_mse": float(mses.std()),
+            "mean_mse": float(mses.mean()) if len(mses) else None,
+            "std_mse": float(mses.std()) if len(mses) else None,
         },
         "validation_mse": best_val_mse,
         "best_test_mse": best_val_mse,  # backward-compat key used by TS loader / evaluate
@@ -208,6 +223,23 @@ def main() -> int:
         "total_seconds": time.time() - start_all,
     }, indent=2))
     print(f"saved {cv_out}")
+
+    # Auto-export weights JSON for the frontend, if requested.
+    if args.export_suffix:
+        import subprocess
+        json_out = (
+            HERE / f"../../frontend/src/data/cae_weights_{args.variant}_{args.export_suffix}.json"
+        ).resolve()
+        rc = subprocess.call([
+            sys.executable, str(HERE / "export_weights.py"),
+            "--variant", args.variant,
+            "--out", str(json_out),
+        ])
+        if rc != 0:
+            print(f"warning: export_weights returned {rc}", file=sys.stderr)
+        else:
+            print(f"auto-exported weights → {json_out}")
+
     return 0
 
 

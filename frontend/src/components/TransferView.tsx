@@ -16,7 +16,7 @@
 // physics claim, no "primaries" interpretation on RGB-addressed datasets.
 
 import { useMemo, useState } from 'react'
-import type { AnchorSet, ProfileData, PredictionReport } from '../types'
+import type { AnchorSet, ProfileData, PredictionReport, WhitePointXYZ } from '../types'
 import { loadProfileMatrix, alignByCommonSampleIds, alignByDeviceGrid } from '../lib/dataset/matrix'
 import { pickHeuristicAnchors } from '../lib/sampling/heuristic'
 import {
@@ -39,7 +39,8 @@ import {
   type OBAExtraction,
 } from '../lib/predict/obaSeparator'
 import { applyPerLambdaAffine } from '../lib/predict/perLambdaAffine'
-import { runCAETransfer, type CAEWeights } from '../lib/predict/cae'
+import { spectraToLab } from '../lib/colormath'
+import { runCAETransfer, buildAnchorResiduals, type CAEWeights } from '../lib/predict/cae'
 import caeWeightsRaw from '../data/cae_weights_raw.json'
 import caeWeightsD7M1 from '../data/cae_weights_d7_m1.json'
 // Per-mode CAE_D7 weight bundles. Each is trained on a single Epson media preset
@@ -48,6 +49,7 @@ import caeWeightsD7M1 from '../data/cae_weights_d7_m1.json'
 import caeWeightsD7WCRW from '../data/cae_weights_d7_WCRW.json'
 import caeWeightsD7USFA from '../data/cae_weights_d7_USFA.json'
 import caeWeightsD7CanvasMatte from '../data/cae_weights_d7_CanvasMatte.json'
+import caeWeightsD7PremiumLuster from '../data/cae_weights_d7_PremiumLuster.json'
 import caeWeightsD7Full36 from '../data/cae_weights_d7_full36.json'
 import { canonicalPrintMode, EpsonPreset } from '../utils/printMode'
 
@@ -59,6 +61,7 @@ type PredictorKey =
   | 'CAE_RAW'
   | 'CAE_D7'
   | 'CAE_D7_M1'
+  | 'CAE_D7_3ANCHOR'
   | 'A3_vs_D1'
   | 'ALL'
 
@@ -72,6 +75,7 @@ const CAE_D7_BY_MODE: Partial<Record<EpsonPreset, CAEWeights>> = {
   WatercolorRadiantWhite: caeWeightsD7WCRW as unknown as CAEWeights,
   UltrasmoothFineArt: caeWeightsD7USFA as unknown as CAEWeights,
   CanvasMatte: caeWeightsD7CanvasMatte as unknown as CAEWeights,
+  PremiumLuster: caeWeightsD7PremiumLuster as unknown as CAEWeights,
 }
 const CAE_WEIGHTS_D7_FULL36 = caeWeightsD7Full36 as unknown as CAEWeights
 
@@ -101,7 +105,7 @@ interface Props {
 }
 
 interface PredictorRun {
-  variant: 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'CAE_D7' | 'CAE_D7_M1'
+  variant: 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'CAE_D7' | 'CAE_D7_M1' | 'CAE_D7_3ANCHOR'
   report: PredictionReport
   perLambdaR2?: Float64Array // A3 only
   residualRank?: number // D1 only
@@ -162,6 +166,52 @@ function evenlySpacedRampLevels(count: number): number[] {
   return out
 }
 
+/**
+ * Pick 3 anchors: paper + 2 patches closest to Lab directions in a/b (chromatic) space.
+ * Searches for patches closest to the requested chroma and hue angles.
+ * Returns [paperRowIdx, anchor1Idx, anchor2Idx]. Indices are valid row positions.
+ */
+function pickLabDirectionAnchorIdx(
+  X: Float64Array,
+  D: Float64Array,
+  N: number,
+  L: number,
+  startWL: number,
+  paperRowIdx: number,
+  paperWP: WhitePointXYZ,
+  angle1Deg: number,
+  angle2Deg: number,
+  chroma: number,
+): [number, number, number] {
+  const a1 = (angle1Deg * Math.PI) / 180
+  const a2 = (angle2Deg * Math.PI) / 180
+  const tA1 = chroma * Math.cos(a1)
+  const tB1 = chroma * Math.sin(a1)
+  const tA2 = chroma * Math.cos(a2)
+  const tB2 = chroma * Math.sin(a2)
+
+  let best1 = -1
+  let best2 = -1
+  let d1 = Infinity
+  let d2 = Infinity
+  for (let i = 0; i < N; i++) {
+    if (i === paperRowIdx) continue
+    const row = Array.from(X.subarray(i * L, i * L + L))
+    const [, aS, bS] = spectraToLab(row, startWL, paperWP)
+    const da1 = (aS - tA1) ** 2 + (bS - tB1) ** 2
+    const da2 = (aS - tA2) ** 2 + (bS - tB2) ** 2
+    if (da1 < d1) {
+      d1 = da1
+      best1 = i
+    }
+    if (da2 < d2) {
+      d2 = da2
+      best2 = i
+    }
+  }
+  return [paperRowIdx, best1, best2]
+}
+
 export default function TransferView({ profiles }: Props) {
   const [refName, setRefName] = useState<string>('')
   const [targetName, setTargetName] = useState<string>('')
@@ -174,6 +224,9 @@ export default function TransferView({ profiles }: Props) {
   const [rampChannel, setRampChannel] = useState<RampChannel>('neutral')
   const [rampLevels, setRampLevels] = useState<number>(4)
   const [obaSeparate, setObaSeparate] = useState<boolean>(true)
+  const [angle1, setAngle1] = useState<number>(45)
+  const [angle2, setAngle2] = useState<number>(165)
+  const [chromaTarget, setChromaTarget] = useState<number>(30)
 
   const refProfile = profiles.find((p) => p.metadata.full_name === refName)
   const targetProfile = profiles.find((p) => p.metadata.full_name === targetName)
@@ -469,7 +522,7 @@ export default function TransferView({ profiles }: Props) {
         return base
       }
 
-      type Variant = 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'CAE_D7' | 'CAE_D7_M1'
+      type Variant = 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'CAE_D7' | 'CAE_D7_M1' | 'CAE_D7_3ANCHOR'
       const wantA3 = predictor === 'A3' || predictor === 'A3_vs_D1' || predictor === 'ALL'
       const wantD1 = predictor === 'D1' || predictor === 'A3_vs_D1' || predictor === 'ALL'
       const wantB3 = (predictor === 'B3' || predictor === 'ALL') && b3Ready
@@ -477,6 +530,7 @@ export default function TransferView({ profiles }: Props) {
       const wantCAE_RAW = predictor === 'CAE_RAW' || predictor === 'ALL'
       const wantCAE_D7 = predictor === 'CAE_D7' || predictor === 'ALL'
       const wantCAE_D7_M1 = predictor === 'CAE_D7_M1' || predictor === 'ALL'
+      const wantCAE_D7_3ANCHOR = predictor === 'CAE_D7_3ANCHOR'
 
       const runCAE_RAW = (idx: number[]) => {
         return runCAETransfer({
@@ -533,6 +587,50 @@ export default function TransferView({ profiles }: Props) {
         })
       }
 
+      const runCAE_D7_3ANCHOR = () => {
+        const [pIdx, a1Idx, a2Idx] = pickLabDirectionAnchorIdx(
+          X_A,
+          D_B,
+          N,
+          L,
+          Baligned.wavelengths[0],
+          paperRowIdx,
+          paperWP,
+          angle1,
+          angle2,
+          chromaTarget,
+        )
+        const threeAnchors = [pIdx, a1Idx, a2Idx].filter((i) => i >= 0)
+        const anchorResiduals = buildAnchorResiduals({
+          weights: caeD7Bundle.weights,
+          X_A,
+          X_B,
+          D: D_B,
+          paper_A: paperSpecA,
+          paper_B: paperSpecB,
+          anchorIdx: threeAnchors,
+          L,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+        })
+        return runCAETransfer({
+          weights: caeD7Bundle.weights,
+          X_A,
+          X_B,
+          D: D_B,
+          paper_A: paperSpecA,
+          paper_B: paperSpecB,
+          sampleIds,
+          anchorIdx: threeAnchors,
+          paperRowIdx: pIdx,
+          L,
+          paperWP,
+          refProfile: refProfile.metadata.full_name,
+          targetProfile: targetProfile.metadata.full_name,
+          anchorResiduals,
+        })
+      }
+
       const dispatch = (v: Variant, idx: number[]) => {
         if (v === 'A3') return { ...runA3(idx), variant: 'A3' as const }
         if (v === 'D1') return { ...runD1(idx), variant: 'D1' as const }
@@ -540,6 +638,7 @@ export default function TransferView({ profiles }: Props) {
         if (v === 'CAE_RAW') return { ...runCAE_RAW(idx), variant: 'CAE_RAW' as const }
         if (v === 'CAE_D7') return { ...runCAE_D7(idx), variant: 'CAE_D7' as const }
         if (v === 'CAE_D7_M1') return { ...runCAE_D7_M1(idx), variant: 'CAE_D7_M1' as const }
+        if (v === 'CAE_D7_3ANCHOR') return { ...runCAE_D7_3ANCHOR(), variant: 'CAE_D7_3ANCHOR' as const }
         return { ...runB3(idx), variant: 'B3' as const }
       }
 
@@ -551,6 +650,7 @@ export default function TransferView({ profiles }: Props) {
       if (wantCAE_RAW) variants.push('CAE_RAW')
       if (wantCAE_D7) variants.push('CAE_D7')
       if (wantCAE_D7_M1) variants.push('CAE_D7_M1')
+      if (wantCAE_D7_3ANCHOR) variants.push('CAE_D7_3ANCHOR')
 
       for (const v of variants) {
         if (anchorStrategy === 'S2') {
@@ -594,6 +694,12 @@ export default function TransferView({ profiles }: Props) {
             base.caeTargetInTrain = c.targetInTrain
             base.caeBestTestMSE = CAE_WEIGHTS_D7_M1.best_test_mse
           }
+          if (v === 'CAE_D7_3ANCHOR') {
+            const c = finalRun as ReturnType<typeof runCAETransfer>
+            base.caeRefInTrain = c.refInTrain
+            base.caeTargetInTrain = c.targetInTrain
+            base.caeBestTestMSE = caeD7Bundle.weights.best_test_mse
+          }
           runs.push(base)
         } else {
           const r = dispatch(v, anchorIdx)
@@ -626,6 +732,12 @@ export default function TransferView({ profiles }: Props) {
             base.caeRefInTrain = c.refInTrain
             base.caeTargetInTrain = c.targetInTrain
             base.caeBestTestMSE = CAE_WEIGHTS_D7_M1.best_test_mse
+          }
+          if (v === 'CAE_D7_3ANCHOR') {
+            const c = r as ReturnType<typeof runCAETransfer>
+            base.caeRefInTrain = c.refInTrain
+            base.caeTargetInTrain = c.targetInTrain
+            base.caeBestTestMSE = caeD7Bundle.weights.best_test_mse
           }
           runs.push(base)
         }
@@ -662,6 +774,9 @@ export default function TransferView({ profiles }: Props) {
     rampChannel,
     rampLevels,
     obaSeparate,
+    angle1,
+    angle2,
+    chromaTarget,
   ])
 
   if (profiles.length < 2) {
@@ -757,6 +872,9 @@ export default function TransferView({ profiles }: Props) {
             </option>
             <option value="CAE_D7_M1">
               CAE_D7_M1 — Conditional Autoencoder (cross-trained MK, OBA-cleaned spectra, M1)
+            </option>
+            <option value="CAE_D7_3ANCHOR">
+              CAE_D7_3ANCHOR — paper + 2 Lab-direction anchors with fine-tuning
             </option>
           </select>
         </label>
@@ -915,6 +1033,68 @@ export default function TransferView({ profiles }: Props) {
         </div>
       )}
 
+      {predictor === 'CAE_D7_3ANCHOR' && (
+        <div className="grid grid-cols-3 gap-4 p-3 rounded-lg border border-gray-800 bg-gray-900/60">
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-gray-500">Angle 1 (°)</span>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={355}
+                step={5}
+                value={angle1}
+                onChange={(e) => setAngle1(Number(e.target.value))}
+                className="flex-1"
+              />
+              <span className="font-mono text-sm text-gray-200 w-12 text-right">{angle1}°</span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Lab hue angle (0–360°) for first anchor in a/b* space.
+            </p>
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-gray-500">Angle 2 (°)</span>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={355}
+                step={5}
+                value={angle2}
+                onChange={(e) => setAngle2(Number(e.target.value))}
+                className="flex-1"
+              />
+              <span className="font-mono text-sm text-gray-200 w-12 text-right">{angle2}°</span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Lab hue angle (0–360°) for second anchor in a/b* space.
+            </p>
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-gray-500">Chroma</span>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="range"
+                min={5}
+                max={80}
+                step={5}
+                value={chromaTarget}
+                onChange={(e) => setChromaTarget(Number(e.target.value))}
+                className="flex-1"
+              />
+              <span className="font-mono text-sm text-gray-200 w-12 text-right">
+                {chromaTarget}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Desired chroma in a/b* space. Patches closest to (angle, chroma) are selected as
+              anchors.
+            </p>
+          </label>
+        </div>
+      )}
+
       {result && result.kind === 'error' && (
         <div className="p-3 rounded-lg bg-red-950 border border-red-800 text-red-300 text-sm">
           {result.error}
@@ -942,7 +1122,7 @@ export default function TransferView({ profiles }: Props) {
               <div className="bg-gray-900/60 border border-gray-700 rounded-lg p-3 text-sm text-gray-300">
                 CAE_D7: using <b>full36</b> mixed-pool weights (no per-mode bundle
                 for this ref/target preset, or they differ). Mode-specific weights
-                available for Canvas Matte, WCRW, USFA.
+                available for Canvas Matte, Premium Luster, WCRW, USFA.
               </div>
             )
           )}

@@ -25,6 +25,7 @@ const jsdom = new JSDOM('<!doctype html><html><body></body></html>')
 
 import { parseIcmFile } from '../src/lib/parsers/icmParser'
 import { parseProfileFilename } from '../src/utils/filenameParser'
+import { canonicalPrintMode } from '../src/utils/printMode'
 
 // Profiles now live in per-Epson-preset subfolders under data/profiles/ (see
 // scripts/reorgByMode.ts), so discovery is a recursive walk rather than a fixed
@@ -158,7 +159,18 @@ async function main() {
     const metadata = parseProfileFilename(path.basename(fp))
     if (INK_MODE_FILTER && mode !== INK_MODE_FILTER) continue
     if (!INK_MODE_FILTER && mode !== 'mk' && mode !== 'unknown') continue
-    if (PRINT_MODE_FILTER && metadata.printMode !== PRINT_MODE_FILTER) continue
+    if (PRINT_MODE_FILTER) {
+      // Match by canonical Epson preset (handles BC abbreviations + MOAB names
+      // collapsing onto the same media setting). Raw `metadata.printMode` would
+      // only match one vendor's spelling.
+      let preset: string
+      try {
+        preset = canonicalPrintMode(metadata)
+      } catch {
+        continue
+      }
+      if (preset !== PRINT_MODE_FILTER && metadata.printMode !== PRINT_MODE_FILTER) continue
+    }
     console.log(`Parsing ${path.basename(fp)}`)
     try {
       const exported = await exportProfile(fp)

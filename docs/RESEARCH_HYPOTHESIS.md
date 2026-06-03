@@ -438,6 +438,331 @@ the data-driven CAE_D7 already absorbs this structure implicitly.
 
 ---
 
+## H4-revised — Same-preset cross-substrate transfer (2026-05-30)
+
+The original **H4** (dated 2026-05) asked whether k ≤ 15 anchors suffice for cross-substrate
+transfer between **any** pair of P9000 substrates, with ≥ 80 % of 702 directed pairs reaching
+median ΔE00 ≤ 1.5 and P95 ≤ 3.0 under D1+S2. Per the 2026-05-30 H4 batch row in
+`EXPERIMENTS.md`, that hypothesis is **rejected at the dataset level**: only 13.8 % of the
+600 BC pairs (those with ≥ 100 shared SAMPLE_IDs) clear both bounds under
+D1+S1+D7+rank=5+UV-clamp.
+
+But the rejection is dominated by **cross-Epson-preset** pairs (different ink mode, total ink
+limit, driver media setting). When restricted to pairs that share an Epson media preset, the
+same predictor passes the original acceptance bound:
+
+- **same-mode subset**: 98 BC pairs, median-of-medians ΔE00 = **0.84**, **80.6 %** clear the
+  median ≤ 1.5 ∧ P95 ≤ 3.0 bound at k = 13 — **meets the 80 % threshold**.
+- cross-mode subset: 502 BC pairs, median-of-medians = 2.47, only 0.8 % pass.
+
+H4-revised therefore reframes the claim:
+
+> For any pair of P9000 profiles built on the **same Epson media preset**, k = 13 forced
+> anchors (S1) plus D1 with `residualRank = 5`, `uvBandCount = 4` per-band UV clamp, and
+> D7 OBA-separation suffice to reach **median ΔE00 ≤ 1.5 and P95 ≤ 3.0 on ≥ 80 % of
+> directed pairs**.
+
+### Acceptance & falsification
+
+- **Pass:** ≥ 80 % of same-preset pairs in the BC P9000 set clear `median ≤ 1.5 ∧ P95 ≤ 3.0`.
+  **Confirmed 2026-05-30 (80.6 % on 98 same-mode BC pairs).**
+- **Reject:** < 70 % pass, OR the cross-mode subset is materially better than reported
+  (i.e. the same-mode / cross-mode split is not the real divider).
+
+### Cross-mode is a separate problem
+
+Cross-preset transfer (mk ↔ pk, matte ↔ glossy, …) lies outside D1's first-order substrate
+model. The follow-on hypothesis for that regime — addressed by **per-mode CAE_D7** and the
+**H10b anchor fine-tune** — is registered separately under H10b (already pre-existing) and
+will be tested with the same `h4_batch.ts` runner extended with a `--predictor cae` mode.
+
+### Tests
+
+`scripts/experiments/h4_batch.ts` — already produces the per-pair table with
+`sameMode` flag and the same-mode / cross-mode aggregates. Re-run after any predictor change.
+
+---
+
+## H13 — Measured-fluorescence OBA correction from paired M0/M2 spectra (2026-05-30)
+
+CxF3 files from the X-Rite / i1Profiler pipeline carry **paired M0 + M2 measurements** for
+every patch on almost every BC P9000 profile (probed: 23/26 have both). M2 is the
+**UV-cut** condition — the illumination has all energy below ~400 nm filtered out, so the
+OBA fluorophore cannot be excited and there is no re-emission. M0 is the standard tungsten
+condition with full UV content. The per-patch difference
+
+    E_patch(λ) = R_M0_patch(λ) − R_M2_patch(λ)
+
+is therefore the **measured** OBA fluorescence contribution at that patch, not a model
+extrapolation. The default D7 wrapper, by contrast, extracts emission from `R_paper` via
+a degree-2 polynomial fit on 460–730 nm extrapolated into 380–450 nm and assumes a single
+per-patch attenuation factor `f(patch) = clamp(R_patch(380)/R_paper(380), 0, 1)`.
+
+**Claim.** Replacing the analytic D7 emission with the **measured M0−M2** emission, then
+running D1 transfer on the OBA-free M2 spectra and adding measured emission back on output,
+materially lowers the cross-substrate transfer error on OBA-disparate pairs.
+
+### Approach
+
+Per profile we now have `spectra` (= M0) and `spectra_m2` (= M2). For a transfer (ref → tgt):
+
+1. **Build clean matrices** `X_A_m2`, `X_B_m2` from the paired M2 spectra of ref and tgt.
+2. **Train D1** on `(X_A_m2, X_B_m2)` with anchors — no UV-clamp needed, no D7 wrapper,
+   because M2 has no OBA fluorescence to clamp out. The residual model captures the
+   true smooth substrate transform.
+3. **Predict** `X_B_m2_pred` for all non-anchor patches.
+4. **Add measured emission back**: for the target, emission of every patch is the measured
+   `E_patch = R_M0_tgt − R_M2_tgt` *at anchor patches only*. For non-anchor patches we
+   estimate emission per band as
+   `E_patch(λ) ≈ E_paper(λ) · (R_patch_m2(λ_uv) / R_paper_m2(λ_uv))`
+   — a single scalar scaling driven by how much UV the patch's ink lets through, taken
+   directly from M2 (no OBA non-linearity in the ratio). `λ_uv = 380 nm`.
+5. Final prediction: `X_B_pred(λ) = X_B_m2_pred(λ) + E_patch(λ)`.
+
+### Acceptance & falsification
+
+- **Pass:** on the OBA-disparate same-mode pairs (e.g. Canvas Matte DecorMatte ↔
+  ChromataWhite, OBA mismatch ≥ 0.10), H13 lowers median ΔE00 by ≥ 0.3 and P95 by ≥ 1.0
+  vs the current D7-default predictor at k = 13 (S1).
+- **Reject:** H13 fails to improve over D7-default on the majority of OBA-disparate pairs,
+  OR its P95 is consistently worse (the emission scaling adds variance instead of removing it).
+
+### Why this should work physically
+
+The 380–410 nm region of M0 paper ratio routinely hits 5–7× on OBA-disparate pairs (e.g.
+DecorMatte / Lyve from `EXPERIMENTS.md` 2026-05-23), which forces D1's clamp to truncate
+real signal. On the M2 side those ratios collapse to ~1× because both papers are equally
+non-fluorescent under UV-cut light — D1 fits cleanly there. Re-adding the measured emission
+restores the M0 signal without re-introducing the non-linearity that broke D1 in the first
+place.
+
+### Tests
+
+`scripts/experiments/h13_m0m2.ts` — per-pair head-to-head between D1+S1+D7-default and
+D1+S1+H13 on the same-mode pairs that did NOT pass H4 (i.e. P95 > 3 in
+`h4_batch.json`). Reports median/P95 ΔE00 for each pair under both predictors.
+
+---
+
+## H14-revised — Substrate-specific cyan red-band absorption is the P95 driver (2026-05-30)
+
+Diagnostic in `scripts/experiments/h14_ink_diagnostic.ts` ruled out ink fluorescence as the
+cause of the 640–680 nm residual:
+
+- `mean(M0 − M2)` at λ > 500 nm ≈ **0.0000** across paper + magenta-heavy + cyan-heavy +
+  yellow-heavy + red-heavy patch groups on all 5 Canvas Matte BC profiles. **No ink itself
+  fluoresces** in the visible band on this dataset.
+- The previously-suspected red-band ΔE residual on pairs like DecorMatte ↔ 800M
+  (obaMismatch = 0.00 but P95 = 5.16) is therefore **not** a fluorescence effect.
+
+The actual driver, surfaced by the 1-ink ramp dump:
+
+> At 660 nm, the **full-coverage cyan** reflectance varies between Canvas Matte
+> substrates by ±30 % despite identical device command:
+> ChromataWhite 0.112, Lyve 0.115, BelgianLinen 0.117, 800M 0.126, DecorMatte **0.152**.
+> Spread = **0.040 reflectance** (~3.5 ΔE-equivalent at this brightness). Magenta and
+> yellow at 660 nm are flat across all 5 substrates (~0.92), confirming the effect is
+> cyan-specific.
+
+**Claim (H14-revised).** The 640–680 nm P95 residual on same-mode Canvas Matte pairs is
+driven by **substrate-specific cyan absorption depth** — a Yule-Nielsen-style optical
+scatter difference between canvas coatings, not OBA, not magenta dye fluorescence. D1's
+`r(λ) = B_paper / A_paper` ratio model uses *paper* reflectance as the substrate proxy and
+linearly transfers it onto inked patches, but the substrate-mediated cyan-darkening curve
+is non-linear in coverage and per-substrate-specific → linear ratio underfits.
+
+### Acceptance & falsification
+
+- **Pass:** a per-substrate YN-style exponent fit at 660 nm (or a cyan-ramp anchor set
+  per profile) lowers P95 on the DecorMatte ↔ {800M, ChromataWhite, Lyve, BelgianLinen}
+  worst-pair set by ≥ 1.0 ΔE without hurting other pairs by > 0.05 median.
+- **Reject:** per-substrate YN at 660 nm fails to capture the spread, OR the residual is
+  actually driven by magenta+cyan overprint coupling rather than cyan alone (testable by
+  inspecting 2-ink M+C overprints separately).
+
+### Tests
+
+`scripts/experiments/h14_redband.ts` — to be written. Fits one extra parameter per
+substrate from the cyan ramp at 660 nm, re-runs D1 across the 90 same-mode BC pairs.
+
+---
+
+## H15 — Cyan-ramp anchor strategy (S5, 2026-05-30)
+
+Following H14-revised: instead of a generic 13-anchor S1 (paper + RGB corners + neutrals),
+include a **cyan ramp** (RGB (0, 255, 255), (64, 255, 255), (128, 255, 255), (192, 255, 255))
+as 4 additional anchors. These 4 measurements directly sample the substrate's effect on
+cyan absorption depth at every illuminant band, including the 640–680 nm region where
+substrate spread is largest.
+
+**Claim.** S1 + 4 cyan-ramp anchors (k = 17) on same-mode BC pairs lowers worst-pair P95
+by ≥ 1.0 ΔE on the cyan-driven outliers (DecorMatte ↔ ChromataWhite etc.) at a small
+incremental cost (4 patches measured on the target instead of 13).
+
+### Acceptance & falsification
+
+- **Pass:** P95 drop ≥ 1.0 ΔE on at least 4 of the 6 worst Canvas Matte pairs.
+- **Reject:** No P95 improvement, OR magenta/yellow ramps perform equally well (refuting
+  the cyan-specific framing).
+
+### Tests
+
+`scripts/experiments/h15_cyan_anchors.ts` — extend `pickHeuristicAnchors` with an
+optional cyan-ramp 4-tuple, re-run h13_m0m2 on the same 90 pairs, compare with S1
+baseline.
+
+---
+
+## H15 — Cyan-ramp anchor strategy (S5) — REJECTED (2026-05-30 result)
+
+H15 was tested in `scripts/experiments/h15_cyan_anchors.ts`. On 98 same-mode BC pairs
+the cyan-ramp anchor addition produced:
+
+- med-of-medians 0.823 → **0.795** (small win, −0.03 ΔE00)
+- P95-of-medians 1.608 → 1.614 (flat)
+- **Zero pairs reach ΔP95 ≤ −0.2 ΔE00**; acceptance bar (ΔP95 ≤ −1.0 ΔE on ≥ 4 of 6 worst
+  Canvas Matte pairs) was missed. Top-6 worst-P95 deltas: −0.13, −0.04, +0.03, +0.15,
+  −0.11, +0.12. Net negligible.
+
+Per-mode breakdown is most informative:
+
+- **WCRW (n = 56): −0.034 ΔE median** — the only mode that wins, despite being already
+  the easiest (S1 median 0.736). The 4 cyan-ramp samples expose substrate behaviour the
+  S1 corners miss on near-identical-OBA WCRW papers.
+- **Canvas Matte (n = 20): +0.013 median, +0.040 P95** — the target mode of H15 is hurt
+  rather than helped. Adding the cyan ramp anchors does NOT fix the substrate-specific
+  cyan absorption depth — D1's per-λ paper-ratio multiplies all coverage by `r(λ)` even
+  though the underlying physics is non-linear in coverage.
+
+**Diagnosis.** D1's structural model is `R_B(λ) = r(λ) · R_A(λ) + residual(λ)` with
+`r(λ) = R_paper_B(λ) / R_paper_A(λ)`. Cyan-ramp anchors fit the residual basis at four
+extra coverage levels, but the **multiplicative form is wrong** when two substrates have
+different effective Yule-Nielsen exponents in the red band. More anchors of the same
+predictor class cannot fix a model that is structurally biased.
+
+The H14-revised finding stands: substrate-specific cyan absorption depth at 640–680 nm
+is real and is the source of the P95 residual. The remedy is **structural**, not more
+anchors of the existing predictor.
+
+---
+
+## H16 — Per-substrate Yule-Nielsen exponent in the red band (2026-05-30)
+
+Following H15's rejection: replace D1's multiplicative paper-ratio with a substrate-aware
+Yule-Nielsen-Spectral-Neugebauer (YNSN) correction restricted to the cyan-darkening
+region (640–680 nm). Two-step predictor:
+
+1. **Base D1 transfer** (current default: residualRank 5, UV clamp on 380–410 nm) for
+   λ ∉ [640, 680] nm.
+2. **YN correction** for λ ∈ [640, 680] nm only: fit a single per-substrate exponent
+   `n_target` from the cyan-ramp anchors (RGB (0, 255, 255), (64, 255, 255),
+   (128, 255, 255), (192, 255, 255)) using the standard YN equation
+   `R = ((1 − t) · R_paper^(1/n) + t · R_cyan_full^(1/n))^n`. The anchor cyan ramp
+   pins `t = 1, 0.75, 0.5, 0.25` of cyan coverage; solve for `n` by non-linear
+   least squares.
+
+**Claim (H16).** A single per-substrate `n` parameter fit from the cyan ramp (k = 4
+extra anchors) lowers P95 on the 6 worst Canvas Matte pairs by ≥ 0.5 ΔE00 without
+hurting same-mode pairs by > 0.05 median.
+
+### Why H16 is structurally different from H15
+
+H15 added anchors to a multiplicative model — the residual basis got bigger but still
+multiplicative. H16 swaps the model class on the affected bands: `n_substrate` is the
+optical-scatter exponent for that paper's coating, which is exactly the parameter that
+explains the 0.040-reflectance spread at full-cyan-660 nm across Canvas Matte papers.
+Two free parameters per substrate (`n_target`, `n_ref`) instead of zero — but still
+just one new measurement (the 4-cyan-anchor ramp).
+
+### Acceptance & falsification
+
+- **Pass:** Canvas Matte median P95 ≤ 1.7 (S1 baseline 2.2), no other mode hurt by > 0.05
+  median.
+- **Reject:** YN exponent doesn't capture spread, OR adding it hurts other modes.
+
+### Tests
+
+`scripts/experiments/h16_redband_yn.ts` — to be written.
+
+---
+
+## Note — M0/M2 at 380 nm (measurement artefact)
+
+Independent of the ink-physics hypotheses: `mean(M0 − M2)` at 380 nm is **negative**
+(−0.10 to −0.52) on every probed profile. M2 = UV-cut → the illuminant has no energy
+below ~400 nm, so M2's reported reflectance at 380 nm is an extrapolated fallback rather
+than a measured value. The H13 simple model's division by `R_paper_m2(380)` therefore
+used a defective denominator, which explains part of why H13 simple amplified noise on
+non-OBA papers. H13b's anchor-driven interpolation sidesteps this by using emission
+samples directly, not band-0 ratios.
+
+This is a parser/data-handling clarification, not a hypothesis — flagged so future
+M2-based work skips the 380 nm band or treats it as missing data.
+
+---
+
+## H14 — Red-band substrate-ink interaction is the dominant P95 driver (2026-05-30, superseded)
+
+Original draft hypothesis. Superseded by H14-revised above. The diagnostic data narrowed
+"red-band substrate-ink interaction" to "**substrate-specific cyan absorption depth at
+640–680 nm**" — same physical phenomenon, far more specific framing.
+
+Diagnostic finding from `scripts/experiments/h13_diagnose.ts`. Across 90 same-mode BC pairs:
+
+- Pearson r(obaMismatch, baseline P95) = **0.31** — only weak correlation.
+- 2 of the 4 worst-P95 pairs have `obaMismatch = 0.00` (DecorMatte ↔ 800M, both
+  high-OBA papers): P95 4.5–5.2 ΔE despite no OBA difference.
+- Per-band reflectance RMS on those pairs peaks at **640–680 nm**, not UV.
+- Worst-5 % patches cluster around mid-coverage 3-ink mixtures: typical RGB
+  ≈ (60–80, 50–70, 50–80); the single worst patch across multiple pairs is
+  RGB(0, 56, 31) (pure G+B, no R) at ΔE 7–9.
+
+**Claim (H14).** The dominant residual on OBA-disparate AND OBA-matched same-mode pairs
+is **substrate-specific ink interaction in the 640–680 nm region** on mid-coverage 3-ink
+mixtures, not OBA fluorescence. A predictor that adds a per-band residual term targeted at
+640–680 nm and fitted from mid-coverage anchors (say 4 additional patches at RGB(64, 32, 64),
+(96, 64, 96), (64, 96, 32), (32, 64, 96)) should lower P95 by ≥ 1.0 ΔE on the worst pairs.
+
+### Why this matters more than OBA at this stage
+
+The post-2026-05-29 D1 (rank=5 + UV clamp) already absorbs most of the OBA non-linearity.
+The remaining headroom isn't in fluorescence — it's in how each substrate's coating
+interacts with the printer's red inks (Y absorption tail, K behaviour) on mid-coverage
+mixtures. H14 reframes the project's residual-shaving direction.
+
+### Acceptance & falsification
+
+- **Pass:** an additional rank-2 residual term fitted on the 640–680 nm bands from 4 new
+  mid-coverage anchors lowers P95 by ≥ 1.0 ΔE on at least 5 of the 10 worst-P95 pairs.
+- **Reject:** the new anchors add no P95 reduction OR they hurt the dataset-level median
+  by ≥ 0.1 ΔE.
+
+### Tests
+
+`scripts/experiments/h14_redband.ts` (to be written) — adds 4 mid-coverage anchors to S1,
+fits the per-band residual at 640–680 nm separately from the rest, evaluates against the
+H13c+S1 baseline on the same 90 same-mode pairs.
+
+---
+
+## H13 minimal-measurement OBA protocol (2026-05-30, deferred)
+
+Given the H14 finding that OBA accounts for only ~0.08–0.09 ΔE of residual on disparate
+pairs and the bulk of P95 lives at 640–680 nm, the minimal-measurement OBA protocol is
+deferred but recorded for completeness:
+
+- **2 measurements per profile in BOTH M0 and M2 conditions** (= 4 spectrometric reads):
+  paper white (RGB 255,255,255) + mid-gray (RGB ≈ 128,128,128).
+- Paper measurements give `E_paper(λ) = R_paper_m0(λ) − R_paper_m2(λ)`.
+- Mid-gray measurement gives one calibration point for the UV-attenuation factor — fit
+  `u(patch) = α · (R_patch_m0(380) / R_paper_m0(380))` where α is solved from the
+  measured (M0 − M2) at the mid-gray anchor.
+
+Exposed as an opt-in in TransferView once H14 work has shipped — OBA is the cheap
+0.08 ΔE win, not the headline result.
+
+---
+
 ## Conventions
 
 - All ΔE values are CIEDE2000 unless explicitly tagged ΔE76.

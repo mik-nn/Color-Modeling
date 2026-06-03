@@ -137,12 +137,36 @@ export function parseCxf3Xml(xmlText: string): CxfParseResult {
      else if (type.includes('Measurement')) m2Objects.push(obj);
    }
 
-   const measureObjects = m1Objects.length > 0 ? m1Objects : 
-                         (m0Objects.length > 0 ? m0Objects : m2Objects);
+   // Prefer M0 over M1 over M2 for the primary `spectra` field — this keeps
+   // `spectra − spectra_m2` interpretable as the OBA fluorescence contribution
+   // wherever both measurement conditions exist.
+   const measureObjects = m0Objects.length > 0 ? m0Objects :
+                         (m1Objects.length > 0 ? m1Objects : m2Objects);
+
+  // ── M2 lookup (by position key) for the paired UV-cut spectrum. Available on the
+  // BC P9000 dataset for almost every profile — gives us a *measured* OBA emission
+  // per patch via `M0 − M2`. We always build the map when M2 objects exist, even
+  // if the primary measurement was picked as M0 / M1.
+  const m2ByKey = new Map<string, { spectra: number[]; startWL: number }>();
+  if (m2Objects.length > 0 && measureObjects !== m2Objects) {
+    for (let i = 0; i < m2Objects.length; i++) {
+      const obj = m2Objects[i];
+      const spectrumEls = obj.getElementsByTagNameNS('*', 'ReflectanceSpectrum');
+      if (spectrumEls.length === 0) continue;
+      const spectrumEl = spectrumEls[0];
+      const startWL = parseInt(spectrumEl.getAttribute('StartWL') ?? '380', 10);
+      const spectraText = spectrumEl.textContent?.trim() ?? '';
+      const spectra = spectraText.split(/\s+/).map(Number).filter((v) => !isNaN(v));
+      if (spectra.length === 0) continue;
+      const { row, col, page } = extractLocation(obj);
+      m2ByKey.set(`${row}:${col}:${page}`, { spectra, startWL });
+    }
+  }
 
   // ── Collect raw data (spectra + location + RGB) ──
   interface RawItem {
     spectra: number[];
+    spectra_m2?: number[];
     startWL: number;
     sampleId: string;
     rgb?: { r: number; g: number; b: number };
@@ -165,8 +189,13 @@ export function parseCxf3Xml(xmlText: string): CxfParseResult {
 
     const { row, col, page, sampleId } = extractLocation(obj);
     const posKey = `${row}:${col}:${page}`;
+    const m2 = m2ByKey.get(posKey);
     rawItems.push({
       spectra,
+      spectra_m2:
+        m2 && m2.startWL === startWL && m2.spectra.length === spectra.length
+          ? m2.spectra
+          : undefined,
       startWL,
       sampleId: sampleId || `P${String(i + 1).padStart(4, '0')}`,
       rgb: rgbByKey.get(posKey),
@@ -204,6 +233,7 @@ export function parseCxf3Xml(xmlText: string): CxfParseResult {
       LAB_A: lab.a,
       LAB_B: lab.b,
       spectra: item.spectra,
+      spectra_m2: item.spectra_m2,
       wavelengths: item.spectra.map((_, j) => item.startWL + j * 10),
     };
   });

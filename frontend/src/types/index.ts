@@ -55,7 +55,13 @@ export interface Measurement {
   SAMPLE_ID: string
 
   // ── primary measurement: spectral reflectance (when present) ──
-  spectra?: number[] // reflectance 0–1, length 36
+  spectra?: number[] // reflectance 0–1, length 36 (M0 if available, else first usable condition)
+  /**
+   * UV-cut (M2) reflectance for the same patch. Same length / wavelength grid as `spectra`.
+   * Present when the source profile carries paired M0 + M2 measurements per patch.
+   * `spectra − spectra_m2 ≈ measured OBA fluorescence` at each wavelength.
+   */
+  spectra_m2?: number[]
   wavelengths?: number[] // [380, 390, ..., 730]
 
   // ── device-addressing values, dual representation during migration ──

@@ -2,6 +2,9 @@
   "permissions": {
     "additionalDirectories": [
       "/home/mikz/.claude/plans"
+    ],
+    "allow": [
+      "Bash(git commit -m 'feat\\(cae\\): learnable substrate descriptor \\(OBA+WP\\) and training framework *)"
     ]
   }
 }

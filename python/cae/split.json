@@ -4,14 +4,14 @@
   "test_count": 1,
   "validation_count": 1,
   "train": [
-    "BC_BelgianLinen_P9000_mk_CanvasMatte",
-    "BC_ChromataWhite_P9000_mk_CanvasMatte",
-    "BC_DecorMatte_P9000_mk_CanvasMatte"
+    "MOAB Colorado Fiber Gloss P9000 Prem Luster",
+    "MOAB Colorado Fiber Satine P9000 Prem Luster",
+    "MOAB Juniper Baryta P9000 Prem Luster"
   ],
   "test": [
-    "BC_Lyve_P9000_mk_CanvasMatte"
+    "MOAB Lasal Exhibition Luster P9000 Prem Luster"
   ],
   "validation": [
-    "BC_800M_P9000_mk_CanvasMatte"
+    "BC_VibranceLuster_P9000_PLPP260"
   ]
 }
