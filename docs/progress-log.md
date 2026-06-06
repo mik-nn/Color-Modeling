@@ -6,6 +6,12 @@
 
 ---
 
+## 2026-06-07: Added optimizer.ts (Nelder-Mead) and dynamicLOO.ts for LOO dynamic training. 
+Fixed spectraToXYZ/xyzToLab/deltaE00 signatures. Added overrideSubstrateLatent to CAERunInput. Hypothesis 4 under validation.
+## 2026-06-07: Pivot to intra-mode LOO dynamic training. 
+Static CAE fails when mixing WCRW/PremiumLuster. Implemented dynamic substrate latent optimization via Nelder-Mead on support set (All\{Target}) before anchor residual application. Hypothesis 4 formulated. Code isolated to `lib/analyzers/dynamicLOO.ts`.
+
+
 ## 2026-06-03 — CAE_D7_3ANCHOR + learnable descriptor framework for Premium Luster
 
 **Part 1: CAE_D7_3ANCHOR** — Lab-direction 3-anchor selector (complete, working).

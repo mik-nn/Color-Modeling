@@ -11,12 +11,10 @@
 //
 // All weights are stored row-major in JSON as 2-D arrays (out × in) and
 // 1-D bias arrays.
-
 import type { PredictionReport, WhitePointXYZ } from '../../types'
 import { evaluatePrediction } from '../dataset/evaluate'
 
 // ─── Weight payload shape ──────────────────────────────────────────────────
-
 export interface CAEWeightLayers {
   'substrate_fc1.weight': number[][]
   'substrate_fc1.bias': number[]
@@ -53,7 +51,6 @@ export interface CAEWeights {
 }
 
 // ─── Tiny matrix-multiply helpers (row-major dense) ────────────────────────
-
 function matVec(W: number[][], x: Float64Array, b: number[], out: Float64Array): Float64Array {
   const outDim = W.length
   const inDim = W[0].length
@@ -90,7 +87,6 @@ function oneHot(id: number, n: number): Float64Array {
 }
 
 // ─── Forward pass ──────────────────────────────────────────────────────────
-
 class CAEForward {
   private readonly w: CAEWeightLayers
   private readonly arch: CAEArch
@@ -150,18 +146,17 @@ class CAEForward {
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
-
 export interface CAERunInput {
   weights: CAEWeights
   /** Full reference spectra N × L. */
   X_A: Float64Array
-  /** Full target spectra N × L (ground truth; only anchorIdx rows would be observable in practice). */
+  /* Full target spectra N × L (ground truth; only anchorIdx rows would be observable in practice). */
   X_B: Float64Array
-  /** N × 3 RGB device values 0–255 (shared between A and B by chart construction). */
+  /* N × 3 RGB device values 0–255 (shared between A and B by chart construction). */
   D: Float64Array
-  /** Length-L paper spectrum of A (row at paperRowIdx). */
+  /* Length-L paper spectrum of A (row at paperRowIdx). */
   paper_A: number[]
-  /** Length-L paper spectrum of B. */
+  /* Length-L paper spectrum of B. */
   paper_B: number[]
   sampleIds: string[]
   anchorIdx: number[] | Int32Array
@@ -170,23 +165,28 @@ export interface CAERunInput {
   paperWP: WhitePointXYZ
   refProfile: string
   targetProfile: string
-  /**
-   * The substrate IDs we look up in weights.id_table. If the profile name
-   * is unknown (held-out), we use weights.null_id. The model's ID-dropout
-   * during training ensures graceful behaviour at the null slot.
-   */
-  /**
-   * Optional: anchor residuals for few-shot fine-tuning of substrate latent.
-   * If provided, performs 1-step gradient update on substrate_latent_B
-   * using anchor residuals to improve prediction accuracy.
-   * Expected format: array of objects with subA, subB, inkLat_A, inkLat_B residuals
-   */
+  /*
+  The substrate IDs we look up in weights.id_table. If the profile name
+  is unknown (held-out), we use weights.null_id. The model's ID-dropout
+  during training ensures graceful behaviour at the null slot.
+  */
+  /*
+  Optional: anchor residuals for few-shot fine-tuning of substrate latent.
+  If provided, performs 1-step gradient update on substrate_latent_B
+  using anchor residuals to improve prediction accuracy.
+  Expected format: array of objects with subA, subB, inkLat_A, inkLat_B residuals
+  */
   anchorResiduals?: {
     subA: Float64Array
     subB: Float64Array
     inkLat_A: Float64Array
     inkLat_B: Float64Array
   }[]
+  /**
+   * Optional: override substrate latent vector for profile B.
+   * If provided, used instead of encoding paper_B. Enables dynamic LOO optimization.
+   */
+  overrideSubstrateLatent?: number[]
 }
 
 export interface CAERunResult {
@@ -194,25 +194,24 @@ export interface CAERunResult {
   report: PredictionReport
   /** True when the target profile was in the training split. */
   targetInTrain: boolean
-  /** True when the reference profile was in the training split. */
+  /* True when the reference profile was in the training split. */
   refInTrain: boolean
-  /** Resolved substrate IDs used at inference (-1 if null). */
+  /* Resolved substrate IDs used at inference (-1 if null). */
   idA: number
   idB: number
-  /** Whether anchor fine-tuning was applied. */
+  /* Whether anchor fine-tuning was applied. */
   anchorFineTuned?: boolean
 }
 
 /**
- * Run the trained CAE on a (ref, target) pair. The substrate-ID slots are
- * filled from weights.id_table when the profile name matches a training
- * profile; held-out profiles fall back to weights.null_id so the
- * paper-spectrum branch carries the substrate identity.
- *
- * Anchors are ignored in this baseline version — the model predicts from
- * the paper spectrum alone. A future revision can add few-shot fine-tune
- * of substrate_latent_B on the anchor residuals.
- */
+Run the trained CAE on a (ref, target) pair. The substrate-ID slots are
+filled from weights.id_table when the profile name matches a training
+profile; held-out profiles fall back to weights.null_id so the
+paper-spectrum branch carries the substrate identity.
+Anchors are ignored in this baseline version — the model predicts from
+the paper spectrum alone. A future revision can add few-shot fine-tune
+of substrate_latent_B on the anchor residuals.
+*/
 export function runCAETransfer(input: CAERunInput): CAERunResult {
   const {
     weights,
@@ -238,10 +237,15 @@ export function runCAETransfer(input: CAERunInput): CAERunResult {
   const idB = weights.id_table[targetProfile] ?? weights.null_id
   const refInTrain = idA !== weights.null_id
   const targetInTrain = idB !== weights.null_id
-
   const fwd = new CAEForward(weights)
   const subA = fwd.encodeSubstrate(paper_A, idA)
-  const subB = fwd.encodeSubstrate(paper_B, idB)
+  let subB = fwd.encodeSubstrate(paper_B, idB)
+
+  // Apply override if provided (for LOO dynamic training)
+  let subBAdjusted = subB
+  if (input.overrideSubstrateLatent) {
+    subBAdjusted = new Float64Array(input.overrideSubstrateLatent)
+  }
 
   // Apply anchor fine-tuning if residuals are provided
   let anchorFineTuned = false
@@ -250,7 +254,6 @@ export function runCAETransfer(input: CAERunInput): CAERunResult {
     // Simple 1-step gradient update: adjust substrate_latent_B based on average residual
     const avgSubResidual = new Float64Array(weights.arch.substrate_latent_dim)
     const avgInkResidual = new Float64Array(weights.arch.ink_latent_dim)
-
     // Average the residuals across all anchors
     for (const res of input.anchorResiduals) {
       for (let i = 0; i < weights.arch.substrate_latent_dim; i++) {
@@ -273,7 +276,7 @@ export function runCAETransfer(input: CAERunInput): CAERunResult {
     // Apply small correction to substrate latent (learning rate = 0.1)
     const learningRate = 0.1
     for (let i = 0; i < weights.arch.substrate_latent_dim; i++) {
-      subB[i] += learningRate * avgSubResidual[i]
+      subBAdjusted[i] += learningRate * avgSubResidual[i]
     }
     // Optionally also adjust ink latent based on anchor residuals
     for (let i = 0; i < weights.arch.ink_latent_dim; i++) {
@@ -291,7 +294,7 @@ export function runCAETransfer(input: CAERunInput): CAERunResult {
     rgb[1] = D[i * 3 + 1] / 255
     rgb[2] = D[i * 3 + 2] / 255
     const ink = fwd.encodeSpectrum(rRow, rgb, subA)
-    const pred = fwd.decode(ink, rgb, subB)
+    const pred = fwd.decode(ink, rgb, subBAdjusted)  // ← используем subBAdjusted
     for (let l = 0; l < L; l++) {
       const v = pred[l]
       X_pred[i * L + l] = v < 0 ? 0 : v > 1 ? 1 : v
@@ -326,12 +329,10 @@ export function runCAETransfer(input: CAERunInput): CAERunResult {
     refProfile,
     targetProfile,
   })
-
   return { X_pred, report, refInTrain, targetInTrain, idA, idB, anchorFineTuned }
 }
 
 // ─── Anchor Residuals Builder ──────────────────────────────────────────────
-
 export interface BuildAnchorResidualsInput {
   weights: CAEWeights
   X_A: Float64Array

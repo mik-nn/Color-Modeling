@@ -1,10 +1,17 @@
 {
   "permissions": {
-    "additionalDirectories": [
-      "/home/mikz/.claude/plans"
-    ],
     "allow": [
-      "Bash(git commit -m 'feat\\(cae\\): learnable substrate descriptor \\(OBA+WP\\) and training framework *)"
+      "Bash(git commit -m 'feat\\(cae\\): learnable substrate descriptor \\(OBA+WP\\) and training framework *)",
+      "Bash(git commit -m 'docs: update progress-log for learnable descriptor framework *)",
+      "Bash(rm -rf node_modules package-lock.json && npm install 2>&1 | tail -20)",
+      "Bash(bash -l -c \"nvm use 20 && node --version && npm test 2>&1\")",
+      "Bash(bash -l -c \"nvm use 20 && rm -rf node_modules package-lock.json && npm install 2>&1 | tail -15\")",
+      "Bash(bash -l -c \"nvm use 20 && npm test 2>&1\")",
+      "Bash(bash -l -c \"nvm use 20 && npm run build 2>&1\")"
+    ],
+    "additionalDirectories": [
+      "/home/mikz/.claude/plans",
+      "/home/mikz/Color-ModelingETL/frontend/node_modules"
     ]
   }
 }

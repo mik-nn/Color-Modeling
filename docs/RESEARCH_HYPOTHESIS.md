@@ -771,3 +771,13 @@ Exposed as an opt-in in TransferView once H14 work has shipped — OBA is the ch
   used only to evaluate.
 - Train/test splits are 50/50 by patch index parity unless otherwise stated (see
   `cynsn.ts:runCYNSNComparison`).
+
+
+### Hypothesis 14: Dynamic LOO CAE Fine-Tuning per Target (Same Print Mode)
+- **Statement:** Static pre-trained CAE fails across heterogeneous print modes. For each target profile, fine-tuning the substrate latent on all other profiles of the *same mode* (LOO) + anchor residuals will capture mode-specific dot gain & spectral masking, reducing P95 ΔE₀₀ < 2.0.
+- **Status:** ⚠️ TESTING
+- **Falsification criterion:** P95 ΔE₀₀ > 2.5 after LOO latent optimization (5–10 epochs) + Lab-weighted anchor residuals on same-mode WCRW pairs.
+- **Math:** 
+  1. `S = AllProfiles_mode \ {Target}`
+  2. `θ_substrate = argmin_θ Σ_{p∈S} MSE(S_pred(θ, p), S_true_p)` via Nelder-Mead
+  3. `S_target = runCAETransfer(Target, θ_substrate, anchorResiduals)`
