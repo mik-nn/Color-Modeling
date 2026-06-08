@@ -18,6 +18,8 @@
 import { useMemo, useState } from 'react'
 import type { AnchorSet, ProfileData, PredictionReport, WhitePointXYZ } from '../types'
 import { loadProfileMatrix, alignByCommonSampleIds, alignByDeviceGrid } from '../lib/dataset/matrix'
+import { buildWlsInterpolator, type WlsInterpOptions } from '../lib/interp/wlsInterp'
+import type { InterpPoint } from '../lib/interp/rgbInterp'
 import { pickHeuristicAnchors } from '../lib/sampling/heuristic'
 import {
   runPerLambdaAffineTransfer,
@@ -769,7 +771,11 @@ export default function TransferView({ profiles }: Props) {
           const B_raw = loadProfileMatrix(targetProfile)
 
           // Build same-mode support set (all loaded profiles of same preset, not target).
+          // Two alignment strategies:
+          //   1. Common SAMPLE_IDs (same chart grid, e.g. BC 905-patch → BC 905-patch).
+          //   2. WLS RGB interpolation (different grids, e.g. MOAB ~2033-patch → BC 905-patch).
           const looSupport: LOOProfileData[] = []
+          const wlsOpts: WlsInterpOptions = { k: 16, power: 2 }
           for (const p of profiles) {
             if (p.metadata.full_name === targetProfile.metadata.full_name) continue
             let preset: string
@@ -778,28 +784,57 @@ export default function TransferView({ profiles }: Props) {
             try {
               const spMat = loadProfileMatrix(p)
               const spAligned = alignByCommonSampleIds(spMat, B_raw)
-              if (spAligned.sampleIds.length < 50) continue
-              const spN = spAligned.sampleIds.length
-              const spX = new Float64Array(spN * L)
-              const spD = new Float64Array(spN * 3)
-              for (let i = 0; i < spN; i++) {
-                const si = spAligned.idxA[i]
-                for (let l = 0; l < L; l++) spX[i * L + l] = spMat.X[si * L + l]
-                for (let c = 0; c < 3; c++) spD[i * 3 + c] = spMat.D[si * 3 + c]
+
+              let spX: Float64Array, spD: Float64Array, spPaperSpec: number[], spSampleIds: string[]
+
+              if (spAligned.sampleIds.length >= 50) {
+                // Same-grid path: direct matrix copy of aligned rows.
+                const spN = spAligned.sampleIds.length
+                spX = new Float64Array(spN * L)
+                spD = new Float64Array(spN * 3)
+                for (let i = 0; i < spN; i++) {
+                  const si = spAligned.idxA[i]
+                  for (let l = 0; l < L; l++) spX[i * L + l] = spMat.X[si * L + l]
+                  for (let c = 0; c < 3; c++) spD[i * 3 + c] = spMat.D[si * 3 + c]
+                }
+                spPaperSpec = Array.from(paperSpecA) // fallback
+                const paperAlignedIdx = spAligned.idxA.findIndex(si =>
+                  spMat.D[si * 3] >= 254 && spMat.D[si * 3 + 1] >= 254 && spMat.D[si * 3 + 2] >= 254,
+                )
+                if (paperAlignedIdx >= 0) {
+                  spPaperSpec = Array.from(spX.subarray(paperAlignedIdx * L, (paperAlignedIdx + 1) * L))
+                }
+                spSampleIds = spAligned.sampleIds
+              } else if (spMat.channels === 3 && B_raw.channels === 3 && spMat.L === L) {
+                // Different-grid path: WLS interpolation of source onto target's RGB device grid.
+                const pts: InterpPoint[] = new Array(spMat.N)
+                for (let i = 0; i < spMat.N; i++) {
+                  pts[i] = {
+                    rgb: [spMat.D[i * 3], spMat.D[i * 3 + 1], spMat.D[i * 3 + 2]],
+                    spectrum: Array.from(spMat.X.subarray(i * L, i * L + L)),
+                  }
+                }
+                const interp = buildWlsInterpolator(pts, wlsOpts)
+                const tgtN = B_raw.N
+                spX = new Float64Array(tgtN * L)
+                spD = new Float64Array(tgtN * 3)
+                for (let i = 0; i < tgtN; i++) {
+                  const rgb: [number, number, number] = [B_raw.D[i * 3], B_raw.D[i * 3 + 1], B_raw.D[i * 3 + 2]]
+                  const spec = interp.query(rgb)
+                  for (let l = 0; l < L; l++) spX[i * L + l] = spec[l]
+                  spD[i * 3] = rgb[0]; spD[i * 3 + 1] = rgb[1]; spD[i * 3 + 2] = rgb[2]
+                }
+                spPaperSpec = interp.query([255, 255, 255])
+                spSampleIds = B_raw.sampleIds
+              } else {
+                continue
               }
-              // Paper spectrum: row where all device channels ≥ 254.
-              let spPaperSpec = Array.from(paperSpecA) // fallback
-              const paperAlignedIdx = spAligned.idxA.findIndex(si =>
-                spMat.D[si * 3] >= 254 && spMat.D[si * 3 + 1] >= 254 && spMat.D[si * 3 + 2] >= 254,
-              )
-              if (paperAlignedIdx >= 0) {
-                spPaperSpec = Array.from(spX.subarray(paperAlignedIdx * L, (paperAlignedIdx + 1) * L))
-              }
+
               looSupport.push({
                 spectra: spX,
                 deviceValues: spD,
                 paperSpectrum: spPaperSpec,
-                sampleIds: spAligned.sampleIds,
+                sampleIds: spSampleIds,
                 profileName: p.metadata.full_name,
               })
             } catch { continue }

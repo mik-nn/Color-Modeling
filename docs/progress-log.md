@@ -6,6 +6,10 @@
 
 ---
 
+## 2026-06-08: Фаза C v3 — MOAB PremiumLuster via WLS interpolation; LOO support=5
+
+Додано fallback у LOO support-set construction: якщо `alignByCommonSampleIds` дає < 50 спільних патчів (BC ↔ MOAB, різні сітки), будуємо WLS інтерполятор з джерела (k=16) і оцінюємо спектри на RGB-сітці цільового профілю. Результат: LOO support=5 (2 BC + 4 MOAB) замість 1. Метрики: CAE_LOO VL→RS median 7.77 (було 7.81 з 1 support). Гейн мінімальний — bottleneck у PremiumLuster CAE (навчений на 2 BC профілях), не в кількості support. Logged у EXPERIMENTS.md v3 row. Наступний крок: перенавчання PremiumLuster bundle з 6 профілями (4 MOAB + 2 BC).
+
 ## 2026-06-08: Фаза C — PremiumLuster H14 evaluation; k=3 fix; all 905 support patches
 
 Bug corrected: CAE_LOO was passing S1 k=13 anchors as few-shot signal into the Nelder-Mead loss, over-specifying the target substrate. Fixed to k=3 (anchorIdx.slice(0,3) = paper + 2 chromatic). Removed 30-patch subsample cap on support profiles (now uses all patches, defaulting `maxPatchesPerSupport ?? Infinity`). Evaluated on both PremiumLuster pairs (VL↔RS): CAE_LOO median 7.8–8.9 (k=3, 1 support profile). C7 = 1.37–1.38. Root cause: PremiumLuster has only 2 profiles → 1 support → insufficient substrate manifold coverage for Nelder-Mead. H14 conditional pass: algorithm correct, needs |S| ≥ 3. Updated H14 status and algorithm spec in RESEARCH_HYPOTHESIS.md; logged Фаза C results in EXPERIMENTS.md. WCRW reference result (prev session, k=13): median 1.26, P95 3.90 (3 support profiles). See EXPERIMENTS.md row 2026-06-08 (Фаза C).
