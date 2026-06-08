@@ -41,6 +41,7 @@ import {
 import { applyPerLambdaAffine } from '../lib/predict/perLambdaAffine'
 import { spectraToLab } from '../lib/colormath'
 import { runCAETransfer, buildAnchorResiduals, type CAEWeights } from '../lib/predict/cae'
+import { predictTargetWithLOO, type LOOProfileData } from '../lib/analyzers/dynamicLOO'
 import caeWeightsRaw from '../data/cae_weights_raw.json'
 import caeWeightsD7M1 from '../data/cae_weights_d7_m1.json'
 // Per-mode CAE_D7 weight bundles. Each is trained on a single Epson media preset
@@ -62,6 +63,7 @@ type PredictorKey =
   | 'CAE_D7'
   | 'CAE_D7_M1'
   | 'CAE_D7_3ANCHOR'
+  | 'CAE_LOO'
   | 'A3_vs_D1'
   | 'ALL'
 
@@ -105,7 +107,7 @@ interface Props {
 }
 
 interface PredictorRun {
-  variant: 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'CAE_D7' | 'CAE_D7_M1' | 'CAE_D7_3ANCHOR'
+  variant: 'A3' | 'D1' | 'B3' | 'C7' | 'CAE_RAW' | 'CAE_D7' | 'CAE_D7_M1' | 'CAE_D7_3ANCHOR' | 'CAE_LOO'
   report: PredictionReport
   perLambdaR2?: Float64Array // A3 only
   residualRank?: number // D1 only
@@ -116,6 +118,7 @@ interface PredictorRun {
   caeRefInTrain?: boolean // CAE only
   caeTargetInTrain?: boolean // CAE only
   caeBestTestMSE?: number // CAE only
+  looSupportCount?: number // CAE_LOO only
 }
 
 type RunResult =
@@ -230,6 +233,20 @@ export default function TransferView({ profiles }: Props) {
 
   const refProfile = profiles.find((p) => p.metadata.full_name === refName)
   const targetProfile = profiles.find((p) => p.metadata.full_name === targetName)
+
+  // sampleId → [R,G,B] for display (worst patches + anchors).
+  const rgbBySampleId = useMemo(() => {
+    const map = new Map<string, [number, number, number]>()
+    const tgt = profiles.find((p) => p.metadata.full_name === targetName)
+    if (!tgt) return map
+    for (const m of tgt.raw) {
+      const sid = m.SAMPLE_ID
+      if (sid && m.RGB_R !== undefined && m.RGB_G !== undefined && m.RGB_B !== undefined) {
+        map.set(sid, [m.RGB_R, m.RGB_G, m.RGB_B])
+      }
+    }
+    return map
+  }, [profiles, targetName])
 
   // Pool basis cache: rebuild when the set of loaded profiles changes
   // (excluding the target — pool must be independent of what we predict).
@@ -531,6 +548,7 @@ export default function TransferView({ profiles }: Props) {
       const wantCAE_D7 = predictor === 'CAE_D7' || predictor === 'ALL'
       const wantCAE_D7_M1 = predictor === 'CAE_D7_M1' || predictor === 'ALL'
       const wantCAE_D7_3ANCHOR = predictor === 'CAE_D7_3ANCHOR'
+      const wantCAE_LOO = predictor === 'CAE_LOO'
 
       const runCAE_RAW = (idx: number[]) => {
         return runCAETransfer({
@@ -743,6 +761,84 @@ export default function TransferView({ profiles }: Props) {
         }
       }
 
+      // CAE_LOO: dynamic leave-one-out substrate latent optimization (H14).
+      // Runs outside the Variant loop — not compatible with S2 greedy (too slow).
+      if (wantCAE_LOO) {
+        try {
+          const targetPreset = canonicalPrintMode(targetProfile.metadata)
+          const B_raw = loadProfileMatrix(targetProfile)
+
+          // Build same-mode support set (all loaded profiles of same preset, not target).
+          const looSupport: LOOProfileData[] = []
+          for (const p of profiles) {
+            if (p.metadata.full_name === targetProfile.metadata.full_name) continue
+            let preset: string
+            try { preset = canonicalPrintMode(p.metadata) } catch { continue }
+            if (preset !== targetPreset) continue
+            try {
+              const spMat = loadProfileMatrix(p)
+              const spAligned = alignByCommonSampleIds(spMat, B_raw)
+              if (spAligned.sampleIds.length < 50) continue
+              const spN = spAligned.sampleIds.length
+              const spX = new Float64Array(spN * L)
+              const spD = new Float64Array(spN * 3)
+              for (let i = 0; i < spN; i++) {
+                const si = spAligned.idxA[i]
+                for (let l = 0; l < L; l++) spX[i * L + l] = spMat.X[si * L + l]
+                for (let c = 0; c < 3; c++) spD[i * 3 + c] = spMat.D[si * 3 + c]
+              }
+              // Paper spectrum: row where all device channels ≥ 254.
+              let spPaperSpec = Array.from(paperSpecA) // fallback
+              const paperAlignedIdx = spAligned.idxA.findIndex(si =>
+                spMat.D[si * 3] >= 254 && spMat.D[si * 3 + 1] >= 254 && spMat.D[si * 3 + 2] >= 254,
+              )
+              if (paperAlignedIdx >= 0) {
+                spPaperSpec = Array.from(spX.subarray(paperAlignedIdx * L, (paperAlignedIdx + 1) * L))
+              }
+              looSupport.push({
+                spectra: spX,
+                deviceValues: spD,
+                paperSpectrum: spPaperSpec,
+                sampleIds: spAligned.sampleIds,
+                profileName: p.metadata.full_name,
+              })
+            } catch { continue }
+          }
+
+          if (looSupport.length > 0) {
+            const looTarget: LOOProfileData = {
+              spectra: X_B,
+              deviceValues: D_B,
+              paperSpectrum: Array.from(paperSpecB),
+              sampleIds,
+              profileName: targetProfile.metadata.full_name,
+            }
+            // Few-shot: exactly 3 target patches (paper + 2 chromatic) guide the latent.
+            // Support: all patches from each same-mode profile (no subsample cap).
+            const looAnchorIndices = anchorIdx.slice(0, 3)
+            const looResult = predictTargetWithLOO(
+              caeD7Bundle.weights,
+              looSupport,
+              looTarget,
+              {
+                nmIterations: 100,
+                nmTolerance: 1e-4,
+                anchorIndices: looAnchorIndices,
+                L,
+              },
+            )
+            runs.push({
+              variant: 'CAE_LOO',
+              report: looResult.report,
+              caeBestTestMSE: caeD7Bundle.weights.best_test_mse,
+              caeRefInTrain: false,
+              caeTargetInTrain: false,
+              looSupportCount: looResult.looSupportCount,
+            })
+          }
+        } catch { /* canonicalPrintMode failed or no support — skip */ }
+      }
+
       return {
         kind: 'ok' as const,
         runs,
@@ -875,6 +971,9 @@ export default function TransferView({ profiles }: Props) {
             </option>
             <option value="CAE_D7_3ANCHOR">
               CAE_D7_3ANCHOR — paper + 2 Lab-direction anchors with fine-tuning
+            </option>
+            <option value="CAE_LOO">
+              CAE_LOO — dynamic LOO substrate latent (H14, same-mode support set)
             </option>
           </select>
         </label>
@@ -1225,8 +1324,15 @@ export default function TransferView({ profiles }: Props) {
                 <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">
                   Worst 5 patches
                 </div>
-                <div className="text-xs font-mono text-gray-400">
-                  {run.report.worstPatchSampleIds.join(', ')}
+                <div className="text-xs font-mono text-gray-400 flex flex-wrap gap-2">
+                  {run.report.worstPatchSampleIds.map((id, i) => {
+                    const rgb = rgbBySampleId.get(id)
+                    return (
+                      <span key={i} className="px-2 py-0.5 bg-gray-800 rounded text-red-300">
+                        {rgb ? `(${rgb[0]},${rgb[1]},${rgb[2]})` : id}
+                      </span>
+                    )
+                  })}
                 </div>
               </div>
               {run.perLambdaR2 && (
@@ -1329,10 +1435,20 @@ export default function TransferView({ profiles }: Props) {
                     </span>
                     .
                   </div>
-                  <div>
-                    No anchor fine-tuning yet — substrate identity comes purely from the paper-white
-                    spectrum. Few-shot anchor adaptation queued for the next revision.
-                  </div>
+                  {run.variant === 'CAE_LOO' ? (
+                    <div>
+                      Dynamic LOO (H14): substrate latent optimized via Nelder-Mead on{' '}
+                      <span className="text-gray-200 font-mono">{run.looSupportCount ?? '?'}</span>{' '}
+                      same-mode support profiles (all patches), init from target paper encoding.
+                      Few-shot: <span className="text-gray-200 font-mono">k = {run.report.k}</span>{' '}
+                      target anchors (paper + 2 chromatic). Evaluated on 905 − {run.report.k} = {905 - run.report.k} held-out patches.
+                    </div>
+                  ) : (
+                    <div>
+                      No anchor fine-tuning yet — substrate identity comes purely from the paper-white
+                      spectrum. Few-shot anchor adaptation queued for the next revision.
+                    </div>
+                  )}
                 </div>
               )}
               {run.poolSize !== undefined && (
@@ -1359,10 +1475,13 @@ export default function TransferView({ profiles }: Props) {
             </div>
             <div className="text-xs font-mono text-gray-400 flex flex-wrap gap-2">
               {result.anchors.sampleIds.map((id, i) => {
-                const label = (result.anchors.meta?.labels as string[])[i]
+                const label = (result.anchors.meta?.labels as string[])?.[i]
+                const rgb = rgbBySampleId.get(id)
                 return (
                   <span key={id} className="px-2 py-0.5 bg-gray-800 rounded">
-                    {label}: <span className="text-gray-200">{id}</span>
+                    {label}: <span className="text-gray-200">
+                      {rgb ? `(${rgb[0]},${rgb[1]},${rgb[2]})` : id}
+                    </span>
                   </span>
                 )
               })}

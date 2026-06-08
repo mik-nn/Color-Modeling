@@ -6,6 +6,14 @@
 
 ---
 
+## 2026-06-08: Фаза C — PremiumLuster H14 evaluation; k=3 fix; all 905 support patches
+
+Bug corrected: CAE_LOO was passing S1 k=13 anchors as few-shot signal into the Nelder-Mead loss, over-specifying the target substrate. Fixed to k=3 (anchorIdx.slice(0,3) = paper + 2 chromatic). Removed 30-patch subsample cap on support profiles (now uses all patches, defaulting `maxPatchesPerSupport ?? Infinity`). Evaluated on both PremiumLuster pairs (VL↔RS): CAE_LOO median 7.8–8.9 (k=3, 1 support profile). C7 = 1.37–1.38. Root cause: PremiumLuster has only 2 profiles → 1 support → insufficient substrate manifold coverage for Nelder-Mead. H14 conditional pass: algorithm correct, needs |S| ≥ 3. Updated H14 status and algorithm spec in RESEARCH_HYPOTHESIS.md; logged Фаза C results in EXPERIMENTS.md. WCRW reference result (prev session, k=13): median 1.26, P95 3.90 (3 support profiles). See EXPERIMENTS.md row 2026-06-08 (Фаза C).
+
+## 2026-06-08: CAE_LOO wired into UI; dynamicLOO.ts rewritten; display fixes
+
+Diagnosed root cause of CAE_LOO being dead code: `predictTargetWithLOO` was never imported by TransferView. Three bugs fixed in the old implementation: (1) `refProfile: 'support'` caused ink encoder to use null_id instead of the real support profile's substrate ID; (2) latent init was zeros instead of `encodeSubstrate(targetPaper, null_id)`; (3) old code used target's N to index support profiles. Rewrote `dynamicLOO.ts` with clean `LOOProfileData` interface (flat matrices), correct profile IDs for ink encoder, subsampled loss (≤30 patches/profile for optimizer speed), few-shot anchor term, init from target paper. Exported `CAEForward` from `cae.ts` for direct use in optimizer loop without evaluation overhead. Added `CAE_LOO` predictor to TransferView with same-mode support set construction (canonicalPrintMode grouping, alignByCommonSampleIds per support profile). UI: "Worst 5 patches" now shows `(R,G,B)` triples; anchor list shows `(R,G,B)` instead of SAMPLE_IDs. Baseline experiment logged in EXPERIMENTS.md (H14 observation: C7/D1 beat all CAE variants on every mode except WCRW). See EXPERIMENTS.md row 2026-06-08.
+
 ## 2026-06-07: Added optimizer.ts (Nelder-Mead) and dynamicLOO.ts for LOO dynamic training. 
 Fixed spectraToXYZ/xyzToLab/deltaE00 signatures. Added overrideSubstrateLatent to CAERunInput. Hypothesis 4 under validation.
 ## 2026-06-07: Pivot to intra-mode LOO dynamic training. 

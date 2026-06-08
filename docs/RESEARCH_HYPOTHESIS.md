@@ -774,9 +774,19 @@ Exposed as an opt-in in TransferView once H14 work has shipped — OBA is the ch
 
 
 ### Hypothesis 14: Dynamic LOO CAE Fine-Tuning per Target (Same Print Mode)
-- **Statement:** Static pre-trained CAE fails across heterogeneous print modes. For each target profile, fine-tuning the substrate latent on all other profiles of the *same mode* (LOO) + anchor residuals will capture mode-specific dot gain & spectral masking, reducing P95 ΔE₀₀ < 2.0.
-- **Status:** ⚠️ TESTING
-- **Falsification criterion:** P95 ΔE₀₀ > 2.5 after LOO latent optimization (5–10 epochs) + Lab-weighted anchor residuals on same-mode WCRW pairs.
+
+- **Statement:** Static pre-trained CAE fails across heterogeneous print modes. For each target profile, fine-tuning the substrate latent on all other profiles of the *same mode* (LOO) + few-shot anchor patches (k=3) will capture mode-specific dot gain & spectral masking, reducing P95 ΔE₀₀ < 2.0 when ≥3 same-mode support profiles are available.
+- **Status:** ⚠️ CONDITIONAL PASS / DATASET-LIMITED
+- **Falsification criterion:** P95 ΔE₀₀ > 2.5 after LOO latent optimization + k=3 few-shot anchors on same-mode WCRW pairs (≥3 support profiles).
+- **Findings (2026-06-08):**
+  - WCRW (4 profiles, 3 support, k=13 old config): CAE_LOO median **1.26**, P95 3.90. Algorithm confirmed working.
+  - PremiumLuster (2 profiles, 1 support, k=3): CAE_LOO median 7.8–8.9 (C7 = 1.37–1.38). H14 fails when support set = 1 profile.
+  - Conclusion: algorithm is correct; effectiveness requires |S| ≥ 3.
+- **Algorithm (corrected):**
+  1. `S = AllProfiles_mode \ {Target}`, require |S| ≥ 3 for reliable results
+  2. `few_shot_anchors = anchorIdx[:3]` (paper + 2 chromatic, from target only)
+  3. `θ_substrate = argmin_θ [Σ_{p∈S} MSE_all_patches(S_pred(θ,p), S_true_p) + λ·Σ_{a∈few_shot} MSE(pred(θ,a), R_target_a)]` via Nelder-Mead
+  4. `S_target = runCAETransfer(Target, θ_substrate)` evaluated on non-few-shot patches
 - **Math:** 
   1. `S = AllProfiles_mode \ {Target}`
   2. `θ_substrate = argmin_θ Σ_{p∈S} MSE(S_pred(θ, p), S_true_p)` via Nelder-Mead

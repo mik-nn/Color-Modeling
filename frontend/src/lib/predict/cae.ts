@@ -87,7 +87,7 @@ function oneHot(id: number, n: number): Float64Array {
 }
 
 // ─── Forward pass ──────────────────────────────────────────────────────────
-class CAEForward {
+export class CAEForward {
   private readonly w: CAEWeightLayers
   private readonly arch: CAEArch
   // Pre-allocated scratch buffers — reused across patches.

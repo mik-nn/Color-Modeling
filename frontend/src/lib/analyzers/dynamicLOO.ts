@@ -1,129 +1,147 @@
 // frontend/src/lib/analyzers/dynamicLOO.ts
 /**
- * Dynamic Leave-One-Out CAE fine-tuning for intra-mode substrate adaptation.
- * 
+ * Dynamic Leave-One-Out CAE fine-tuning for intra-mode substrate adaptation (H14).
+ *
+ * Algorithm:
+ *   1. Find same-mode support profiles S = AllProfiles_mode \ {Target}.
+ *   2. Optimize substrate latent θ = argmin_θ Σ_{p∈S} MSE(decode(encode_ink(X_p,θ_p),θ), X_p)
+ *      + λ_few · Σ_{a∈anchors} MSE(decode(encode_ink(X_a,θ_a),θ), X_a)
+ *      via Nelder-Mead. Support profiles use their real one-hot IDs for ink encoding.
+ *      Ink encoder uses real subA; only the decoder substrate (subB=θ) is optimized.
+ *   3. Predict target: runCAETransfer(Target, overrideSubstrateLatent=θ).
+ *
  * @module lib/analyzers/dynamicLOO
  */
 
-import type { CAERunInput, CAERunResult, CAEWeights } from '../predict/cae'
-import { runCAETransfer, buildAnchorResiduals } from '../predict/cae'
-import { nelderMead, type NelderMeadOptions } from './optimizer'
-import type { Measurement, WhitePointXYZ } from '../../types'
-import { spectraToXYZ, xyzToLab, deltaE00 } from '../colormath'
+import type { CAEWeights } from '../predict/cae'
+import { CAEForward, runCAETransfer } from '../predict/cae'
+import { nelderMead } from './optimizer'
+import type { PredictionReport, WhitePointXYZ } from '../../types'
+import { spectraToXYZ } from '../colormath'
+
+export interface LOOProfileData {
+  /** N×L row-major reflectance (values in [0,1]). */
+  spectra: Float64Array
+  /** N×3 row-major device values (0–255 RGB). */
+  deviceValues: Float64Array
+  /** Paper white spectrum, length L. */
+  paperSpectrum: number[]
+  /** SAMPLE_IDs, length N. */
+  sampleIds: string[]
+  /** Profile name as stored in weights.id_table (or unknown name → null_id). */
+  profileName: string
+}
 
 export interface LOOConfig {
   nmIterations: number
   nmTolerance: number
-  useAnchorResiduals: boolean
+  /** Indices into target sampleIds for few-shot guidance (may be empty). */
   anchorIndices: number[]
   L: number
+  /** Patches per support profile for optimizer subsampling (default 30). */
+  maxPatchesPerSupport?: number
+  /** Weight for few-shot anchor term relative to support term (default 1.0). */
+  anchorWeight?: number
 }
 
 export interface LOOPredictionResult {
   X_pred: Float64Array
+  report: PredictionReport
   optimizedLatent: number[]
-  medianDE00: number
-  p95DE00: number
   anchorFineTuned: boolean
+  looSupportCount: number
 }
 
-/**
- * Compute paper white point from actual paper spectrum.
- */
 function computePaperWP(paperSpectrum: number[]): WhitePointXYZ {
   const xyz = spectraToXYZ(paperSpectrum)
   return [xyz[0], xyz[1], xyz[2]] as WhitePointXYZ
 }
 
-/**
- * Compute Lab from spectrum using specified white point.
- */
-function spectrumToLab(spectrum: number[], whitePoint: WhitePointXYZ): [number, number, number] {
-  const [X, Y, Z] = spectraToXYZ(spectrum)
-  return xyzToLab(X, Y, Z, whitePoint)
-}
-
 export function predictTargetWithLOO(
   weights: CAEWeights,
-  supportProfiles: Array<{
-    profile: { raw: Measurement[]; wavelengths?: number[] }
-    paperSpectrum: number[]
-    sampleIds: string[]
-    deviceValues: Float64Array
-  }>,
-  targetProfile: {
-    profile: { raw: Measurement[]; wavelengths?: number[] }
-    paperSpectrum: number[]
-    sampleIds: string[]
-    deviceValues: Float64Array
-  },
+  supportProfiles: LOOProfileData[],
+  target: LOOProfileData,
   config: LOOConfig,
 ): LOOPredictionResult {
-  const { L } = config
-  const N = targetProfile.sampleIds.length
+  const { L, anchorIndices } = config
+  // Default: use all patches. Pass a finite number only if browser perf is a concern.
+  const maxPatchesPerSupport = config.maxPatchesPerSupport ?? Infinity
+  const anchorWeight = config.anchorWeight ?? 1.0
 
-  // Compute paper white points from actual spectra
-  const supportPaperWP = computePaperWP(supportProfiles[0].paperSpectrum)
-  const targetPaperWP = computePaperWP(targetProfile.paperSpectrum)
+  const targetPaperWP = computePaperWP(target.paperSpectrum)
+  const fwd = new CAEForward(weights)
 
-  // 1. Optimize substrate latent on support set
-  const initialLatent = new Array(weights.arch.substrate_latent_dim).fill(0)
-  
+  // Init substrate latent from target paper (null_id = held-out substrate).
+  const initLatent = Array.from(fwd.encodeSubstrate(target.paperSpectrum, weights.null_id))
+
+  // Pre-compute support substrate latents — real IDs so ink encoder sees correct substrate.
+  const supportSubLats = supportProfiles.map(sp => {
+    const id = weights.id_table[sp.profileName] ?? weights.null_id
+    return fwd.encodeSubstrate(sp.paperSpectrum, id)
+  })
+
+  // Pre-compute target substrate latent for few-shot anchor term.
+  const tgtId = weights.id_table[target.profileName] ?? weights.null_id
+  const tgtSubLat = fwd.encodeSubstrate(target.paperSpectrum, tgtId)
+
+  // Evenly-spaced subsample indices per support profile.
+  const supportSubsamples = supportProfiles.map(sp => {
+    const N_sp = sp.sampleIds.length
+    const stride = Math.max(1, Math.floor(N_sp / maxPatchesPerSupport))
+    const idxs: number[] = []
+    for (let i = 0; i < N_sp; i += stride) idxs.push(i)
+    return idxs
+  })
+
+  // Reusable rgb buffer — allocated once outside the hot loop.
+  const rgb = new Float64Array(3)
+
+  // Loss: spectral MSE across support (subsampled) + few-shot anchor patches.
   const lossFn = (latent: number[]) => {
-    let totalMSE = 0
-    let totalPatches = 0
+    let totalSS = 0
+    let totalN = 0
 
-    for (const support of supportProfiles) {
-      let anchorResiduals: CAERunInput['anchorResiduals']
-      if (config.useAnchorResiduals && config.anchorIndices.length > 0) {
-        anchorResiduals = buildAnchorResiduals({
-          weights,
-          X_A: flattenSpectra(support.profile.raw, L),
-          X_B: flattenSpectra(support.profile.raw, L),
-          D: support.deviceValues,
-          paper_A: support.paperSpectrum,
-          paper_B: support.paperSpectrum,
-          anchorIdx: new Int32Array(config.anchorIndices),
-          L,
-          refProfile: 'support',
-          targetProfile: 'support',
-        })
-      }
-
-      const input: CAERunInput = {
-        weights,
-        X_A: flattenSpectra(support.profile.raw, L),
-        X_B: flattenSpectra(support.profile.raw, L),
-        D: support.deviceValues,
-        paper_A: support.paperSpectrum,
-        paper_B: support.paperSpectrum,
-        sampleIds: support.sampleIds,
-        anchorIdx: new Int32Array(config.anchorIndices),
-        paperRowIdx: 0,
-        L,
-        paperWP: supportPaperWP,
-        refProfile: 'support',
-        targetProfile: 'support',
-        overrideSubstrateLatent: latent,
-        anchorResiduals,
-      }
-
-      const result = runCAETransfer(input)
-      
-      for (let i = 0; i < N; i++) {
+    for (let si = 0; si < supportProfiles.length; si++) {
+      const sp = supportProfiles[si]
+      const spSubLat = supportSubLats[si]
+      for (const i of supportSubsamples[si]) {
+        rgb[0] = sp.deviceValues[i * 3] / 255
+        rgb[1] = sp.deviceValues[i * 3 + 1] / 255
+        rgb[2] = sp.deviceValues[i * 3 + 2] / 255
+        const rRow = sp.spectra.subarray(i * L, i * L + L)
+        const ink = fwd.encodeSpectrum(rRow, rgb, spSubLat)
+        const pred = fwd.decode(ink, rgb, latent)
         for (let l = 0; l < L; l++) {
-          const pred = result.X_pred[i * L + l]
-          const true_ = support.profile.raw[i].spectra?.[l] ?? 0
-          totalMSE += (pred - true_) ** 2
+          const d = pred[l] - sp.spectra[i * L + l]
+          totalSS += d * d
         }
+        totalN++
       }
-      totalPatches += N
     }
 
-    return totalMSE / totalPatches
+    // Few-shot: target anchor patches guide latent toward actual target substrate.
+    if (anchorIndices.length > 0) {
+      for (const i of anchorIndices) {
+        rgb[0] = target.deviceValues[i * 3] / 255
+        rgb[1] = target.deviceValues[i * 3 + 1] / 255
+        rgb[2] = target.deviceValues[i * 3 + 2] / 255
+        const rRow = target.spectra.subarray(i * L, i * L + L)
+        const ink = fwd.encodeSpectrum(rRow, rgb, tgtSubLat)
+        const pred = fwd.decode(ink, rgb, latent)
+        let ss = 0
+        for (let l = 0; l < L; l++) {
+          const d = pred[l] - target.spectra[i * L + l]
+          ss += d * d
+        }
+        totalSS += anchorWeight * ss
+        totalN++
+      }
+    }
+
+    return totalN > 0 ? totalSS / totalN : Infinity
   }
 
-  const nmResult = nelderMead(lossFn, initialLatent, {
+  const nmResult = nelderMead(lossFn, initLatent, {
     max_iter: config.nmIterations,
     tol: config.nmTolerance,
     initial_simplex_size: 0.1,
@@ -131,80 +149,29 @@ export function predictTargetWithLOO(
 
   const optimizedLatent = nmResult.bestPoint
 
-  // 2. Predict target with optimized latent
-  let anchorResiduals: CAERunInput['anchorResiduals']
-  if (config.useAnchorResiduals && config.anchorIndices.length > 0) {
-    anchorResiduals = buildAnchorResiduals({
-      weights,
-      X_A: flattenSpectra(targetProfile.profile.raw, L),
-      X_B: flattenSpectra(targetProfile.profile.raw, L),
-      D: targetProfile.deviceValues,
-      paper_A: targetProfile.paperSpectrum,
-      paper_B: targetProfile.paperSpectrum,
-      anchorIdx: new Int32Array(config.anchorIndices),
-      L,
-      refProfile: 'target_ref',
-      targetProfile: 'target',
-    })
-  }
-
-  const input: CAERunInput = {
+  // Final prediction on full target using optimized substrate latent.
+  const finalResult = runCAETransfer({
     weights,
-    X_A: flattenSpectra(targetProfile.profile.raw, L),
-    X_B: flattenSpectra(targetProfile.profile.raw, L),
-    D: targetProfile.deviceValues,
-    paper_A: targetProfile.paperSpectrum,
-    paper_B: targetProfile.paperSpectrum,
-    sampleIds: targetProfile.sampleIds,
-    anchorIdx: new Int32Array(config.anchorIndices),
+    X_A: target.spectra,
+    X_B: target.spectra,
+    D: target.deviceValues,
+    paper_A: target.paperSpectrum,
+    paper_B: target.paperSpectrum,
+    sampleIds: target.sampleIds,
+    anchorIdx: new Int32Array(anchorIndices),
     paperRowIdx: 0,
     L,
     paperWP: targetPaperWP,
-    refProfile: 'target_ref',
-    targetProfile: 'target',
+    refProfile: target.profileName,
+    targetProfile: target.profileName,
     overrideSubstrateLatent: optimizedLatent,
-    anchorResiduals,
-  }
-
-  const result: CAERunResult = runCAETransfer(input)
-
-  // 3. Compute metrics with correct function signatures
-  const errors: number[] = []
-  for (let i = 0; i < N; i++) {
-    const predSpectrum = Array.from(result.X_pred.slice(i * L, (i + 1) * L))
-    const trueSpectrum = targetProfile.profile.raw[i].spectra ?? []
-    
-    const [predL, predA, predB] = spectrumToLab(predSpectrum, targetPaperWP)
-    const [trueL, trueA, trueB] = spectrumToLab(trueSpectrum, targetPaperWP)
-    
-    const dE = deltaE00(predL, predA, predB, trueL, trueA, trueB)
-    errors.push(dE)
-  }
-
-  errors.sort((a, b) => a - b)
-  const medianDE00 = errors[Math.floor(N / 2)]
-  const p95DE00 = errors[Math.floor(N * 0.95)]
+  })
 
   return {
-    X_pred: result.X_pred,
+    X_pred: finalResult.X_pred,
+    report: finalResult.report,
     optimizedLatent,
-    medianDE00,
-    p95DE00,
-    anchorFineTuned: result.anchorFineTuned ?? false,
+    anchorFineTuned: anchorIndices.length > 0,
+    looSupportCount: supportProfiles.length,
   }
-}
-
-function flattenSpectra(measurements: Measurement[], L: number): Float64Array {
-  const N = measurements.length
-  const out = new Float64Array(N * L)
-  for (let i = 0; i < N; i++) {
-    const spec = measurements[i].spectra
-    if (!spec || spec.length !== L) {
-      throw new Error(`Measurement ${i} has invalid spectra length`)
-    }
-    for (let l = 0; l < L; l++) {
-      out[i * L + l] = spec[l]
-    }
-  }
-  return out
 }
