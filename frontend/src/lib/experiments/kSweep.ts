@@ -12,8 +12,7 @@
 import type { ProfileData, PredictionReport, WhitePointXYZ } from '../../types'
 import {
   loadProfileMatrix,
-  alignByCommonSampleIds,
-  alignByDeviceGrid,
+  alignProfiles,
 } from '../dataset/matrix'
 import { fitPCA, pcaProject } from '../dataset/basis'
 import { runGreedyActiveAnchors } from '../sampling/greedy'
@@ -417,31 +416,13 @@ function _buildPairMatrices(
   let X_B: Float64Array
   let D_B: Float64Array
 
-  const aligned = alignByCommonSampleIds(A, B)
-  if (aligned.sampleIds.length >= 50) {
-    N = aligned.sampleIds.length
-    sampleIds = aligned.sampleIds
-    X_A = new Float64Array(N * L)
-    X_B = new Float64Array(N * L)
-    D_B = new Float64Array(N * 3)
-    for (let i = 0; i < N; i++) {
-      const ai = aligned.idxA[i]
-      const bi = aligned.idxB[i]
-      for (let l = 0; l < L; l++) {
-        X_A[i * L + l] = A.X[ai * L + l]
-        X_B[i * L + l] = B.X[bi * L + l]
-      }
-      for (let c = 0; c < 3; c++) D_B[i * 3 + c] = B.D[bi * 3 + c]
-    }
-  } else {
-    const g = alignByDeviceGrid(A, B)
-    if (g.N < 50) return null
-    N = g.N
-    sampleIds = g.sampleIds
-    X_A = g.X_A
-    X_B = g.X_B
-    D_B = g.D
-  }
+  const al = alignProfiles(A, B)
+  if (al.N < 50) return null
+  N = al.N
+  sampleIds = al.sampleIds
+  X_A = al.X_A
+  X_B = al.X_B
+  D_B = al.D
 
   // Paper row: nearest to (255,255,255) in D_B.
   const paperRowIdx = (() => {
