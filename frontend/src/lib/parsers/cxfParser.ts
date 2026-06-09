@@ -220,8 +220,15 @@ export function parseCxf3Xml(xmlText: string): CxfParseResult {
     const [X, Y, Z] = xyzList[i];
     const lab = xyzToLab(X, Y, Z, wpX, wpY, wpZ);
     const hasRgb = item.rgb?.r !== undefined && item.rgb?.g !== undefined && item.rgb?.b !== undefined;
+    // Match patches across profiles by device coordinate, not position. Encode RGB
+    // into SAMPLE_ID (same convention as cgatsParser) so profiles with different
+    // chart layouts still align by measurement point. Fall back to ordinal id only
+    // when no Target/RGB exists for this measurement.
+    const sampleId = hasRgb
+      ? `RGB_${Math.round(item.rgb!.r!)}_${Math.round(item.rgb!.g!)}_${Math.round(item.rgb!.b!)}`
+      : item.sampleId;
     return {
-      SAMPLE_ID: item.sampleId,
+      SAMPLE_ID: sampleId,
       CMYK_C: 0, CMYK_M: 0, CMYK_Y: 0, CMYK_K: 0,
       RGB_R: item.rgb?.r,
       RGB_G: item.rgb?.g,

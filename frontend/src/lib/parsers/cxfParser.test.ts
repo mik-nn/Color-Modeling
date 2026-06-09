@@ -1,6 +1,6 @@
 // src/lib/parsers/cxfParser.test.ts
 import { describe, it, expect } from 'vitest';
-import { parseCxfFile } from './cxfParser';
+import { parseCxfFile, parseCxf3Xml } from './cxfParser';
 
 // Mock File object with text method
 const createMockFile = (content: string, type: string) => {
@@ -82,11 +82,38 @@ describe('CxF Parser', () => {
         <CxF>
           <Patch L="50" a="10" b="-5" C="20" M="30" Y="40" K="5"/>
         </CxF>`;
-      
+
       const file = createMockFile(xmlContent, 'text/xml');
       const result = await parseCxfFile(file);
-      
+
       expect(result.measurements[0].SAMPLE_ID).toBe('P0001');
     });
+  });
+
+  it('encodes SAMPLE_ID from RGB device values (cc:CxF spectral path)', async () => {
+    // Minimal cc:CxF: one Target (RGB) + one M0 Measurement at same Row/Col/Page.
+    const xml = `<?xml version="1.0"?>
+<cc:CxF xmlns:cc="http://colorexchangeformat.com/CxF3-core">
+  <cc:Resources>
+    <cc:ObjectCollection>
+      <cc:Object Id="t1" ObjectType="Target">
+        <cc:TagCollection>
+          <cc:Tag Name="Row" Value="3"/><cc:Tag Name="Column" Value="5"/><cc:Tag Name="Page" Value="1"/>
+        </cc:TagCollection>
+        <cc:DeviceColorValues><cc:ColorRGB><cc:R>128</cc:R><cc:G>64</cc:G><cc:B>32</cc:B></cc:ColorRGB></cc:DeviceColorValues>
+      </cc:Object>
+      <cc:Object Id="m1" ObjectType="M0_Measurement">
+        <cc:TagCollection>
+          <cc:Tag Name="Row" Value="3"/><cc:Tag Name="Column" Value="5"/><cc:Tag Name="Page" Value="1"/>
+        </cc:TagCollection>
+        <cc:ColorValues><cc:ReflectanceSpectrum StartWL="380">0.1 0.2 0.3 0.4 0.5 0.6</cc:ReflectanceSpectrum></cc:ColorValues>
+      </cc:Object>
+    </cc:ObjectCollection>
+  </cc:Resources>
+</cc:CxF>`;
+    const result = parseCxf3Xml(xml);
+    expect(result.measurements).toHaveLength(1);
+    expect(result.measurements[0].SAMPLE_ID).toBe('RGB_128_64_32');
+    expect(result.measurements[0].device).toEqual({ space: 'rgb', values: [128, 64, 32] });
   });
 });
