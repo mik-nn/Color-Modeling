@@ -6,6 +6,32 @@
 
 ---
 
+## 2026-06-09 (сессия 3): CGATS SAMPLE_ID generator fix — cross-grid alignment bug
+
+**Задача:** исправить ошибки в UI при загрузке USFA профилей (Bright→Textured показывал OBA 4.548, ΔE00=23–31).
+
+**Диагноз:**
+
+1. CGATS без поля `SAMPLE_ID` генерировал ID как `P{row}` (порядковый номер). Bright=2033 патча, Textured=1877 → совпадение по номеру строки, но строка 1727 в Bright = magenta (255,0,255), в Textured = бумага (255,255,255).
+2. Alignment взял row 1727 как "бумаг" reference → extract magenta спектр как paper white.
+3. R(550)=0.126 (magenta), R(440)=0.572 → OBA score = 0.572/0.126 = 4.54. Все predictors получали неправильный baseline.
+
+**Изменения:**
+
+- `cgatsParser.ts` (line 74–82): ID от device value `RGB_{R}_{G}_{B}` вместо `P{row}` когда SAMPLE_ID отсутствует. Обе разные сетки теперь матчат только по точному RGB совпадению.
+- `TransferView.tsx` (line 348–385): добавить независимый поиск бумаги по точному RGB(255,255,255) в A. Обработка двух случаев: same-grid (поиск в aligned.idxA) и cross-grid (поиск в A.N + маппинг в aligned). Ранее paperRowIdx от target-anchors неправильно использовался для обеих профилей.
+
+**Ключевые результаты:**
+
+- Bright→Textured (разные гриды): D1 **0.92** ΔE00 (было 30.87), R²=0.972 (было -393)
+- Bright→Natural (одна сетка): D1 **0.25** ΔE00 (без изменений), R²=0.992
+- Shared SAMPLE_IDs правильно 311 (только RGB совпадения) вместо ошибочного "все 2033"
+- OBA mismatch 0.002 (было 3.578)
+
+→ `EXPERIMENTS.md` update: cross-grid USFA pairs теперь работают корректно.
+
+---
+
 ## 2026-06-09 (сессия 2): Per-mode CAE_D7 — PremiumLuster, CanvasMatte, CanvasSatin
 
 **Задача:** продолжить per-mode обучение после USFA; добавить оставшиеся режимы.

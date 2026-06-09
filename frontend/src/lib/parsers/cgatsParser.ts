@@ -70,16 +70,18 @@ export function parseCgats17Text(text: string): CgatsParseResult {
     .map((line, row) => {
       const cols = splitFields(line)
       const spectra = normalizeReflectance(spectralColumns.map((c) => Number(cols[c.idx])))
-      return {
-        sampleId:
-          sampleIdx >= 0 && cols[sampleIdx]
-            ? cols[sampleIdx]
-            : `P${String(row + 1).padStart(4, '0')}`,
-        r: rgbRIdx >= 0 ? Number(cols[rgbRIdx]) : undefined,
-        g: rgbGIdx >= 0 ? Number(cols[rgbGIdx]) : undefined,
-        b: rgbBIdx >= 0 ? Number(cols[rgbBIdx]) : undefined,
-        spectra,
-      }
+      const r = rgbRIdx >= 0 ? Number(cols[rgbRIdx]) : undefined
+      const g = rgbGIdx >= 0 ? Number(cols[rgbGIdx]) : undefined
+      const b = rgbBIdx >= 0 ? Number(cols[rgbBIdx]) : undefined
+      const explicitId = sampleIdx >= 0 && cols[sampleIdx] ? cols[sampleIdx] : undefined
+      // When SAMPLE_ID is absent, encode device values so profiles with different
+      // patch counts align by measurement point, not by row order.
+      const sampleId =
+        explicitId ??
+        (r !== undefined && g !== undefined && b !== undefined
+          ? `RGB_${Math.round(r)}_${Math.round(g)}_${Math.round(b)}`
+          : `P${String(row + 1).padStart(4, '0')}`)
+      return { sampleId, r, g, b, spectra }
     })
     .filter((item) => item.spectra.every(Number.isFinite))
 
@@ -95,7 +97,7 @@ export function parseCgats17Text(text: string): CgatsParseResult {
     const [L, a, bLab] = xyzToLab(X, Y, Z, paperWP)
     const hasRgb = item.r !== undefined && item.g !== undefined && item.b !== undefined
     return {
-      SAMPLE_ID: item.sampleId || `P${String(row + 1).padStart(4, '0')}`,
+      SAMPLE_ID: item.sampleId,
       RGB_R: item.r,
       RGB_G: item.g,
       RGB_B: item.b,

@@ -352,7 +352,44 @@ export default function TransferView({ profiles }: Props) {
       const paperSpecA = new Array<number>(L)
       for (let l = 0; l < L; l++) {
         paperSpecB[l] = X_B[paperRowIdx * L + l]
-        paperSpecA[l] = X_A[paperRowIdx * L + l]
+      }
+      // Reference paper: find white (255,255,255) in aligned A by device value match.
+      // Cannot reuse target's paperRowIdx when A and B come from different-size grids—
+      // same row index maps to different device values (e.g. Bright row 1727 = magenta,
+      // Textured row 1727 = paper).
+      let paperRowIdxA = paperRowIdx // fallback: use target's anchor if no white found
+      if (crossChart) {
+        // Device grid: find white in A's original grid by device value.
+        for (let i = 0; i < A.N; i++) {
+          const r = A.D[i * A.channels]
+          const g_val = A.D[i * A.channels + 1]
+          const b = A.D[i * A.channels + 2]
+          if (r === 255 && g_val === 255 && b === 255) {
+            // This is the original index in A. Find it in the aligned set.
+            for (let j = 0; j < N; j++) {
+              if (aligned.idxA[j] === i) {
+                paperRowIdxA = j
+                break
+              }
+            }
+            break
+          }
+        }
+      } else {
+        // Same-grid: search in aligned A by original indices.
+        for (let j = 0; j < N; j++) {
+          const ai = aligned.idxA[j]
+          const r = A.D[ai * A.channels]
+          const g_val = A.D[ai * A.channels + 1]
+          const b = A.D[ai * A.channels + 2]
+          if (r === 255 && g_val === 255 && b === 255) {
+            paperRowIdxA = j
+            break
+          }
+        }
+      }
+      for (let l = 0; l < L; l++) {
+        paperSpecA[l] = X_A[paperRowIdxA * L + l]
       }
       const startWL = Baligned.wavelengths[0]
       const paperWP = paperWPFromBrightestPatch(new Float64Array(paperSpecB), 1, L, startWL)
@@ -374,7 +411,7 @@ export default function TransferView({ profiles }: Props) {
       if (obaSeparate) {
         obaExtractionA = extractOBAEmission(paperSpecA, { startWL })
         obaExtractionB = extractOBAEmission(paperSpecB, { startWL })
-        factorsA_local = computeOBAFactorPerPatch(X_A, L, paperRowIdx, { startWL })
+        factorsA_local = computeOBAFactorPerPatch(X_A, L, paperRowIdxA, { startWL })
         factorsB_local = computeOBAFactorPerPatch(X_B, L, paperRowIdx, { startWL })
         X_A_work = subtractOBA(X_A, L, factorsA_local, obaExtractionA.emission)
         X_B_work = subtractOBA(X_B, L, factorsB_local, obaExtractionB.emission)

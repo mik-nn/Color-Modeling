@@ -7,7 +7,10 @@
       "Bash(bash -l -c \"nvm use 20 && node --version && npm test 2>&1\")",
       "Bash(bash -l -c \"nvm use 20 && rm -rf node_modules package-lock.json && npm install 2>&1 | tail -15\")",
       "Bash(bash -l -c \"nvm use 20 && npm test 2>&1\")",
-      "Bash(bash -l -c \"nvm use 20 && npm run build 2>&1\")"
+      "Bash(bash -l -c \"nvm use 20 && npm run build 2>&1\")",
+      "Bash(bash -lc 'source ~/.nvm/nvm.sh 2>/dev/null && nvm ls 2>/dev/null | head')",
+      "Bash(bash -lc 'source ~/.nvm/nvm.sh && nvm use 20 >/dev/null 2>&1 && npx tsc --noEmit 2>&1')",
+      "Bash(bash -lc 'source ~/.nvm/nvm.sh && nvm use 20 >/dev/null 2>&1 && cd /home/mikz/.claude/skills/playwright && node run.js /tmp/ss_caelootransfer.js 2>&1')"
     ],
     "additionalDirectories": [
       "/home/mikz/.claude/plans",
