@@ -28,6 +28,11 @@
 - Shared SAMPLE_IDs правильно 311 (только RGB совпадения) вместо ошибочного "все 2033"
 - OBA mismatch 0.002 (было 3.578)
 
+**Тесты:**
+
+- `cgatsParser.test.ts`: 2 новых теста на SAMPLE_ID генерацию (`RGB_255_255_255` для белого, `RGB_0_0_0` для чёрного)
+- `matrix.test.ts`: тест cross-grid alignment с RGB-encoded SAMPLE_IDs (проверяет что 311 совпадений вместо ошибочных row-based матчей)
+
 → `EXPERIMENTS.md` update: cross-grid USFA pairs теперь работают корректно.
 
 ---

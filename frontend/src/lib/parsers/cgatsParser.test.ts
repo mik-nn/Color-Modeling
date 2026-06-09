@@ -19,10 +19,30 @@ describe('parseCgats17Text', () => {
     expect(result.hasSpectral).toBe(true)
     expect(result.patchCount).toBe(2)
     expect(result.wavelengths).toEqual([380, 390, 400])
-    expect(result.measurements[0].SAMPLE_ID).toBe('P0001')
     expect(result.measurements[0].RGB_R).toBe(255)
     expect(result.measurements[0].device).toEqual({ space: 'rgb', values: [255, 255, 255] })
     expect(result.measurements[0].spectra).toEqual([0.9, 0.9, 0.9])
+  })
+
+  it('generates SAMPLE_ID from device RGB when field is absent', () => {
+    const result = parseCgats17Text(CGATS)
+
+    expect(result.measurements[0].SAMPLE_ID).toBe('RGB_255_255_255')
+    expect(result.measurements[1].SAMPLE_ID).toBe('RGB_0_0_0')
+  })
+
+  it('preserves explicit SAMPLE_ID field when present', () => {
+    const cgatsWithId = `CGATS.17
+BEGIN_DATA_FORMAT
+SAMPLE_ID RGB_R RGB_G RGB_B SPECTRAL_NM_380 SPECTRAL_NM_390
+END_DATA_FORMAT
+NUMBER_OF_SETS 1
+BEGIN_DATA
+MyPatch 255 255 255 0.9 0.9
+END_DATA`
+    const result = parseCgats17Text(cgatsWithId)
+
+    expect(result.measurements[0].SAMPLE_ID).toBe('MyPatch')
   })
 
   it('normalizes percent reflectance values to 0-1', () => {

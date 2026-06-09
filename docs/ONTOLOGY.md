@@ -87,7 +87,7 @@ Stored as `Measurement` in `types/index.ts`.
 
 | Field | Meaning |
 |---|---|
-| `SAMPLE_ID` | `R{row}C{col}P{page}` — stable across profiles for matching |
+| `SAMPLE_ID` | Stable cross-profile join key. Format depends on source: `R{row}C{col}P{page}` (CxF), or when CGATS has no SAMPLE_ID field, `RGB_{R}_{G}_{B}` to encode device value and enable matching on measurement point (not row index). See §3.2 Parsers. |
 | `device` | `{ space: 'rgb' \| 'cmyk', values: number[] }` (after DeviceSpace refactor) |
 | `RGB_R/G/B` | 0–255 — legacy fields, kept until DeviceSpace migration completes |
 | `CMYK_C/M/Y/K` | 0–100 — legacy, used by old `linearityAnalyzer` |

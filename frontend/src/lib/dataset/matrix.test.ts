@@ -88,6 +88,28 @@ describe('alignByCommonSampleIds', () => {
     expect(aligned.idxA.length).toBe(2);
     expect(aligned.idxB.length).toBe(2);
   });
+
+  it('matches RGB-encoded SAMPLE_IDs from CGATS (cross-grid alignment)', () => {
+    // Simulate CGATS profiles without explicit SAMPLE_ID: ID = RGB_{R}_{G}_{B}
+    const pA = mkProfile('A', [
+      mkPatch('RGB_255_255_255', [255, 255, 255], [0.9, 0.9, 0.9]),
+      mkPatch('RGB_255_0_0', [255, 0, 0], [0.5, 0.1, 0.1]),
+      mkPatch('RGB_0_0_0', [0, 0, 0], [0.05, 0.05, 0.05]),
+    ]);
+    const pB = mkProfile('B', [
+      // Different patch count but same device values
+      mkPatch('RGB_255_255_255', [255, 255, 255], [0.95, 0.95, 0.95]),
+      mkPatch('RGB_0_0_0', [0, 0, 0], [0.04, 0.04, 0.04]),
+      mkPatch('RGB_128_128_128', [128, 128, 128], [0.5, 0.5, 0.5]),
+    ]);
+    const a = loadProfileMatrix(pA);
+    const b = loadProfileMatrix(pB);
+    const aligned = alignByCommonSampleIds(a, b);
+    // Only exact device-value matches survive
+    expect(aligned.sampleIds).toEqual(['RGB_0_0_0', 'RGB_255_255_255']);
+    expect(aligned.idxA).toEqual([2, 0]); // sorted by B's order
+    expect(aligned.idxB).toEqual([1, 0]);
+  });
 });
 
 describe('alignByDeviceGrid', () => {
