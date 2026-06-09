@@ -152,8 +152,79 @@ Only **17.8 %** of pairs have r ≤ 4 (acceptance needs ≥ 90 %); 16.7 % requir
 difference needs ~5–6 components, not ≤ 4 — consistent with paper-white shift (1) +
 OBA band structure (1–2) + ink-coverage interaction (2–3). Implication: D1's rank-≤3
 residual under-captures; a richer residual (rank ~5) or A3's per-λ affine is better matched.
-Note this is on the *raw* difference (substrate included); the device-normalised difference
-is expected to be lower-rank.
+
+### Addendum (2026-06-08) — raw vs d7 and cross-mode
+
+Full 27-profile dataset (702 directed pairs) re-analysed with `python/cae/rank_analysis.py`
+(cached in `weights/rank_analysis_{raw,d7}.npz`). Key new findings:
+
+**OBA-compensation does not reduce rank.**
+`d7` (OBA-cleaned via polynomial baseline subtraction per `oba.py`) vs `raw`: rank distribution
+identical, RMS(D) drops ~2 %. OBA fluorescence is a small amplitude perturbation, not a
+separate structural degree of freedom in the residual field.
+
+**Cross-mode rank is only 1 unit higher than same-mode:**
+
+| Slice | n pairs | median rank@99% | p95 rank@99% | 5 SVs cover |
+| --- | --- | --- | --- | --- |
+| same-mode | 144 | **5** | 8 | 99.0 % |
+| cross-mode | 558 | **6** | 8 | 98.2 % |
+| all | 702 | 6 | 8 | 98.5 % |
+
+**Information-theoretic minimum k:**
+
+- Minimum anchors to fit the residual = rank + 1 (one degree of freedom per basis vector).
+- same-mode: **≥ 6 patches** (median rank 5).
+- cross-mode: **≥ 7 patches** (median rank 6, p95 = 8 → ≥ 9 to cover 95 % of pairs).
+- Current S1 = 13 comfortably exceeds p95; D-optimal anchor selection could approach
+  the theoretical minimum and reduce measurement burden by ~50 %.
+
+**Implication for method choice:** the low-rank structure (rank 5–6, 702 pairs) directly
+explains why D1 + rank-5 residual meets H4 on same-mode pairs with k = 13. Cross-mode
+adds one component — not a different physics — so the same predictor family should work
+for cross-mode with a slightly larger k or a cross-mode-aware D-optimal anchor design.
+
+### Addendum (2026-06-08b) — cross-mode tier analysis (558 pairs)
+
+Full per-preset breakdown computed via `python/cae/rank_analysis.py --variant raw`.
+
+**Coverage vs k (% pairs where k SVs capture ≥ 99 % energy):**
+
+| k | same-mode | cross-mode |
+| --- | --- | --- |
+| 5 | 59.7 % | 19.7 % |
+| 6 | 86.1 % | 59.5 % |
+| 7 | 94.4 % | **91.8 %** |
+| 8 | 100.0 % | **99.3 %** |
+| 10 | 100.0 % | 100.0 % |
+
+**Three difficulty tiers for cross-mode pairs:**
+
+| Tier | rank@99% | pairs | % | RMS(D) med | Min k |
+| --- | --- | --- | --- | --- | --- |
+| Easy | ≤ 5 | 110 | 19.7 % | 0.050 | 6 |
+| Medium | 6–7 | 402 | 72.0 % | 0.038 | 7–8 |
+| Hard | ≥ 8 | 46 | 8.2 % | 0.030 | 9 |
+
+**Pattern:** Hard pairs have *lower* RMS than easy pairs — they are spectrally compact but
+structurally complex (more dimensions). Easy pairs are large-shift/near-identity (e.g.
+VibranceLuster ↔ VibranceMetallic, rank = 3).
+
+**Hardest target presets** (median rank across all ref→tgt cross-mode pairs):
+
+- `BC_1930_P9000_pk_EMP`, `BC_ArtPeelBlckt_P9000_mk_EMP`, `BC_VibranceGloss_pk_PGPP`,
+  `BC_VibranceLuster_PLPP260` — all median rank = 7, p95 = 8. Brand-custom EMP profiles
+  with tighter, more structured residuals.
+- `CanvasMatte`, `WCRW` (9-profile groups) — median rank = 6–7, well-behaved.
+- `BC_VibranceMetallic_PGPP260` — median rank = 5 (easiest target; spectrally near-luster).
+
+**Min-k implications by tier:**
+
+- For 91.8 % of cross-mode pairs (rank ≤ 7): **k = 8** suffices with D-optimal anchors.
+- For 99.3 % coverage: **k = 9**.
+- Current S1 = 13 covers 100 % with a safe 4-anchor margin.
+- D-optimal selection could reduce k by ~30–40 % vs greedy while maintaining ≥ 99.3 %
+  coverage (same budget as rank+1 = 9 with margin for ill-conditioned pairs).
 
 ---
 
@@ -783,11 +854,13 @@ Exposed as an opt-in in TransferView once H14 work has shipped — OBA is the ch
   - PremiumLuster (2 profiles, 1 support, k=3): CAE_LOO median 7.8–8.9 (C7 = 1.37–1.38). H14 fails when support set = 1 profile.
   - Conclusion: algorithm is correct; effectiveness requires |S| ≥ 3.
 - **Algorithm (corrected):**
-  1. `S = AllProfiles_mode \ {Target}`, require |S| ≥ 3 for reliable results
-  2. `few_shot_anchors = anchorIdx[:3]` (paper + 2 chromatic, from target only)
-  3. `θ_substrate = argmin_θ [Σ_{p∈S} MSE_all_patches(S_pred(θ,p), S_true_p) + λ·Σ_{a∈few_shot} MSE(pred(θ,a), R_target_a)]` via Nelder-Mead
-  4. `S_target = runCAETransfer(Target, θ_substrate)` evaluated on non-few-shot patches
-- **Math:** 
+  1. `S = AllProfiles_mode \ {Target}` — **all** profiles of the mode must be in the support set, not a subset. The browser implementation must load all same-mode profiles; the Python training pipeline must include all same-mode profiles in the LOO fold.
+  2. **RGB-grid normalisation (invariant):** before entering the Nelder-Mead loop, every support profile `p ∈ S` is WLS-interpolated onto the **target's exact RGB device grid** (`B_raw.D`, shape N_target × 3). This guarantees that the loss function evaluates all support profiles at the same device locations, enabling consistent cross-profile MSE. Direct SAMPLE_ID intersection is insufficient when charts differ (BC 905-patch vs MOAB ~1550-patch); even for same-chart profiles the WLS path must be taken to guarantee grid identity.
+  3. `few_shot_anchors = anchorIdx[:3]` (paper + 2 chromatic, from target only)
+  4. `θ_substrate = argmin_θ [Σ_{p∈S} MSE_all_patches(S_pred(θ,p), S_true_p) + λ·Σ_{a∈few_shot} MSE(pred(θ,a), R_target_a)]` via Nelder-Mead, where all `S_true_p` matrices are at the target's RGB grid (step 2).
+  5. `S_target = runCAETransfer(Target, θ_substrate)` evaluated on non-few-shot patches.
+- **Math:**
   1. `S = AllProfiles_mode \ {Target}`
-  2. `θ_substrate = argmin_θ Σ_{p∈S} MSE(S_pred(θ, p), S_true_p)` via Nelder-Mead
-  3. `S_target = runCAETransfer(Target, θ_substrate, anchorResiduals)`
+  2. `∀ p ∈ S: (X_p, D_p) ← WLS_interp(p, onto=D_target)` — shapes become `(N_target, L)` and `(N_target, 3)`.
+  3. `θ_substrate = argmin_θ Σ_{p∈S} MSE(S_pred(θ, p), S_true_p)` via Nelder-Mead
+  4. `S_target = runCAETransfer(Target, θ_substrate, anchorResiduals)`

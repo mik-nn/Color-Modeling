@@ -6,6 +6,34 @@
 
 ---
 
+## 2026-06-09 (сессия 2): Per-mode CAE_D7 — PremiumLuster, CanvasMatte, CanvasSatin
+
+**Задача:** продолжить per-mode обучение после USFA; добавить оставшиеся режимы.
+
+**Изменения:**
+
+- `python/cae/icm_reader.py` — без изменений (уже починен в сессии 1)
+- `python/cae/split.json` — последовательно перезаписывался под каждый режим (финальное состояние: CanvasSatin)
+- TS-экспорт каждого режима: `CAE_PRINT_MODE=PremiumLuster/CanvasMatte/CanvasSatin [CAE_INK_MODE=pk]`
+- Обучение: `cv_train.py --folds 2 --epochs 50 --export-suffix <режим>` для каждого
+- Сохранены: `weights/cae_d7_PremiumLuster.pt`, `cae_d7_CanvasMatte.pt`, `cae_d7_CanvasSatin.pt`
+- TS-бандлы: `frontend/src/data/cae_weights_d7_{PremiumLuster,CanvasMatte,CanvasSatin}.json`
+- Eval JSON: `evaluate_d7_PremiumLuster_test.json`, `evaluate_d7_CanvasMatte_{test,val}.json`, `evaluate_d7_CanvasSatin_test.json`
+
+**Ключевые результаты:**
+
+- PremiumLuster: Juniper Baryta (baryta vs cotton) med **0.78–0.88** ΔE00 (old CAE_LOO was 7.77 = ×10 улучшение)
+- CanvasMatte: BC_Lyve med **0.74–0.81**, MOAB Anasazi cross-vendor med **1.39–1.52**
+- CanvasSatin: Silverada med **1.38–1.56** (metallic texture substrate)
+- canonicalPrintMode(): `Prem Luster` → `PremiumLuster`, `Exh Canvas Matte` → `CanvasMatte`
+- MOAB profiles N=2027 patches (CGATS densest grid), BC IDW-interpolated onto it
+
+**Урок:** 4 profiles достаточно для viable per-mode модели при folds=2 (требование: fold_eval≥2 и fold_train≥2). VFA (2 профиля) и EMP (смешанный mk/pk, только 2 mk) — недостаточно.
+
+→ `EXPERIMENTS.md` строка 2026-06-09 (per-mode batch).
+
+---
+
 ## 2026-06-09: USFA CAE_D7 fix — per-mode split + CGATS reader
 
 **Задача:** понять, почему модели не работают на USFA профилях; исправить.

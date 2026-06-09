@@ -783,58 +783,33 @@ export default function TransferView({ profiles }: Props) {
             if (preset !== targetPreset) continue
             try {
               const spMat = loadProfileMatrix(p)
-              const spAligned = alignByCommonSampleIds(spMat, B_raw)
+              if (spMat.channels !== 3 || B_raw.channels !== 3 || spMat.L !== L) continue
 
-              let spX: Float64Array, spD: Float64Array, spPaperSpec: number[], spSampleIds: string[]
-
-              if (spAligned.sampleIds.length >= 50) {
-                // Same-grid path: direct matrix copy of aligned rows.
-                const spN = spAligned.sampleIds.length
-                spX = new Float64Array(spN * L)
-                spD = new Float64Array(spN * 3)
-                for (let i = 0; i < spN; i++) {
-                  const si = spAligned.idxA[i]
-                  for (let l = 0; l < L; l++) spX[i * L + l] = spMat.X[si * L + l]
-                  for (let c = 0; c < 3; c++) spD[i * 3 + c] = spMat.D[si * 3 + c]
+              // Always WLS-interpolate onto target's exact RGB device grid (H14 invariant:
+              // one common set of RGB values across all support profiles).
+              const pts: InterpPoint[] = new Array(spMat.N)
+              for (let i = 0; i < spMat.N; i++) {
+                pts[i] = {
+                  rgb: [spMat.D[i * 3], spMat.D[i * 3 + 1], spMat.D[i * 3 + 2]],
+                  spectrum: Array.from(spMat.X.subarray(i * L, i * L + L)),
                 }
-                spPaperSpec = Array.from(paperSpecA) // fallback
-                const paperAlignedIdx = spAligned.idxA.findIndex(si =>
-                  spMat.D[si * 3] >= 254 && spMat.D[si * 3 + 1] >= 254 && spMat.D[si * 3 + 2] >= 254,
-                )
-                if (paperAlignedIdx >= 0) {
-                  spPaperSpec = Array.from(spX.subarray(paperAlignedIdx * L, (paperAlignedIdx + 1) * L))
-                }
-                spSampleIds = spAligned.sampleIds
-              } else if (spMat.channels === 3 && B_raw.channels === 3 && spMat.L === L) {
-                // Different-grid path: WLS interpolation of source onto target's RGB device grid.
-                const pts: InterpPoint[] = new Array(spMat.N)
-                for (let i = 0; i < spMat.N; i++) {
-                  pts[i] = {
-                    rgb: [spMat.D[i * 3], spMat.D[i * 3 + 1], spMat.D[i * 3 + 2]],
-                    spectrum: Array.from(spMat.X.subarray(i * L, i * L + L)),
-                  }
-                }
-                const interp = buildWlsInterpolator(pts, wlsOpts)
-                const tgtN = B_raw.N
-                spX = new Float64Array(tgtN * L)
-                spD = new Float64Array(tgtN * 3)
-                for (let i = 0; i < tgtN; i++) {
-                  const rgb: [number, number, number] = [B_raw.D[i * 3], B_raw.D[i * 3 + 1], B_raw.D[i * 3 + 2]]
-                  const spec = interp.query(rgb)
-                  for (let l = 0; l < L; l++) spX[i * L + l] = spec[l]
-                  spD[i * 3] = rgb[0]; spD[i * 3 + 1] = rgb[1]; spD[i * 3 + 2] = rgb[2]
-                }
-                spPaperSpec = interp.query([255, 255, 255])
-                spSampleIds = B_raw.sampleIds
-              } else {
-                continue
+              }
+              const interp = buildWlsInterpolator(pts, wlsOpts)
+              const tgtN = B_raw.N
+              const spX = new Float64Array(tgtN * L)
+              const spD = new Float64Array(tgtN * 3)
+              for (let i = 0; i < tgtN; i++) {
+                const rgb: [number, number, number] = [B_raw.D[i * 3], B_raw.D[i * 3 + 1], B_raw.D[i * 3 + 2]]
+                const spec = interp.query(rgb)
+                for (let l = 0; l < L; l++) spX[i * L + l] = spec[l]
+                spD[i * 3] = rgb[0]; spD[i * 3 + 1] = rgb[1]; spD[i * 3 + 2] = rgb[2]
               }
 
               looSupport.push({
                 spectra: spX,
                 deviceValues: spD,
-                paperSpectrum: spPaperSpec,
-                sampleIds: spSampleIds,
+                paperSpectrum: interp.query([255, 255, 255]),
+                sampleIds: B_raw.sampleIds,
                 profileName: p.metadata.full_name,
               })
             } catch { continue }

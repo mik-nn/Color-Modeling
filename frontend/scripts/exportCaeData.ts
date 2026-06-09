@@ -33,9 +33,12 @@ import { canonicalPrintMode } from '../src/utils/printMode'
 const PROFILES_ROOT =
   process.env.CAE_PROFILE_DIR ?? path.resolve(process.cwd(), '../data/profiles')
 const OUT_DIR = path.resolve(process.cwd(), 'data/cae-input')
-const OUT_FILE = path.join(OUT_DIR, 'profiles-mk.json')
+const OUT_FILE_OVERRIDE = process.env.CAE_OUT_FILE
+const OUT_FILE = OUT_FILE_OVERRIDE
+  ? path.resolve(process.cwd(), OUT_FILE_OVERRIDE)
+  : path.join(OUT_DIR, 'profiles-mk.json')
 const PRINT_MODE_FILTER = process.env.CAE_PRINT_MODE
-const INK_MODE_FILTER = process.env.CAE_INK_MODE
+const INK_MODE_FILTER = process.env.CAE_INK_MODE  // 'mk'|'pk'|'all' (default: mk only)
 
 interface ExportedPatch {
   sample_id: string
@@ -157,8 +160,9 @@ async function main() {
   for (const fp of icms) {
     const mode = inkMode(fp)
     const metadata = parseProfileFilename(path.basename(fp))
-    if (INK_MODE_FILTER && mode !== INK_MODE_FILTER) continue
-    if (!INK_MODE_FILTER && mode !== 'mk' && mode !== 'unknown') continue
+    if (INK_MODE_FILTER === 'all') { /* include every ink mode */ }
+    else if (INK_MODE_FILTER && mode !== INK_MODE_FILTER) continue
+    else if (!INK_MODE_FILTER && mode !== 'mk' && mode !== 'unknown') continue
     if (PRINT_MODE_FILTER) {
       // Match by canonical Epson preset (handles BC abbreviations + MOAB names
       // collapsing onto the same media setting). Raw `metadata.printMode` would

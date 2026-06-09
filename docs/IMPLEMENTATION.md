@@ -23,7 +23,7 @@ picker.
 
 | File                       | Role                                                                                              |
 | -------------------------- | ------------------------------------------------------------------------------------------------- |
-| `App.tsx`                  | Layout: `ProfileUploader` + `ProfileList` + `ComparisonView`. Dispatches uploads to `dataLoader`. |
+| `App.tsx`                  | Layout: `ProfileUploader` + `ProfileList` + tab bar (`Transfer` / `k-Sweep`). Dispatches uploads to `dataLoader`. Renders `TransferView` or `KSweepView` depending on active tab. |
 | `store/useProfileStore.ts` | Zustand: `profiles`, `selectedProfiles` (max 2), `linearityResult`, selection actions.            |
 
 ### 2.2 I/O
@@ -84,7 +84,7 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 | `lib/predict/poolPCATransfer.ts`   | **B3** | Pool-PCA basis (all 27 profiles) vs reference-only PCA. Chosen when paper-white ΔE76 > 5; tests H6.                                                                                |
 | `lib/predict/perLambdaCurve.ts`    | **C7** | Per-λ monotone curve fitted from anchors. Paired with S3 ramp anchors; minimal-measurement cross-substrate (H9). Fits `f_λ(A→B)` per wavelength, applies uniformly.                 |
 | `lib/predict/cae.ts`               | **CAE_D7** | Conditional Autoencoder, trained per-print-mode on D7-cleaned profiles (commit 706a51b). Architecture: substrate encoder [paper(36) + ID(N)] → 8-dim latent; spectrum encoder [R(36) + RGB(3) + sub_lat(8)] → 16-dim latent; decoder → R(36). H10b: fine-tune `substrate_latent_B` on k=13 S1 anchors at inference (Adam, 200 steps, lr=0.05). Per-mode pools (WCRW/USFA/CanvasMatte) + L2 regularisation (`--l2-init 0.1` default). `CAEForward` class is exported for direct use in LOO optimizer. |
-| `lib/analyzers/dynamicLOO.ts`      | **CAE_LOO** | Dynamic LOO substrate latent optimization (H14). For each target profile, builds a same-mode support set S = AllProfiles_mode \ {Target}. Optimizes substrate latent θ via Nelder-Mead: loss = spectral MSE over subsampled support spectra (uses real profile one-hot IDs for ink encoding, only decoder substrate θ is free) + few-shot term on target anchor patches. Init θ from `encodeSubstrate(targetPaper, null_id)`. Final prediction via `runCAETransfer(..., overrideSubstrateLatent=θ)`. Subsampling: max 30 patches per support profile for optimizer speed. |
+| `lib/analyzers/dynamicLOO.ts`      | **CAE_LOO** | Dynamic LOO substrate latent optimization (H14). For each target profile, builds a same-mode support set `S = AllProfiles_mode \ {Target}` — **all** profiles of the mode, not only those loaded in the current UI session. **Before** the optimizer loop, every support profile is WLS-interpolated onto the target's exact RGB device grid (N_target × 3) so that the Nelder-Mead loss is computed at identical device locations across all support profiles (H14 invariant: one common RGB grid). Optimizes substrate latent θ: loss = spectral MSE over support spectra (real profile one-hot IDs for ink encoder, only decoder substrate θ is free) + few-shot term on k=3 target anchor patches. Init θ from `encodeSubstrate(targetPaper, null_id)`. Final prediction via `runCAETransfer(..., overrideSubstrateLatent=θ)`. Support-set construction is in `TransferView.tsx` (not inside this module). |
 
 ### 2.4.2 Anchor sampling strategies
 
@@ -93,6 +93,14 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 | `lib/sampling/heuristic.ts`    | **S1** | Forced set: paper + RGB corners (8) + black + neutrals. Total k=13. Baseline; comprehensive coverage.                                          |
 | `lib/sampling/channelRamp.ts`  | **S3** | Single-channel or neutral ramps (k=5). For H9: test if per-λ substrate transform `f_λ` shared across inks. Neutral ramps work; cyan ramps fail. |
 | `lib/sampling/labSaturation.ts` | **S4** | Lab-saturation anchors: paper + high-chroma patches. Experimental; rejected on OBA-disparate pairs (H12).                                       |
+
+### 2.4.3 Experiment harness
+
+| File | Purpose |
+| ---- | ------- |
+| `lib/experiments/kSweep.ts` | `runKSweep(profiles, opts)` — enumerate directed profile pairs, classify same-mode/cross-mode via `canonicalPrintMode`, run greedy and D-optimal anchor strategies for each predictor (D1/C7) at each k in `kGrid`, aggregate pass-fraction and median ΔE00. `dOptimalAnchors(X_A, N, L, paperRowIdx, k)` — greedy Gram-Schmidt in PCA space of `X_A`, maximises volume in leading PC subspace (proxy for residual space). Returns `KSweepResult` with `perK` rows and `minKToPass` summary. H4 gate: median ≤1.5 AND p95 ≤3.0. |
+| `lib/experiments/kSweep.worker.ts` | Web Worker wrapper for `runKSweep`. Posts `{type:'progress', done, total}` ticks and `{type:'done', result}`. Keeps sweep off the main thread. |
+| `lib/experiments/kSweep.test.ts` | 9 unit tests: `dOptimalAnchors` invariants + `runKSweep` on 60-patch synthetic fixture (≥50 shared IDs required for `alignByCommonSampleIds`). |
 
 ### 2.5 UI components
 
@@ -103,6 +111,7 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 | `ComparisonView`  | The hub. Renders metadata cards, `LabScatterPlot`, `SpectralCurves`, `InkLimitSection`, `GroupBreakdownTable`, `InkRatioTable`, `PredictionAccuracyView`, `PatchCorrelationScatter`, plus the CYNSN comparison table. |
 | `InkLimitSection` | Slider per channel; downstream analyses re-filter when limits change.                                                                                                                                                 |
 | `MetricCard`      | Reusable metric tile with colour-coded values.                                                                                                                                                                        |
+| `KSweepView`      | k-sweep experiment tab. Controls: predictor checkboxes (D1/C7), anchor strategy (greedy/dOptimal), slice radio, max-pairs limit. Runs sweep via `kSweep.worker.ts`, shows progress bar, D3 line charts (pass-fraction vs k, median-of-medians vs k), min-k summary table, CSV export. |
 
 ---
 
@@ -171,10 +180,10 @@ formula. **Known issue:** training loop ignores the measured-grid override (see
 
 ## 4. CAE Python Training Data
 
-| File                    | Purpose                                                                                                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `python/cae/dataset.py` | `ProfileBank` loads exported JSON profiles, aligns them by common rounded RGB device coordinates, and stacks spectra/paper whites for CAE training. It no longer assumes the legacy 905-patch BC chart.             |
-| `python/cae/train.py`   | Trains raw/D7 CAE variants. If `split.json` does not match the filtered export payload, it creates a deterministic 80/20 split from available profile names so same-mode MOAB exports can train without hand edits. |
+| File | Purpose |
+| --- | --- |
+| `python/cae/dataset.py` | `ProfileBank` loads exported JSON profiles. **Current alignment:** takes the intersection of rounded RGB keys across all profiles (`common_keys &= …`). This collapses to N ≈ 10 when mixed BC+MOAB grids are in the same pool (root cause of the "N=10 / k_effective=5" failure in H10b full-pool result). **Required fix (H14 invariant):** for LOO training each LOO fold must interpolate all non-target profiles onto the target's RGB grid (WLS in device space) rather than restricting to the raw intersection. Per-mode pools that are homogeneous (all BC or all MOAB) avoid the collapse — but the correct long-term approach is WLS normalisation to a reference grid for any mixed pool. |
+| `python/cae/train.py` | Trains raw/D7 CAE variants. LOO split: trains on **all** profiles of the mode except the held-out target (the LOO fold), not a fixed 80/20 random split. If `split.json` does not match the filtered export payload, it creates a deterministic split from available profile names. |
 
 ---
 
@@ -190,6 +199,7 @@ formula. **Known issue:** training loop ignores the measured-grid override (see
   missing spectral columns.
 - `lib/iccTagScanner.test.ts` — ICC `text` tag extraction for `targ`-style payloads.
 - `utils/filenameParser.test.ts` — filename parsing.
+- `lib/experiments/kSweep.test.ts` — `dOptimalAnchors` invariants + `runKSweep` aggregation on synthetic fixture.
 
 `npm test` runs the full suite via Vitest. Local Node 12 cannot execute Vitest; rely on CI
 (GitHub Actions, Node 20).
