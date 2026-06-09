@@ -266,7 +266,7 @@ export interface AlignedProfiles {
   interpCount: number;
   /** A points dropped because they fall outside B's device bounding box. */
   droppedOutOfGamut: number;
-  /** Interpolation noise floor (LOO RMS reflectance over B); null when interpCount === 0. */
+  /** Interpolation noise floor (LOO RMS reflectance over B); null when interpCount === 0 or when B has fewer than 2 points. */
   looRms: number | null;
 }
 
@@ -307,6 +307,7 @@ export function alignProfiles(
 
   // B exact-match lookup by quantized device key.
   const bByKey = new Map<string, number>();
+  // If B has duplicate device coordinates, the last occurrence wins (deterministic).
   for (let j = 0; j < b.N; j++) bByKey.set(deviceKey(b.D, j, channels), j);
 
   // Resolve each A row: exact B row index, or -1 meaning "needs interpolation".
@@ -339,6 +340,7 @@ export function alignProfiles(
     }
     interp = buildInterpolator(bPoints, opts);
     bbox = boundingBox(bPoints);
+    // looRms requires ≥2 points; b.N < 2 is degenerate but must not crash.
     looRmsVal = b.N >= 2 ? looRms(bPoints, opts) : null;
   }
 
