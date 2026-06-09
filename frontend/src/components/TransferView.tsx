@@ -329,7 +329,7 @@ export default function TransferView({ profiles }: Props) {
       // row index is the paper row — no idxA indirection needed.
       let paperRowIdxA = paperRowIdx // fallback: target's anchor if no white found
       for (let j = 0; j < N; j++) {
-        if (D_B[j * B.channels] === 255 && D_B[j * B.channels + 1] === 255 && D_B[j * B.channels + 2] === 255) {
+        if (D_B[j * al.channels] === 255 && D_B[j * al.channels + 1] === 255 && D_B[j * al.channels + 2] === 255) {
           paperRowIdxA = j
           break
         }
