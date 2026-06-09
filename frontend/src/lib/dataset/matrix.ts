@@ -11,6 +11,7 @@ import {
   boundingBox,
   intersectBox,
   inBox,
+  looRms,
   type InterpPoint,
 } from '../interp/rgbInterp';
 
@@ -245,4 +246,159 @@ export function alignByDeviceGrid(
   }
 
   return { sampleIds, X_A, X_B, D, channels: 3, N, L };
+}
+
+export interface AlignedProfiles {
+  /** Display labels (device-encoded) in row order. */
+  sampleIds: string[];
+  /** N×L reflectance for reference A — always real measured spectra. */
+  X_A: Float64Array;
+  /** N×L reflectance for target B — exact where B has the point, else interpolated. */
+  X_B: Float64Array;
+  /** N×channels device coordinates (A's actual sampled points). */
+  D: Float64Array;
+  channels: 3 | 4;
+  N: number;
+  L: number;
+  /** B patches matched exactly by device coordinate. */
+  exactCount: number;
+  /** B patches reconstructed by k-NN IDW interpolation. */
+  interpCount: number;
+  /** A points dropped because they fall outside B's device bounding box. */
+  droppedOutOfGamut: number;
+  /** Interpolation noise floor (LOO RMS reflectance over B); null when interpCount === 0. */
+  looRms: number | null;
+}
+
+/** Quantized device key for exact matching: RGB → integer, CMYK → 2-decimal. */
+function deviceKey(d: Float64Array, row: number, channels: 3 | 4): string {
+  if (channels === 3) {
+    return `${Math.round(d[row * 3])}_${Math.round(d[row * 3 + 1])}_${Math.round(d[row * 3 + 2])}`;
+  }
+  let s = '';
+  for (let c = 0; c < 4; c++) s += (c ? '_' : '') + d[row * 4 + c].toFixed(2);
+  return s;
+}
+
+/**
+ * Align two profiles by DEVICE COORDINATE (the invariant across files), not by
+ * position or string ID. Query grid is A's actual device points: A keeps its real
+ * measured spectra; for each A point, B's spectrum is taken exactly when B has that
+ * device coordinate, otherwise reconstructed by k-NN IDW interpolation from B's
+ * neighbours. A points outside B's device bounding box are dropped (no extrapolation).
+ *
+ * Unifies the former exact-match (`alignByCommonSampleIds`) and grid-resample
+ * (`alignByDeviceGrid`) paths into one. RGB only for interpolation; CMYK exact-match
+ * works but interpolation throws (needs 4D IDW — see spec §2.3).
+ */
+export function alignProfiles(
+  a: ProfileMatrices,
+  b: ProfileMatrices,
+  opts: { k?: number; power?: number } = {},
+): AlignedProfiles {
+  if (a.channels !== b.channels) {
+    throw new Error(`alignProfiles: device channel mismatch (A=${a.channels}, B=${b.channels})`);
+  }
+  if (a.L !== b.L) {
+    throw new Error(`alignProfiles: wavelength count mismatch (${a.L} vs ${b.L})`);
+  }
+  const channels = a.channels;
+  const L = a.L;
+
+  // B exact-match lookup by quantized device key.
+  const bByKey = new Map<string, number>();
+  for (let j = 0; j < b.N; j++) bByKey.set(deviceKey(b.D, j, channels), j);
+
+  // Resolve each A row: exact B row index, or -1 meaning "needs interpolation".
+  const exactRow = new Int32Array(a.N);
+  let anyInterp = false;
+  for (let i = 0; i < a.N; i++) {
+    const j = bByKey.get(deviceKey(a.D, i, channels));
+    if (j !== undefined) {
+      exactRow[i] = j;
+    } else {
+      exactRow[i] = -1;
+      anyInterp = true;
+    }
+  }
+
+  // Build interpolation machinery only if some A point misses an exact B match.
+  let interp: ReturnType<typeof buildInterpolator> | null = null;
+  let bbox: ReturnType<typeof boundingBox> | null = null;
+  let looRmsVal: number | null = null;
+  if (anyInterp) {
+    if (channels !== 3) {
+      throw new Error('alignProfiles: CMYK interpolation not yet implemented; need 4D IDW');
+    }
+    const bPoints: InterpPoint[] = new Array(b.N);
+    for (let j = 0; j < b.N; j++) {
+      bPoints[j] = {
+        rgb: [b.D[j * 3], b.D[j * 3 + 1], b.D[j * 3 + 2]],
+        spectrum: Array.from(b.X.subarray(j * L, j * L + L)),
+      };
+    }
+    interp = buildInterpolator(bPoints, opts);
+    bbox = boundingBox(bPoints);
+    looRmsVal = b.N >= 2 ? looRms(bPoints, opts) : null;
+  }
+
+  // Decide which A rows survive (exact, or interpolatable inside B's bbox).
+  const keptA: number[] = [];
+  let exactCount = 0;
+  let interpCount = 0;
+  let droppedOutOfGamut = 0;
+  for (let i = 0; i < a.N; i++) {
+    if (exactRow[i] >= 0) {
+      keptA.push(i);
+      exactCount++;
+      continue;
+    }
+    const rgb: [number, number, number] = [a.D[i * 3], a.D[i * 3 + 1], a.D[i * 3 + 2]];
+    if (bbox && inBox(rgb, bbox)) {
+      keptA.push(i);
+      interpCount++;
+    } else {
+      droppedOutOfGamut++;
+    }
+  }
+
+  const N = keptA.length;
+  const X_A = new Float64Array(N * L);
+  const X_B = new Float64Array(N * L);
+  const D = new Float64Array(N * channels);
+  const sampleIds: string[] = new Array(N);
+
+  for (let r = 0; r < N; r++) {
+    const i = keptA[r];
+    for (let l = 0; l < L; l++) X_A[r * L + l] = a.X[i * L + l];
+    for (let c = 0; c < channels; c++) D[r * channels + c] = a.D[i * channels + c];
+
+    const bj = exactRow[i];
+    if (bj >= 0) {
+      for (let l = 0; l < L; l++) X_B[r * L + l] = b.X[bj * L + l];
+    } else {
+      const s = interp!.query([a.D[i * 3], a.D[i * 3 + 1], a.D[i * 3 + 2]]);
+      for (let l = 0; l < L; l++) X_B[r * L + l] = s[l];
+    }
+
+    if (channels === 3) {
+      sampleIds[r] = `RGB_${Math.round(D[r * 3])}_${Math.round(D[r * 3 + 1])}_${Math.round(D[r * 3 + 2])}`;
+    } else {
+      sampleIds[r] = `CMYK_${deviceKey(D, r, channels)}`;
+    }
+  }
+
+  return {
+    sampleIds,
+    X_A,
+    X_B,
+    D,
+    channels,
+    N,
+    L,
+    exactCount,
+    interpCount,
+    droppedOutOfGamut,
+    looRms: interpCount > 0 ? looRmsVal : null,
+  };
 }
