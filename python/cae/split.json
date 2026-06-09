@@ -1,17 +1,13 @@
 {
   "seed": 42,
-  "note": "USFA-specific split. Kozo in train (washi anchor). Unryu in validation (primary target). Cotton-rag profiles fill train/test.",
+  "note": "CanvasSatin: 4 BC pk profiles. Pool=all 4 (train+test). Silverada (metallic texture) as test. No validation (only 4 profiles).",
   "train": [
-    "MOAB Entrada Rag Natural P9000 USFA",
-    "MOAB Entrada Rag Textured P9000 USFA",
-    "MOAB Lasal Matte P9000 USFA",
-    "MOAB Moenkopi Kozo P9000 USFA",
-    "MOAB Somerset Museum Rag P9000 USFA"
+    "BC_17MGloss_P9000_pk_CanvasSatin",
+    "BC_17MSatin_P9000_pk_CanvasSatin",
+    "BC_Crystalline_P9000_pk_CanvasSatin"
   ],
   "test": [
-    "MOAB Entrada Rag Bright P9000 USFA"
+    "BC_Silverada_P9000_pk_CanvasSatin"
   ],
-  "validation": [
-    "MOAB Moenkopi Unryu P9000 USFA"
-  ]
+  "validation": []
 }
