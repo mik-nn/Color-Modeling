@@ -17,7 +17,7 @@
 
 import { useMemo, useState } from 'react'
 import type { AnchorSet, ProfileData, PredictionReport, WhitePointXYZ } from '../types'
-import { loadProfileMatrix, alignByCommonSampleIds, alignByDeviceGrid } from '../lib/dataset/matrix'
+import { loadProfileMatrix, alignProfiles } from '../lib/dataset/matrix'
 import { buildWlsInterpolator, type WlsInterpOptions } from '../lib/interp/wlsInterp'
 import type { InterpPoint } from '../lib/interp/rgbInterp'
 import { pickHeuristicAnchors } from '../lib/sampling/heuristic'
@@ -132,6 +132,12 @@ type RunResult =
       alignedN: number
       /** True when profiles came from different charts and were aligned on a common RGB grid. */
       crossChart: boolean
+      /** Target patches matched exactly by device coordinate. */
+      exactCount: number
+      /** Target patches reconstructed by k-NN IDW interpolation. */
+      interpCount: number
+      /** Interpolation noise floor (LOO RMS reflectance), null when interpCount===0. */
+      looRms: number | null
       /** Which CAE_D7 weight bundle was used: per-mode preset name, or 'full36' fallback. */
       caeD7Mode: 'full36' | EpsonPreset
       caeD7ModeMatched: boolean
@@ -271,55 +277,20 @@ export default function TransferView({ profiles }: Props) {
     try {
       const A = loadProfileMatrix(refProfile)
       const B = loadProfileMatrix(targetProfile)
-      const aligned = alignByCommonSampleIds(A, B)
       const L = A.L
-      let N: number
-      let sampleIds: string[]
-      let X_A: Float64Array
-      let X_B: Float64Array
-      let D_B: Float64Array
-      let crossChart = false
-
-      if (aligned.sampleIds.length >= 50) {
-        // Same target chart — align by shared SAMPLE_IDs (exact patch match).
-        N = aligned.sampleIds.length
-        sampleIds = aligned.sampleIds
-        X_A = new Float64Array(N * L)
-        X_B = new Float64Array(N * L)
-        D_B = new Float64Array(N * B.channels)
-        for (let i = 0; i < N; i++) {
-          const ai = aligned.idxA[i]
-          const bi = aligned.idxB[i]
-          for (let l = 0; l < L; l++) {
-            X_A[i * L + l] = A.X[ai * L + l]
-            X_B[i * L + l] = B.X[bi * L + l]
-          }
-          for (let c = 0; c < B.channels; c++) {
-            D_B[i * B.channels + c] = B.D[bi * B.channels + c]
-          }
-        }
-      } else if (A.channels === 3 && B.channels === 3 && A.L === B.L) {
-        // Different charts (no shared SAMPLE_IDs) — resample both profiles onto a
-        // common RGB grid via interpolation so the transfer can still run.
-        const g = alignByDeviceGrid(A, B)
-        if (g.N < 50) {
-          return {
-            kind: 'error' as const,
-            error: `Cannot align: ${aligned.sampleIds.length} shared SAMPLE_IDs and only ${g.N} common-grid points (device gamuts barely overlap).`,
-          }
-        }
-        N = g.N
-        sampleIds = g.sampleIds
-        X_A = g.X_A
-        X_B = g.X_B
-        D_B = g.D
-        crossChart = true
-      } else {
+      const al = alignProfiles(A, B)
+      if (al.N < 50) {
         return {
           kind: 'error' as const,
-          error: `Only ${aligned.sampleIds.length} shared SAMPLE_IDs, and cross-chart alignment needs both profiles to be RGB with matching wavelength grids.`,
+          error: `Only ${al.N} device-aligned patches (gamut overlap too small or wavelength/space mismatch).`,
         }
       }
+      const N = al.N
+      const sampleIds = al.sampleIds
+      const X_A = al.X_A
+      const X_B = al.X_B
+      const D_B = al.D
+      const crossChart = al.interpCount > 0
 
       const Baligned = {
         X: X_B,
@@ -353,39 +324,14 @@ export default function TransferView({ profiles }: Props) {
       for (let l = 0; l < L; l++) {
         paperSpecB[l] = X_B[paperRowIdx * L + l]
       }
-      // Reference paper: find white (255,255,255) in aligned A by device value match.
-      // Cannot reuse target's paperRowIdx when A and B come from different-size grids—
-      // same row index maps to different device values (e.g. Bright row 1727 = magenta,
-      // Textured row 1727 = paper).
-      let paperRowIdxA = paperRowIdx // fallback: use target's anchor if no white found
-      if (crossChart) {
-        // Device grid: find white in A's original grid by device value.
-        for (let i = 0; i < A.N; i++) {
-          const r = A.D[i * A.channels]
-          const g_val = A.D[i * A.channels + 1]
-          const b = A.D[i * A.channels + 2]
-          if (r === 255 && g_val === 255 && b === 255) {
-            // This is the original index in A. Find it in the aligned set.
-            for (let j = 0; j < N; j++) {
-              if (aligned.idxA[j] === i) {
-                paperRowIdxA = j
-                break
-              }
-            }
-            break
-          }
-        }
-      } else {
-        // Same-grid: search in aligned A by original indices.
-        for (let j = 0; j < N; j++) {
-          const ai = aligned.idxA[j]
-          const r = A.D[ai * A.channels]
-          const g_val = A.D[ai * A.channels + 1]
-          const b = A.D[ai * A.channels + 2]
-          if (r === 255 && g_val === 255 && b === 255) {
-            paperRowIdxA = j
-            break
-          }
+      // Reference paper: find white (255,255,255) directly in the aligned device grid.
+      // D_B holds A's device coordinates (query grid = A's real points), so the aligned
+      // row index is the paper row — no idxA indirection needed.
+      let paperRowIdxA = paperRowIdx // fallback: target's anchor if no white found
+      for (let j = 0; j < N; j++) {
+        if (D_B[j * B.channels] === 255 && D_B[j * B.channels + 1] === 255 && D_B[j * B.channels + 2] === 255) {
+          paperRowIdxA = j
+          break
         }
       }
       for (let l = 0; l < L; l++) {
@@ -892,6 +838,9 @@ export default function TransferView({ profiles }: Props) {
         anchors,
         alignedN: N,
         crossChart,
+        exactCount: al.exactCount,
+        interpCount: al.interpCount,
+        looRms: al.looRms,
         caeD7Mode: caeD7Bundle.mode,
         caeD7ModeMatched: caeD7Bundle.matched,
         obaRef,
@@ -1251,10 +1200,13 @@ export default function TransferView({ profiles }: Props) {
         <div className="space-y-6">
           {result.crossChart && (
             <div className="bg-amber-950/40 border border-amber-700/60 rounded-lg p-3 text-sm text-amber-200">
-              Cross-chart mode: profiles have no shared SAMPLE_IDs, so both were
-              resampled onto a common 9×9×9 RGB lattice via per-band k-NN IDW
-              interpolation ({result.alignedN} grid points). Read ΔE00 above the
-              interpolation noise floor (~1.5–2 ΔE00 on sparse charts like BC 905).
+              Device-coordinate alignment: {result.exactCount} target patches matched
+              exactly, {result.interpCount} reconstructed by per-band k-NN IDW
+              interpolation onto the reference's device grid.
+              {result.looRms !== null && (
+                <> Interpolation noise floor ≈ {fmt(result.looRms, 4)} RMS reflectance —
+                read ΔE00 above it.</>
+              )}
             </div>
           )}
           {(predictor === 'CAE_D7' || predictor === 'ALL') && (
@@ -1362,7 +1314,7 @@ export default function TransferView({ profiles }: Props) {
                 <Metric label="anchors (k)" value={String(run.report.k)} cls="text-gray-200" />
                 <Metric label="held-out" value={String(run.report.nTest)} cls="text-gray-200" />
                 <Metric
-                  label={result.crossChart ? 'grid points (interp)' : 'shared SAMPLE_IDs'}
+                  label={result.crossChart ? 'patches (some interp)' : 'patches (all exact)'}
                   value={String(result.alignedN)}
                   cls={result.crossChart ? 'text-amber-300' : 'text-gray-200'}
                 />
