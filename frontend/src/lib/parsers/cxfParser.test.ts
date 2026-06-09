@@ -116,4 +116,27 @@ describe('CxF Parser', () => {
     expect(result.measurements[0].SAMPLE_ID).toBe('RGB_128_64_32');
     expect(result.measurements[0].device).toEqual({ space: 'rgb', values: [128, 64, 32] });
   });
+
+  it('falls back to positional SAMPLE_ID and no device when Target/RGB is absent', async () => {
+    // Measurement with no matching Target → no RGB → must not fabricate a device coord.
+    const xml = `<?xml version="1.0"?>
+<cc:CxF xmlns:cc="http://colorexchangeformat.com/CxF3-core">
+  <cc:Resources>
+    <cc:ObjectCollection>
+      <cc:Object Id="m1" ObjectType="M0_Measurement">
+        <cc:TagCollection>
+          <cc:Tag Name="Row" Value="7"/><cc:Tag Name="Column" Value="2"/><cc:Tag Name="Page" Value="1"/>
+        </cc:TagCollection>
+        <cc:ColorValues><cc:ReflectanceSpectrum StartWL="380">0.1 0.2 0.3 0.4 0.5 0.6</cc:ReflectanceSpectrum></cc:ColorValues>
+      </cc:Object>
+    </cc:ObjectCollection>
+  </cc:Resources>
+</cc:CxF>`;
+    const { parseCxf3Xml } = await import('./cxfParser');
+    const result = parseCxf3Xml(xml);
+    expect(result.measurements).toHaveLength(1);
+    expect(result.measurements[0].device).toBeUndefined();
+    // No RGB → SAMPLE_ID is NOT an RGB_ device-encoded id (it's positional/ordinal).
+    expect(result.measurements[0].SAMPLE_ID).not.toMatch(/^RGB_/);
+  });
 });

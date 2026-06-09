@@ -130,7 +130,7 @@ type RunResult =
       runs: PredictorRun[]
       anchors: AnchorSet
       alignedN: number
-      /** True when profiles came from different charts and were aligned on a common RGB grid. */
+      /** True when any B patches were reconstructed by k-NN IDW (interpCount > 0) rather than all exactly matched. */
       crossChart: boolean
       /** Target patches matched exactly by device coordinate. */
       exactCount: number

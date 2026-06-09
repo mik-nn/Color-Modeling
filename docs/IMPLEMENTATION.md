@@ -100,7 +100,7 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 | ---- | ------- |
 | `lib/experiments/kSweep.ts` | `runKSweep(profiles, opts)` — enumerate directed profile pairs, classify same-mode/cross-mode via `canonicalPrintMode`, run greedy and D-optimal anchor strategies for each predictor (D1/C7) at each k in `kGrid`, aggregate pass-fraction and median ΔE00. `dOptimalAnchors(X_A, N, L, paperRowIdx, k)` — greedy Gram-Schmidt in PCA space of `X_A`, maximises volume in leading PC subspace (proxy for residual space). Returns `KSweepResult` with `perK` rows and `minKToPass` summary. H4 gate: median ≤1.5 AND p95 ≤3.0. |
 | `lib/experiments/kSweep.worker.ts` | Web Worker wrapper for `runKSweep`. Posts `{type:'progress', done, total}` ticks and `{type:'done', result}`. Keeps sweep off the main thread. |
-| `lib/experiments/kSweep.test.ts` | 9 unit tests: `dOptimalAnchors` invariants + `runKSweep` on 60-patch synthetic fixture (≥50 shared IDs required for `alignByCommonSampleIds`). |
+| `lib/experiments/kSweep.test.ts` | 9 unit tests: `dOptimalAnchors` invariants + `runKSweep` on 60-patch synthetic fixture (minimum-overlap guard: `al.N < 50` aborts alignment via `alignProfiles`). |
 
 ### 2.5 UI components
 

@@ -1,8 +1,9 @@
 // src/lib/dataset/matrix.ts
 //
 // Build dense Float64 matrices from ProfileData for math-heavy code paths.
-// Patches are ordered by SAMPLE_ID so the same patch indexes refer to the same
-// device value across all profiles built from the identical target chart.
+// Within a profile, rows are sorted by SAMPLE_ID for stable, deterministic ordering.
+// Cross-profile correspondence is established by alignProfiles via device coordinate
+// (exact match + k-NN IDW interpolation fallback) — NOT by row index or SAMPLE_ID.
 
 import type { Measurement, ProfileData } from '../../types';
 import {

@@ -47,6 +47,8 @@ switch в один вызов. Spec: `docs/specs/device-coordinate-alignment.md`
 
 → `EXPERIMENTS.md` update: cross-grid USFA pairs теперь работают корректно.
 
+Follow-up: closed final-review doc/test gaps (no-Target test in cxfParser, stale comments in matrix.ts / TransferView.tsx / IMPLEMENTATION.md).
+
 ---
 
 ## 2026-06-09 (сессия 2): Per-mode CAE_D7 — PremiumLuster, CanvasMatte, CanvasSatin
