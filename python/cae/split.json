@@ -1,17 +1,17 @@
 {
   "seed": 42,
-  "train_count": 3,
-  "test_count": 1,
-  "validation_count": 1,
+  "note": "USFA-specific split. Kozo in train (washi anchor). Unryu in validation (primary target). Cotton-rag profiles fill train/test.",
   "train": [
-    "MOAB Colorado Fiber Gloss P9000 Prem Luster",
-    "MOAB Colorado Fiber Satine P9000 Prem Luster",
-    "MOAB Juniper Baryta P9000 Prem Luster"
+    "MOAB Entrada Rag Natural P9000 USFA",
+    "MOAB Entrada Rag Textured P9000 USFA",
+    "MOAB Lasal Matte P9000 USFA",
+    "MOAB Moenkopi Kozo P9000 USFA",
+    "MOAB Somerset Museum Rag P9000 USFA"
   ],
   "test": [
-    "MOAB Lasal Exhibition Luster P9000 Prem Luster"
+    "MOAB Entrada Rag Bright P9000 USFA"
   ],
   "validation": [
-    "BC_VibranceLuster_P9000_PLPP260"
+    "MOAB Moenkopi Unryu P9000 USFA"
   ]
 }

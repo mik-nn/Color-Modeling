@@ -6,6 +6,100 @@
 
 ---
 
+## 2026-06-09: USFA CAE_D7 fix — per-mode split + CGATS reader
+
+**Задача:** понять, почему модели не работают на USFA профилях; исправить.
+
+**Диагноз:**
+
+1. Корень провала USFA Unryu (washi) — `split.json` содержал PremLuster имена → `train.py` делал auto-split с seed=42, не гарантируя нужный состав; Kozo (единственный washi-якорь) мог не попасть в pool нужным образом.
+2. `icm_reader.py` не читал MOAB `targ`/CGATS профили — возвращал None для всех 17 MOAB icc файлов (искал только ZXML/CxF тег). BC профили используют CxF3-core namespace (`http://colorexchangeformat.com/CxF3-core`), не старый `http://www.color.org/colorexchange`.
+3. `profiles-all.json` содержал только 27 BC профилей; MOAB были исключены.
+
+**Изменения:**
+
+- `python/cae/icm_reader.py` — поддержка CxF3-core namespace (Target→RGB + Measurement→ReflectanceSpectrum join by Row/Col/Page) + CGATS `targ`-тег (MOAB). Нулевые байты в ZXML stripped. Металлические без спектров → None. 44/45 профилей читаются.
+- `python/cae/split.json` — USFA-специфичный split: 5 train (Kozo в train), 1 test (Entrada Bright), 1 validation (Unryu).
+- TS-экспорт перезапущен: `CAE_INK_MODE=all` → `profiles-all.json` (44 профиля, 18.88 MB); `CAE_PRINT_MODE=UltrasmoothFineArt` → `profiles-mk.json` (7 USFA).
+- `python/cae/cv_train.py --variant d7 --folds 5 --epochs 50 --export-suffix USFA` на 7 USFA профилях.
+
+**Результат:** Unryu med-of-med: **3.64 → 1.30 ΔE00** (×2.8 улучшение). Kozo→Unryu: 2.55 → **1.18**. p95 ≤ 4.0 (было ≤ 18.2). Урок: per-mode обязателен; явный split с washi в train — обязателен.
+
+→ `EXPERIMENTS.md` строка 2026-06-09.
+
+---
+
+## 2026-06-09: k-sweep harness — D-optimal anchor selection vs greedy
+
+**Задача:** реализовать сравнительный k-sweep: greedy (worst-patch) vs D-optimal (greedy Gram-Schmidt в PCA-пространстве `X_A`) для предикторов D1/C7 при k ∈ {3,5,8,13,20,30}, срезы same-mode / cross-mode.
+
+**Реализация:**
+
+- `lib/experiments/kSweep.ts` — `dOptimalAnchors`: PCA проекция `X_A` (rank=min(8,N-1,L)), жадный выбор строк с максимальной нормой остатка после проецирования; `runKSweep`: перебор всех направленных пар (классификация via `canonicalPrintMode`), greedy через `runGreedyActiveAnchors(seed=[paper], targetMedianDE=-Infinity)`, D-optimal через `dOptimalAnchors`, агрегация pass-fraction + медиан. H4 gate: median ≤1.5 AND p95 ≤3.0.
+- `lib/experiments/kSweep.worker.ts` — Web Worker обёртка, прогресс-тики.
+- `components/KSweepView.tsx` — вкладка k-Sweep: контролы, прогресс-бар, D3 line charts (pass-fraction vs k, median vs k), таблица min-k, CSV-экспорт.
+- `App.tsx` — добавлена вкладочная панель Transfer / k-Sweep.
+
+**Тесты:** 9/9 pass, 205/205 total. Фикстура требует ≥60 патчей (порог `alignByCommonSampleIds` = 50).
+
+**Следующий шаг:** запустить sweep на всех 27 профилях, записать результат в EXPERIMENTS.md.
+
+Обновлены: IMPLEMENTATION.md (разделы 2.1, 2.4.3, 2.5, 5).
+
+---
+
+## 2026-06-08: Cross-mode SVD tier analysis — coverage vs k, per-preset breakdown
+
+**Задача:** детализировать cross-mode ранги по пресет-парам — понять, какие пары самые сложные и сколько якорей нужно для покрытия разных tier.
+
+**Результаты (558 cross-mode пар, raw-вариант):**
+
+- Coverage @99% энергии: k=7 → 91.8%, k=8 → **99.3%**, k=10 → 100%.
+- Три тира: easy (rank≤5, 20%): VibranceMetallic↔Luster-пары, RMS=0.050; medium (rank 6–7, 72%): CanvasMatte↔WCRW, стандарт; hard (rank≥8, 8%): EMP-профили.
+- Самые сложные target-пресеты: BC_1930_pk_EMP, BC_ArtPeelBlckt_mk_EMP, BC_VibranceGloss_pk_PGPP, BC_VibranceLuster_PLPP260 — все median rank=7, p95=8.
+- Важный контр-интуитивный факт: hard-пары имеют **меньший** RMS (0.030) чем easy (0.050) — они спектрально компактны, но структурно богаче.
+
+**Вывод:** для cross-mode D-optimal k=8 достаточен для 99.3% пар; EMP-профили требуют k=9. S1=13 перекрывает 100% с запасом. Следующий шаг: D-optimal anchor selection по SVD-базису остатка.
+
+Обновлены: EXPERIMENTS.md (новая строка), RESEARCH_HYPOTHESIS.md (H5 Addendum 2026-06-08b).
+
+---
+
+## 2026-06-08: SVD rank analysis — raw vs d7, все 27 профилей
+
+**CAE-диагноз (закрыт):** static CAE предсказывает из одной бумаги (k=0), anchor-fit предикторы (D1/C7) видят измеренные якоря. Разные задачи. CAE_LOO с 8-D latent + Nelder-Mead уступает C7/D1 в 5–6 ΔE на PremiumLuster (1 support). CAE убран из основного пайплайна, оставлен как baseline-линия.
+
+**Инфраструктура:**
+
+- `scripts/exportCaeData.ts` расширен: `CAE_INK_MODE=all` (mk+pk), `CAE_OUT_FILE`. Запуск на `/mnt/e/PET/LinkedInPosts/surecolor-p9000/` → `profiles-all.json` (8.92 MB, 27 профилей, 25 080 патчей).
+- `python/cae/rank_analysis.py` — batch SVD остатков D=X_B−X_A для всех 702 пар, кэш `.npz`+`.json`, отчёт raw vs d7 + same/cross-mode срезы.
+- `python/cae/icm_reader.py` — Python ICM/CxF парсер (minimal, defusedxml).
+
+**Результаты SVD (702 пары, 27 профилей):**
+
+- same-mode (n=144): median rank@99% = 5, p95 = 8. d7 ≡ raw (rank не меняется).
+- cross-mode (n=558): median rank@99% = 6, p95 = 8. d7 ≡ raw.
+- OBA-компенсация: снижает RMS на ~2%, ранг не трогает. OBA — не отдельная структурная степень свободы.
+- 5 компонент покрывают 99.0% same-mode / 98.2% cross-mode энергии.
+
+**Импликации для min-k:** info-theoretic нижняя граница = rank+1 = **6 патчей same-mode, 7 cross-mode**. Текущий S1=13 — достаточно с запасом. D-оптимальный выбор якорей по SVD-базису даёт min-k ближе к теоретическому пределу, чем greedy worst-patch. Следующий шаг: k-sweep с D-optimal vs greedy.
+
+Обновлены: EXPERIMENTS.md (новая строка), RESEARCH_HYPOTHESIS.md (H5 addendum 2026-06-08).
+
+---
+
+## 2026-06-08: Документация H14 — два обязательных инварианта LOO
+
+Зафиксированы два требования, нарушение которых делает LOO некорректным:
+
+1. **Все профили режима** — `S = AllProfiles_mode \ {Target}` означает буквально все профили данного Epson media preset, а не только загруженные в текущей UI-сессии. Браузерная реализация обязана загрузить все профили режима перед запуском CAE_LOO; Python pipeline обязан включать все профили режима в LOO fold, не фиксированный 80/20 сплит.
+
+2. **Единая RGB-сетка** — перед входом в Nelder-Mead каждый support-профиль `p ∈ S` должен быть WLS-интерполирован на точную RGB device grid целевого профиля (`B_raw.D`, форма N_target × 3). Текущий браузерный код имеет два пути: same-grid (SAMPLE_ID intersection, переменный размер) и different-grid (WLS, всегда N_target). Это несогласованность: при смешанных чартах (BC 905 + MOAB ~1550) same-grid путь даёт < 50 совпадений и падает в WLS, но WLS должен применяться всегда. Python `dataset.py` использует `common_keys &= …` — пересечение коллапсирует до N=10 при смешанных пулах (задокументировано в H10b full-pool failure). Правильное решение: WLS на референсную сетку для любого смешанного пула.
+
+Обновлены `RESEARCH_HYPOTHESIS.md` (H14 Algorithm + Math) и `IMPLEMENTATION.md` (строки dynamicLOO.ts и Python dataset.py).
+
+---
+
 ## 2026-06-08: Фаза C v3 — MOAB PremiumLuster via WLS interpolation; LOO support=5
 
 Додано fallback у LOO support-set construction: якщо `alignByCommonSampleIds` дає < 50 спільних патчів (BC ↔ MOAB, різні сітки), будуємо WLS інтерполятор з джерела (k=16) і оцінюємо спектри на RGB-сітці цільового профілю. Результат: LOO support=5 (2 BC + 4 MOAB) замість 1. Метрики: CAE_LOO VL→RS median 7.77 (було 7.81 з 1 support). Гейн мінімальний — bottleneck у PremiumLuster CAE (навчений на 2 BC профілях), не в кількості support. Logged у EXPERIMENTS.md v3 row. Наступний крок: перенавчання PremiumLuster bundle з 6 профілями (4 MOAB + 2 BC).

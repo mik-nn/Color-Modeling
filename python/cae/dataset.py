@@ -18,6 +18,38 @@ DATA_FILE = HERE / "../../frontend/data/cae-input/profiles-mk.json"
 SPLIT_FILE = HERE / "split.json"
 
 
+def _idw_interpolate(
+    src_rgb: np.ndarray,
+    src_spectra: np.ndarray,
+    tgt_rgb: np.ndarray,
+    k: int = 16,
+    power: float = 2.0,
+) -> np.ndarray:
+    """IDW: for each target RGB, weighted average of k nearest source spectra.
+
+    src_rgb: (N_src, 3) float32  — source device values
+    src_spectra: (N_src, L) float32
+    tgt_rgb: (N_tgt, 3) float32  — query device values
+    Returns: (N_tgt, L) float32
+    """
+    N_tgt = len(tgt_rgb)
+    L = src_spectra.shape[1]
+    kk = min(k, len(src_rgb))
+    out = np.empty((N_tgt, L), dtype=np.float32)
+    for qi in range(N_tgt):
+        dists = np.linalg.norm(src_rgb - tgt_rgb[qi], axis=1)
+        nn_idx = np.argpartition(dists, kk - 1)[:kk]
+        nn_d = dists[nn_idx]
+        exact = np.where(nn_d < 0.5)[0]
+        if len(exact) > 0:
+            out[qi] = src_spectra[nn_idx[exact[0]]]
+        else:
+            w = 1.0 / (nn_d ** power)
+            w /= w.sum()
+            out[qi] = w @ src_spectra[nn_idx]
+    return out
+
+
 def load_payload():
     with open(DATA_FILE) as fh:
         return json.load(fh)
@@ -42,17 +74,22 @@ class ProfileBank:
         first = self.profiles[0]
         self.L = len(first["paper_spectrum"])
         patch_maps = [self._patch_map(prof) for prof in self.profiles]
-        common_keys = set(patch_maps[0])
-        for patch_map in patch_maps[1:]:
-            common_keys &= set(patch_map)
-        if not common_keys:
-            raise ValueError("No common RGB patch coordinates across selected profiles")
-        sample_id_order = sorted(common_keys, key=self._rgb_sort_key)
+
+        # Use the profile with the most patches as reference grid (densest source →
+        # best interpolation quality when projecting sparser profiles onto it).
+        # All profiles are WLS-interpolated (IDW) onto this grid, so every profile
+        # has identical device values — the H14 invariant: one common RGB grid.
+        ref_pi = max(range(len(patch_maps)), key=lambda i: len(patch_maps[i]))
+        sample_id_order = sorted(patch_maps[ref_pi], key=self._rgb_sort_key)
+        if not sample_id_order:
+            raise ValueError("Reference profile has no spectral patches")
         self.N = len(sample_id_order)
 
-        # Pre-stack spectra as (N_profiles, N_patches, L) for fast indexing.
-        # Different sources can have different chart sizes; align by rounded
-        # RGB device coordinates rather than assuming row-index equivalence.
+        # Reference RGB array for IDW distance queries.
+        ref_rgb_arr = np.array(
+            [list(map(int, k.split(","))) for k in sample_id_order], dtype=np.float32
+        )
+
         spectra = np.zeros((len(self.profiles), self.N, self.L), dtype=np.float32)
         rgb = np.zeros((len(self.profiles), self.N, 3), dtype=np.float32)
         paper_specs = np.zeros((len(self.profiles), self.L), dtype=np.float32)
@@ -62,19 +99,42 @@ class ProfileBank:
             patch_map = patch_maps[pi]
             paper_ti = -1
             brightest_neutral = (-1.0, -1)
-            for ti, key in enumerate(sample_id_order):
-                pat = patch_map[key]
-                spectra[pi, ti] = pat["spectrum"]
-                rgb[pi, ti] = pat["rgb"]
-                r, g, b = pat["rgb"]
-                # Tolerance: some profiles label their paper as (254,254,254)
-                # or similar; track the brightest neutral as a fallback.
-                if r >= 250 and g >= 250 and b >= 250 and abs(r - g) < 5 and abs(g - b) < 5:
-                    paper_ti = ti
-                if abs(r - g) < 5 and abs(g - b) < 5:
-                    brightness = r + g + b
-                    if brightness > brightest_neutral[0]:
-                        brightest_neutral = (brightness, ti)
+
+            if pi == ref_pi or set(patch_map.keys()) >= set(sample_id_order):
+                # Exact same grid (or superset): direct copy — no interpolation error.
+                for ti, key in enumerate(sample_id_order):
+                    pat = patch_map[key]
+                    spectra[pi, ti] = pat["spectrum"]
+                    rgb[pi, ti] = pat["rgb"]
+                    r, g, b = pat["rgb"]
+                    if r >= 250 and g >= 250 and b >= 250 and abs(r - g) < 5 and abs(g - b) < 5:
+                        paper_ti = ti
+                    if abs(r - g) < 5 and abs(g - b) < 5:
+                        brightness = r + g + b
+                        if brightness > brightest_neutral[0]:
+                            brightest_neutral = (brightness, ti)
+            else:
+                # Different grid: IDW-interpolate source spectra onto reference RGB grid.
+                src_keys = sorted(patch_map.keys(), key=self._rgb_sort_key)
+                src_rgb_arr = np.array(
+                    [list(map(int, k.split(","))) for k in src_keys], dtype=np.float32
+                )
+                src_spec_arr = np.array(
+                    [patch_map[k]["spectrum"] for k in src_keys], dtype=np.float32
+                )
+                spectra[pi] = _idw_interpolate(src_rgb_arr, src_spec_arr, ref_rgb_arr)
+                rgb[pi] = ref_rgb_arr
+
+                # Paper white index: first entry in ref_keys that looks like paper white.
+                for ti, key in enumerate(sample_id_order):
+                    r, g, b = map(int, key.split(","))
+                    if r >= 250 and g >= 250 and b >= 250 and abs(r - g) < 5 and abs(g - b) < 5:
+                        paper_ti = ti
+                    if abs(r - g) < 5 and abs(g - b) < 5:
+                        brightness = r + g + b
+                        if brightness > brightest_neutral[0]:
+                            brightest_neutral = (brightness, ti)
+
             paper_specs[pi] = prof["paper_spectrum"]
             if paper_ti < 0 and brightest_neutral[1] >= 0:
                 paper_ti = brightest_neutral[1]
