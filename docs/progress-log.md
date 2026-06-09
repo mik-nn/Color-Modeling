@@ -6,6 +6,18 @@
 
 ---
 
+## 2026-06-09 — Device-coordinate alignment
+
+Заменил сопоставление патчей по позиции/SAMPLE_ID на сопоставление по device-координате
+(RGB/CMYK). Новая `alignProfiles` в `matrix.ts` объединяет старые `alignByCommonSampleIds`
+и `alignByDeviceGrid`: query-сетка = реальные точки референса A (A хранит измеренные спектры),
+B берётся exact-match по квантованному device-ключу или реконструируется k-NN IDW
+интерполяцией; точки A вне gamut B дропаются (без экстраполяции). `cxfParser` теперь отдаёт
+`SAMPLE_ID = RGB_{r}_{g}_{b}`. TransferView и kSweep схлопнули дублированный threshold=50
+switch в один вызов. Spec: `docs/specs/device-coordinate-alignment.md`.
+
+---
+
 ## 2026-06-09 (сессия 3): CGATS SAMPLE_ID generator fix — cross-grid alignment bug
 
 **Задача:** исправить ошибки в UI при загрузке USFA профилей (Bright→Textured показывал OBA 4.548, ΔE00=23–31).

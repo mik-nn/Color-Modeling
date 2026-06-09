@@ -8,8 +8,8 @@
 // closed-form fit, no iterations. Baseline against which D1/B3 must justify
 // their complexity.
 //
-// Inputs assumed already aligned by SAMPLE_ID — see dataset/matrix.ts
-// alignByCommonSampleIds. The predictor never touches sample IDs; it operates
+// Inputs assumed already aligned by device coordinate — see dataset/matrix.ts
+// alignProfiles. The predictor never touches sample IDs; it operates
 // on row-major matrices and index arrays.
 
 import type { PredictionReport, WhitePointXYZ } from '../../types';
