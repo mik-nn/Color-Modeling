@@ -869,6 +869,80 @@ chromatic anchors (near R≈40, G≈0, B≈100–200) to S1 closes the gap.
 
 ---
 
+## H18 — Ink-coverage correlation and high-CMY anchor augmentation (2026-06-12)
+
+**Motivation:** H17 showed the P95 residual on DecorMatte→ChromataWhite (CanvasMatte mode)
+is concentrated at 530–580 nm in dark blue/violet patches (R=31–63, G=0–28, B=63–191),
+which are regions of heavy C+M coverage. The D1 paper-ratio model cannot capture the
+nonlinear ink-substrate interaction at high C+M density for these two substrates. Two
+questions to resolve:
+
+1. **Ink-coverage correlation (diagnostic):** Does the 530–580 nm spectral error and ΔE00
+   correlate with total ink coverage `C+M+Y = (255−R)+(255−G)+(255−B)`? If yes, the error
+   is not random noise but a systematic model-coverage effect.
+2. **Anchor augmentation (intervention):** Adding 2–3 anchors in the high-CMY sector
+   (R≈40, G≈0, B≈100–200) directly samples the ink-substrate interaction at the problematic
+   gamut boundary. Does this close the P95 gap?
+
+**Claim (H18).** On the pair `BC_DecorMatte_P9000_mk_CanvasMatte` →
+`BC_ChromataWhite_P9000_mk_CanvasMatte` (D1 rank=5 UV-clamp-4 D7 OBA):
+
+- **H18a:** Spearman rank correlation between per-patch ΔE00 and (C+M+Y) device sum
+  is > 0.5 across all non-anchor patches.
+- **H18b:** Spearman rank correlation between per-patch mean |err| at 530–580 nm and
+  (C+M+Y) device sum is > 0.5 across all non-anchor patches.
+- **H18c:** Adding 3 high-CMY anchors (nearest grid patches to
+  (R=40, G=0, B=100), (R=40, G=0, B=150), (R=40, G=0, B=190)) to S1 (k=13 → k=16)
+  lowers P95 by ≥ 1.0 ΔE00 on this pair.
+
+### Acceptance & falsification
+
+| Part              | Pass                   | Fail                                          |
+|-------------------|------------------------|-----------------------------------------------|
+| H18a/b (corr.)    | Spearman r > 0.50      | r < 0.30 (error not coverage-driven)          |
+| H18c (augment)    | P95 drop ≥ 1.0 ΔE      | P95 drop < 0.30 ΔE (anchors miss mechanism)   |
+
+### H18 script
+
+`frontend/scripts/experiments/h18_ink_coverage.ts`
+
+### H18 result — H18a + H18c CONFIRMED; H18b REJECTED (2026-06-12)
+
+905 patches aligned, D1 rank=5 uvBandCount=4 D7 OBA, S1 k=13 baseline (892 non-anchor patches).
+
+**H18a:** Spearman(ink, ΔE00) = **0.712** — PASS (gate > 0.50). Total ink coverage is a strong
+systematic predictor of transfer error.
+
+**H18b:** Spearman(ink, 530–580nm err) = **−0.120** — REJECT. The 530–580 nm elevation in H17's
+P95 patches was a consequence of those patches' location in color space (dark blue-violet gamut
+boundary), not an independent coverage→green-yellow-band effect.
+
+**H18c:** Augmented anchors (31,0,95), (31,0,159), (31,0,191): k=13 → k=16.
+P95: **6.419 → 4.787** (Δ = 1.632) — PASS (gate ≥ 1.0).
+Median: 1.886 → 1.817 (−0.069).
+
+**Coverage bucket analysis (baseline):**
+
+| Ink sum (C+M+Y) | n   | Median ΔE | P95 ΔE |
+|-----------------|-----|-----------|--------|
+| 0–255 (light)   | 182 | 1.200     | 2.133  |
+| 256–383 (mid)   | 263 | 1.207     | 3.447  |
+| 384–511 (high)  | 260 | 2.759     | 6.131  |
+| 512–765 (max)   | 187 | 5.230     | 7.723  |
+
+**After augmentation:** worst patches shift from dark blue-violet to heavy-Y olive-green sector
+(R≈100–160, G≈85–170, B≈0 — high C+M+Y total coverage, Y-dominated). Same root cause, new
+gamut sector.
+
+**Conclusion:** D1's paper-ratio + rank-5 residual is fundamentally inadequate at high total
+ink density regardless of gamut sector. Each targeted sector fix shifts the worst tier to the
+next-worst sector. Remedy requires either (a) a model upgrade (higher rank or coverage-aware
+weighting) or (b) exhaustive anchor coverage of all high-ink sectors.
+
+Candidate H19: test residualRank 5 → 8 (SVD p95 rank from H8) and/or heavy-Y sector anchors.
+
+---
+
 ## Note — M0/M2 at 380 nm (measurement artefact)
 
 Independent of the ink-physics hypotheses: `mean(M0 − M2)` at 380 nm is **negative**

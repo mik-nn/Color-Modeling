@@ -6,6 +6,32 @@
 
 ---
 
+## 2026-06-12 (cont.) — H18: ink-coverage correlation подтверждена; high-CMY anchors снижают P95 на 1.63 ΔE00
+
+**Зарегистрирована H18** в `docs/RESEARCH_HYPOTHESIS.md`. Написан и запущен
+`frontend/scripts/experiments/h18_ink_coverage.ts`. Пара: DecorMatte → ChromataWhite (CanvasMatte).
+
+**Результаты:**
+
+- **H18a ПОДТВЕРЖДЕНА:** Spearman(ink, ΔE00) = **0.712** — сильная монотонная связь суммарного
+  покрытия чернил (C+M+Y) с ошибкой предсказания. Coverage buckets: P95 растёт 2.1→3.4→6.1→7.7
+  по мере роста ink sum от 0–255 до ≥512.
+- **H18b ОТКЛОНЕНА:** Spearman(ink, 530–580nm err) = **−0.120** — отрицательный, не связан.
+  Подъём 530–580nm в H17 P95-группе был следствием положения патчей в color space, а не
+  самостоятельного coverage→band эффекта.
+- **H18c ПОДТВЕРЖДЕНА:** Три high-CMY якоря (31,0,95), (31,0,159), (31,0,191) → k=16.
+  P95: **6.419 → 4.787** (Δ=1.632, gate ≥ 1.0 ΔE00).
+
+**Вывод:** D1 paper-ratio rank-5 фундаментально неадекватен при высокой суммарной плотности
+чернил. Добавление якорей в конкретный gamut-сектор (dark blue-violet) закрывает этот сектор,
+но новый worst-сектор — heavy-Y (R≈100–160, G≈85–170, B≈0) — та же root cause, другой сектор.
+
+**Следующий шаг — H19:** (a) якоря в heavy-Y секторе + (b) residualRank 5→8.
+
+Обновлены `docs/ROADMAP.md` (H18 закрыта, H19 зарегистрирована) и `docs/EXPERIMENTS.md`.
+
+---
+
 ## 2026-06-12 (cont.) — H17 написан и отклонён; неожиданная находка: P95 = green-yellow VIS, не OBA
 
 **Написан и запущен** `frontend/scripts/experiments/h17_residual_bands.ts`:
