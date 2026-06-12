@@ -776,9 +776,57 @@ just one new measurement (the 4-cyan-anchor ramp).
   median.
 - **Reject:** YN exponent doesn't capture spread, OR adding it hurts other modes.
 
-### Tests
+### Result — **REJECTED (2026-06-12)**
 
-`scripts/experiments/h16_redband_yn.ts` — to be written.
+`scripts/experiments/h16_redband_yn.ts` executed on 26 BC profiles.
+
+**Failure mode 1 (unmasked):** Applying YN to all patches produced catastrophic regressions
+(CanvasMatte ΔP95 = +14). Root cause: the two-endpoint model (paper ↔ full-cyan) is only
+valid when M and Y inks are absent; magenta absorbs heavily at 640–680 nm, so YN predicts
+≈ paper-white for M-laden patches.
+
+**Failure mode 2 (cyan-mask G ≥ 220, B ≥ 220):** Masking to the cyan-dominant sector
+eliminates the regression but produces null effect (ΔP95 = 0.000 for CanvasMatte). D1
+already handles cyan-dominated patches well.
+
+**Conclusion:** The P95 = 2.2 on Canvas Matte is driven by OBA-mismatch in mixed/neutral
+patches on DecorMatte ↔ OBA-extreme pairs (ChromataWhite, 800M, BelgianLinen) — not by
+640–680 nm YN nonlinearity. H16 was targeting the wrong spectral mechanism. The `n_B`
+values were physically plausible (1.72–2.60 across papers) but irrelevant to the P95 driver.
+
+---
+
+## H17 — Spectral residual band analysis on the worst OBA-disparate pair (2026-06-12)
+
+**Motivation (diagnostic hypothesis):** H16's rejection revealed that P95=6.42 on
+DecorMatte→ChromataWhite is caused by OBA-mismatch in chromatic/neutral patches, not by
+640–680 nm YN nonlinearity. H17 diagnoses *which wavelength bands* carry the residual
+error in the P95 group, to guide the next targeted fix.
+
+**Claim (H17).** On the pair `BC_DecorMatte_P9000_mk_CanvasMatte` →
+`BC_ChromataWhite_P9000_mk_CanvasMatte`, the per-band mean absolute spectral error
+`|R_pred(λ) − R_meas(λ)|` for the P95-error patches (worst 5 % by ΔE00) is
+**concentrated in the OBA/UV bands (380–430 nm)**, where the elevated error is
+> 2× the average visible-band (430–730 nm) error for the same patch group.
+Formally: `mean_err_UV / mean_err_VIS > 2.0` for P95 patches, where
+`mean_err_UV = mean over λ∈{380,390,400,410,420,430}` and
+`mean_err_VIS = mean over λ∈{440,...,730}`.
+
+**Why this matters.** If confirmed, the fix is OBA-targeted: better anchor selection
+(D-optimal on OBA-band SVD components) or measured M0/M2 OBA at anchors (H13c path).
+If rejected (error flat across λ), some non-OBA structural mechanism dominates and
+a different approach is needed.
+
+### Acceptance & falsification
+
+- **Confirm:** P95 patches show UV/OBA mean error > 2× VIS mean error. Identify the
+  top-3 wavelength bands by mean absolute error in the P95 group.
+- **Reject:** UV/OBA error < 1.5× VIS error in P95 patches → OBA is not the primary
+  driver; structural visible-range mismatch dominates.
+
+### Script
+
+`frontend/scripts/experiments/h17_residual_bands.ts`
 
 ---
 

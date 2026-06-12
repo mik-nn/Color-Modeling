@@ -59,10 +59,11 @@ Empirical spectral predictors + Conditional Autoencoder. Best results: CAE_D7 me
 - [x] CAE_RAW, CAE_D7, per-mode variants (commit 706a51b: `python/cae/cv_train.py`, per-preset pools).
 - [x] H10b anchor fine-tune (in `lib/predict/cae.ts`; Adam, 200 steps, lr=0.05).
 - [x] CGATS cross-grid alignment: `cgatsParser.ts` `SAMPLE_ID = RGB_{R}_{G}_{B}` + `TransferView.tsx` paper detection by exact RGB(255,255,255) device-value lookup (2026-06-12).
-- [ ] Re-run batch runner over all 702 directed pairs after CGATS fix (H4 aggregate stats now stale).
+- [x] Re-run batch runner over all 702 directed pairs after CGATS fix — same-mode 80.6% confirmed stable (2026-06-12).
+- [x] Re-generate all per-mode evaluate JSONs from correct per-mode weights; `evaluate.py` gains `--mode` + `--payload` + `_test` set suffix (2026-06-12).
 - [ ] UI mode selector for per-mode CAE_D7 weight loading (`frontend/src/data/cae_weights_d7_*.json`).
-- [ ] Re-generate `evaluate_d7_USFA.json` + `evaluate_d7_PremiumLuster_test.json` from correct weights (currently duplicates of `evaluate_d7.json`).
-- [ ] H16: per-substrate YN exponent at 640–680 nm — write `scripts/experiments/h16_redband_yn.ts`.
+- [x] H16: per-substrate YN exponent at 640–680 nm — **REJECTED** (2026-06-12). Null effect on P95; P95 driver is OBA-mismatch in chromatic patches, not 640–680nm YN nonlinearity.
+- [ ] **H17 (next):** Spectral residual band analysis on DecorMatte→ChromataWhite (worst pair, P95=6.42). Identify which λ drive P95. Candidate fix: D-optimal anchor selection targeting OBA-band SVD components; or H13c measured OBA emission from M2 anchors on OBA-disparate pairs.
 
 ## Phase 2″ — Print-mode taxonomy + cross-vendor comparison (H11) — **CONFIRMED**
 

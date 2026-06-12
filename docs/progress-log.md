@@ -1,8 +1,42 @@
-# progress-log.md
+у# progress-log.md
 
 > Append-only per-session changelog. Newest entries at the top. Bilingual EN/RU acceptable.
 > Each entry: date, one-line summary, body explaining **why**, links to relevant
 > `EXPERIMENTS.md` rows and commits.
+
+---
+
+## 2026-06-12 (cont.) — H16 скрипт написан; нестыковки устранены
+
+**Написан** `frontend/scripts/experiments/h16_redband_yn.ts`:
+
+- Загружает BC ICM профили, выравнивает по device-coordinate через `alignProfiles`.
+- На B's cyan ramp (4 патча: RGB (0,255,255), (64,255,255), (128,255,255), (192,255,255)) фитирует YN-экспоненту n_B(λ) для каждой длины волны 640–680 nm методом golden-section search.
+- Baseline: D1 (S1 якоря, rank=5, UV clamp=4, D7 OBA). H16: заменяет D1-предсказание на YN в [640,680]; сравнивает median/P95.
+- Вывод: per-preset aggr + таблица 6 worst CanvasMatte пар с флагом improvement ≥ 0.5 P95.
+- Acceptance gate из RESEARCH_HYPOTHESIS.md: Canvas Matte P95 ≤ 1.7 на ≥ 4/6 худших пар.
+
+**Исправлены нестыковки** (сессия 2026-06-12):
+
+- `evaluate.py`: добавлены `--mode`, `--payload`, `_test` suffix → регенерированы все per-mode evaluate JSON.
+- `h4_batch.ts`: `alignByCommonSampleIds` → `alignProfiles`; H4 re-run подтвердил 80.6% same-mode stable.
+- H10b USFA: диагностирован OOD регрессия Unryu (dist=32.9 > threshold 25); canonical = a0 (med=1.320, p95=3.605).
+- `docs/RESEARCH_HYPOTHESIS.md`: добавлен per-mode H10b addendum с USFA caveат.
+- `docs/ROADMAP.md`: CGATS fix, evaluate JSON regeneration, H4 re-run отмечены done.
+
+**H16 запущена и отклонена** (`npx tsx scripts/experiments/h16_redband_yn.ts`):
+
+- **v1 (без маски):** CanvasMatte ΔP95 = +14.0 (катастрофа). Причина: двухточечная YN (paper ↔ full-cyan) неприменима к M/Y-насыщенным патчам — magenta поглощает 640–680nm, модель предсказывает ≈paper-white.
+- **v2 (маска G≥220, B≥220):** ΔP95 = 0.000 на всех пресетах. YN корректирует только cyan-dominant патчи, которые D1 уже обрабатывает хорошо.
+- **Вывод:** P95=2.2 на CanvasMatte — OBA-mismatch в chromatic патчах на парах DecorMatte↔OBA-extreme (ChromataWhite, 800M, BelgianLinen), не 640–680nm YN нелинейность. H16 лечила не ту болезнь.
+
+**Обновлена документация:**
+
+- `docs/RESEARCH_HYPOTHESIS.md`: H16 → раздел "Result — REJECTED" с диагнозом обоих failure mode.
+- `docs/ROADMAP.md`: H16 помечена rejected.
+- `docs/EXPERIMENTS.md`: добавлена строка H16 с двумя run-результатами и заключением.
+
+→ Следующий шаг: спектральный анализ residual по полосам на паре DecorMatte→ChromataWhite (какие λ дают P95?). Кандидаты: H13c measured OBA от M2-якорей; D-optimal anchor selection с OBA-band SVD компонентами.
 
 ---
 
