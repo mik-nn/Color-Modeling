@@ -333,7 +333,9 @@ def main() -> int:
             )
 
     anchor_suffix = f"_a{args.anchors}" if args.anchors > 0 else ""
-    out = WEIGHTS_DIR / f"evaluate_{args.variant}{mode_suffix}{anchor_suffix}.json"
+    # Include set suffix for non-default ("test") to avoid overwriting the validation output.
+    set_suffix = "_test" if args.set == "test" else ""
+    out = WEIGHTS_DIR / f"evaluate_{args.variant}{mode_suffix}{set_suffix}{anchor_suffix}.json"
     out.write_text(json.dumps({
         "variant": args.variant,
         "set": args.set,
