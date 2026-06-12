@@ -6,6 +6,36 @@
 
 ---
 
+## 2026-06-12 — Ревью проекта: суммаризация состояния, диагностика нестыковок, обновление документации
+
+**Задача:** суммаризировать текущее состояние проекта, обновить документацию, проанализировать нестыковки и предложить направления.
+
+**Найденные нестыковки:**
+
+1. `evaluate_d7.json`, `evaluate_d7_USFA.json`, `evaluate_d7_PremiumLuster_test.json` — идентичные данные (n=6, med=1.306, p95=3.630, set=validation). Это copy-paste артефакт evaluation скрипта — USFA и PremiumLuster json не перегенерированы после retraining. Нужно заново запустить `python/cae/evaluate.py` с правильными весами.
+2. `evaluate_d7_a13.json` == `evaluate_d7_CanvasSatin_test.json` (n=3, med=1.468) — аналогичная проблема.
+3. H16 (per-substrate YN exponent в 640–680 nm) зарегистрирована в RESEARCH_HYPOTHESIS.md как следующий шаг после H15 rejection, но скрипт `h16_redband_yn.ts` не написан.
+4. H4 batch runner не запускался после CGATS fix — агрегатные метрики на 702 парах устарели.
+5. UI mode selector для per-mode CAE весов отсутствует (ROADMAP Phase 2′ open item).
+6. `evaluate_d7_USFA_a13.json`: fine-tuning ухудшает Unryu (1.306 → 1.357 при a13 vs a0) — регрессия H10b на USFA. Требует диагностики.
+
+**Обновления документации:**
+
+- `EXPERIMENTS.md`: добавлена строка 2026-06-12 (CGATS cross-grid alignment bug + copy-paste eval json bug).
+- `ROADMAP.md`: добавлена задача H16 как open item; CGATS fix помечен как done.
+
+**Алгоритмические направления для основной цели (кратко):**
+
+- D-optimal anchor selection по SVD basis остатка (теоретический минимум k ≈ rank+1 = 6–7 патчей)
+- H13: M0/M2 измеренная эмиссия вместо аналитической D7 — физически корректнее
+- H16: per-substrate YN exponent n(λ) для 640–680 nm (P95 driver для CanvasMatte)
+- Optimal transport map (earth-mover) в спектральном пространстве — нет предположений о линейности
+- Low-rank completion (matrix factorization на device-grid) — восполнить unmeasured points из k наблюдений
+
+→ `EXPERIMENTS.md`: строка 2026-06-12 добавлена. `ROADMAP.md`: обновлён.
+
+---
+
 ## 2026-06-09 — Device-coordinate alignment
 
 Заменил сопоставление патчей по позиции/SAMPLE_ID на сопоставление по device-координате

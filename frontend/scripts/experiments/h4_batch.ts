@@ -26,7 +26,7 @@ const jsdom = new JSDOM('<!doctype html><html><body></body></html>')
 ;(globalThis as any).XMLSerializer = jsdom.window.XMLSerializer
 
 import { parseIcmFile } from '../../src/lib/parsers/icmParser'
-import { loadProfileMatrix, alignByCommonSampleIds } from '../../src/lib/dataset/matrix'
+import { loadProfileMatrix, alignProfiles } from '../../src/lib/dataset/matrix'
 import { pickHeuristicAnchors } from '../../src/lib/sampling/heuristic'
 import { runPaperRatioResidualTransfer } from '../../src/lib/predict/paperRatioResidual'
 import {
@@ -164,39 +164,32 @@ async function main() {
       if (i === j) continue
       const A = matrices[i].mx
       const B = matrices[j].mx
-      const aligned = alignByCommonSampleIds(A, B)
-      if (aligned.sampleIds.length < MIN_MATCH) {
+      const al = alignProfiles(A, B)
+      if (al.exactCount < MIN_MATCH) {
         done++
         continue
       }
-      const N = aligned.sampleIds.length
+      const N = al.N
       const L = A.L
-      const X_A = new Float64Array(N * L)
-      const X_B = new Float64Array(N * L)
-      const D = new Float64Array(N * 3)
-      for (let k = 0; k < N; k++) {
-        const ai = aligned.idxA[k]
-        const bi = aligned.idxB[k]
-        for (let l = 0; l < L; l++) {
-          X_A[k * L + l] = A.X[ai * L + l]
-          X_B[k * L + l] = B.X[bi * L + l]
-        }
-        for (let c = 0; c < 3; c++) D[k * 3 + c] = B.D[bi * 3 + c]
-      }
+      const X_A = al.X_A
+      const X_B = al.X_B
+      const D = al.D
 
-      const Baligned = {
-        X: X_B,
-        D,
-        channels: 3 as const,
-        N,
-        L,
-        wavelengths: A.wavelengths,
-        sampleIds: aligned.sampleIds,
-        droppedCount: 0,
+      const tgtForAnchors = {
+        X: X_B, D, channels: 3 as const, N, L,
+        wavelengths: A.wavelengths, sampleIds: al.sampleIds, droppedCount: 0,
       }
-      const anchors = pickHeuristicAnchors(Baligned)
+      const anchors = pickHeuristicAnchors(tgtForAnchors)
       const anchorIdx = anchors.meta?.chosenIdx as number[]
-      const paperRowIdx = anchorIdx[0]
+
+      // Find paper white by exact RGB(255,255,255) device-value lookup.
+      let paperRowIdx = anchorIdx[0] // fallback if chart has no pure-white patch
+      for (let k = 0; k < N; k++) {
+        if (D[k * 3] === 255 && D[k * 3 + 1] === 255 && D[k * 3 + 2] === 255) {
+          paperRowIdx = k
+          break
+        }
+      }
 
       // D7 OBA-clean both matrices.
       const paperSpecA = Array.from(X_A.subarray(paperRowIdx * L, paperRowIdx * L + L))
@@ -214,7 +207,7 @@ async function main() {
         X_A: X_A_clean,
         X_B: X_B_clean,
         D,
-        sampleIds: aligned.sampleIds,
+        sampleIds: al.sampleIds,
         anchorIdx,
         paperRowIdx,
         L,
@@ -260,7 +253,7 @@ async function main() {
           D,
           paper_A: paperSpecA,
           paper_B: paperSpecB,
-          sampleIds: aligned.sampleIds,
+          sampleIds: al.sampleIds,
           anchorIdx,
           paperRowIdx,
           L,

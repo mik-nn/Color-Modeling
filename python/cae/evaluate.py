@@ -200,16 +200,36 @@ def main() -> int:
              "Default 0.1 trades a tiny median bump for a large P95 win on tight per-mode CAEs; "
              "set to 0 on OBA-disparate modes (CanvasMatte) where anchors carry essential signal.",
     )
+    ap.add_argument(
+        "--mode",
+        type=str,
+        default=None,
+        help="Per-mode suffix for weights and output: loads cae_<variant>_<mode>.pt and writes "
+             "evaluate_<variant>_<mode>.json. Split is read from the bundle's embedded 'split' key "
+             "rather than split.json. Example: --mode USFA",
+    )
+    ap.add_argument(
+        "--payload",
+        type=str,
+        default=None,
+        help="Path to profiles JSON payload. Defaults to profiles-mk.json. Use profiles-all.json "
+             "for MOAB / multi-vendor modes.",
+    )
     args = ap.parse_args()
 
-    pt = WEIGHTS_DIR / f"cae_{args.variant}.pt"
+    mode_suffix = f"_{args.mode}" if args.mode else ""
+    pt = WEIGHTS_DIR / f"cae_{args.variant}{mode_suffix}.pt"
     if not pt.exists():
-        print(f"missing {pt} — run `python train.py --variant {args.variant}` first", file=sys.stderr)
+        print(f"missing {pt}", file=sys.stderr)
         return 1
     bundle = torch.load(pt, map_location="cpu", weights_only=False)
 
-    payload = load_payload()
-    split = load_split()
+    payload = load_payload(args.payload)
+    # Per-mode bundles carry their own split; global split.json is the fallback.
+    if args.mode and "split" in bundle:
+        split = bundle["split"]
+    else:
+        split = load_split()
     bank = ProfileBank(payload["profiles"], variant=args.variant)
 
     model = CAEHybrid(n_substrate_ids=bundle["n_substrate_ids"])
@@ -312,8 +332,8 @@ def main() -> int:
                 f"  {'(train ref)' if a_in_train else '(held-out ref)'}"
             )
 
-    suffix = f"_a{args.anchors}" if args.anchors > 0 else ""
-    out = WEIGHTS_DIR / f"evaluate_{args.variant}{suffix}.json"
+    anchor_suffix = f"_a{args.anchors}" if args.anchors > 0 else ""
+    out = WEIGHTS_DIR / f"evaluate_{args.variant}{mode_suffix}{anchor_suffix}.json"
     out.write_text(json.dumps({
         "variant": args.variant,
         "set": args.set,

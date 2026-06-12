@@ -382,6 +382,31 @@ ratio-clamp or per-λ affine predictor.
 The H10 original (paper-only, k=0, full pool) stays rejected; H10b changes the
 verdict for the anchored, per-mode variant.
 
+### Addendum (2026-06-12) — H10b distribution-shift caveat
+
+The results above were based on WCRW / CanvasMatte models trained on incorrect evaluation
+data (duplicate `evaluate_d7.json`). After re-generating all per-mode evaluate JSONs from
+the correct weights (`evaluate.py --mode <MODE> --payload profiles-all.json`), the updated
+figures are:
+
+| Mode | a0 med | a13 med | Δmed | a0 p95 | a13 p95 | Δp95 | Verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| WCRW | 0.795 | 0.770 | −0.025 | 2.054 | 2.021 | −0.033 | ✓ H10b helps |
+| CanvasMatte | 0.812 | 0.772 | −0.040 | 2.345 | 2.369 | +0.024 | ✓ H10b helps |
+| CanvasSatin | 1.527 | 1.404 | −0.123 | 4.370 | 4.228 | −0.142 | ✓ H10b helps |
+| PremiumLuster | 0.849 | 0.844 | −0.005 | 3.723 | 3.674 | −0.049 | ~ marginal |
+| USFA (Unryu) | **1.320** | 1.290 | −0.030 | **3.605** | 4.079 | **+0.47** | ✗ P95 regression |
+
+**USFA exception.** Unryu (washi) is the furthest outlier from the cotton-rag training
+distribution (spectral distance to centroid = 32.9 vs median ≈ 20). Fine-tuning the
+substrate latent overshoots: anchors pull the latent into a localised region that fits
+S1 patches but misses mid-gamut coverage. Higher `l2_init` (0.5–1.0) reduces the P95
+regression but cannot eliminate it. **For USFA, canonical result is a0 (no fine-tune).**
+
+The confirmation gate (−0.5 ΔE threshold) holds for in-distribution modes (WCRW,
+CanvasMatte, CanvasSatin). H10b should be disabled for OOD targets with spectral
+distance-to-centroid > 25.
+
 ### H10c (planned, Stage 2)
 
 CAE_D7 (CAE trained on OBA-cleaned spectra, OBA re-added at output) beats

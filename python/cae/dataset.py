@@ -50,8 +50,8 @@ def _idw_interpolate(
     return out
 
 
-def load_payload():
-    with open(DATA_FILE) as fh:
+def load_payload(path: "str | Path | None" = None):
+    with open(path or DATA_FILE) as fh:
         return json.load(fh)
 
 

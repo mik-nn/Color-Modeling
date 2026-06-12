@@ -58,8 +58,11 @@ Empirical spectral predictors + Conditional Autoencoder. Best results: CAE_D7 me
 - [x] A3 / D1 / B3 / C7 predictors + anchor strategies S1–S4 (`lib/predict/`, `lib/sampling/`).
 - [x] CAE_RAW, CAE_D7, per-mode variants (commit 706a51b: `python/cae/cv_train.py`, per-preset pools).
 - [x] H10b anchor fine-tune (in `lib/predict/cae.ts`; Adam, 200 steps, lr=0.05).
-- [ ] Batch runner over all 702 directed pairs to test H4 (≥80% ≤1.5) / H8 / H9 fully.
+- [x] CGATS cross-grid alignment: `cgatsParser.ts` `SAMPLE_ID = RGB_{R}_{G}_{B}` + `TransferView.tsx` paper detection by exact RGB(255,255,255) device-value lookup (2026-06-12).
+- [ ] Re-run batch runner over all 702 directed pairs after CGATS fix (H4 aggregate stats now stale).
 - [ ] UI mode selector for per-mode CAE_D7 weight loading (`frontend/src/data/cae_weights_d7_*.json`).
+- [ ] Re-generate `evaluate_d7_USFA.json` + `evaluate_d7_PremiumLuster_test.json` from correct weights (currently duplicates of `evaluate_d7.json`).
+- [ ] H16: per-substrate YN exponent at 640–680 nm — write `scripts/experiments/h16_redband_yn.ts`.
 
 ## Phase 2″ — Print-mode taxonomy + cross-vendor comparison (H11) — **CONFIRMED**
 
