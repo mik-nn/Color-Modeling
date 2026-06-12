@@ -1,6 +1,6 @@
 # IMPLEMENTATION.md — Code Map
 
-> Snapshot of what each module does, as of commit f8cb1e8 (May 2026). See
+> Snapshot of what each module does, as of 2026-06-12 (H18). See
 > `docs/progress-log.md` for the history that produced this state.
 
 ---
@@ -80,7 +80,7 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 | File                               | Predictor | Purpose                                                                                                                                                                              |
 | ---------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `lib/predict/perLambdaAffine.ts`   | **A3** | Per-wavelength affine: `R_B(λ) ≈ α(λ) · R_A(λ) + β(λ)`. 72 free params. Baseline empirical model; no structural assumption.                                                         |
-| `lib/predict/paperRatioResidual.ts` | **D1** | Paper-relative ratio + rank-≤3 PCA residual. Exploits multiplicative substrate model: `R_B ≈ (R_paper_B / R_paper_A) ⊙ R_A + PCA residual` (H4). Works best on non-OBA pairs. |
+| `lib/predict/paperRatioResidual.ts` | **D1** | Paper-relative ratio + rank-≤N PCA residual (`residualRank`, default 5). Exploits multiplicative substrate model: `R_B ≈ (R_paper_B / R_paper_A) ⊙ R_A + PCA residual` (H4). Works best on non-OBA pairs. Default rank=5 comes from H5 (median effective rank). Per-band UV clamp on 380–410 nm (`uvBandCount=4` in TransferView). **Limitation (H18):** error scales monotonically with total ink coverage (C+M+Y); P95 reaches 6–8 ΔE00 at maximum ink density regardless of gamut sector. |
 | `lib/predict/poolPCATransfer.ts`   | **B3** | Pool-PCA basis (all 27 profiles) vs reference-only PCA. Chosen when paper-white ΔE76 > 5; tests H6.                                                                                |
 | `lib/predict/perLambdaCurve.ts`    | **C7** | Per-λ monotone curve fitted from anchors. Paired with S3 ramp anchors; minimal-measurement cross-substrate (H9). Fits `f_λ(A→B)` per wavelength, applies uniformly.                 |
 | `lib/predict/cae.ts`               | **CAE_D7** | Conditional Autoencoder, trained per-print-mode on D7-cleaned profiles (commit 706a51b). Architecture: substrate encoder [paper(36) + ID(N)] → 8-dim latent; spectrum encoder [R(36) + RGB(3) + sub_lat(8)] → 16-dim latent; decoder → R(36). H10b: fine-tune `substrate_latent_B` on k=13 S1 anchors at inference (Adam, 200 steps, lr=0.05). Per-mode pools (WCRW/USFA/CanvasMatte) + L2 regularisation (`--l2-init 0.1` default). `CAEForward` class is exported for direct use in LOO optimizer. |
@@ -101,6 +101,22 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 | `lib/experiments/kSweep.ts` | `runKSweep(profiles, opts)` — enumerate directed profile pairs, classify same-mode/cross-mode via `canonicalPrintMode`, run greedy and D-optimal anchor strategies for each predictor (D1/C7) at each k in `kGrid`, aggregate pass-fraction and median ΔE00. `dOptimalAnchors(X_A, N, L, paperRowIdx, k)` — greedy Gram-Schmidt in PCA space of `X_A`, maximises volume in leading PC subspace (proxy for residual space). Returns `KSweepResult` with `perK` rows and `minKToPass` summary. H4 gate: median ≤1.5 AND p95 ≤3.0. |
 | `lib/experiments/kSweep.worker.ts` | Web Worker wrapper for `runKSweep`. Posts `{type:'progress', done, total}` ticks and `{type:'done', result}`. Keeps sweep off the main thread. |
 | `lib/experiments/kSweep.test.ts` | 9 unit tests: `dOptimalAnchors` invariants + `runKSweep` on 60-patch synthetic fixture (minimum-overlap guard: `al.N < 50` aborts alignment via `alignProfiles`). |
+
+### 2.4.4 Standalone diagnostic experiment scripts (`scripts/experiments/`)
+
+Each script is run via `npx tsx scripts/experiments/<name>.ts` from `frontend/`. Results are
+appended to `docs/EXPERIMENTS.md` and written to `data/cae-input/<name>.json`.
+
+| File | Hypothesis | Purpose & key result |
+| ---- | ---------- | -------------------- |
+| `h12_oba_scale.ts` | H12 | OBA scale anchor strategy (S4). Rejected: Lab-saturation anchors hurt OBA-disparate pairs. |
+| `h13_diagnose.ts` | H13 | D1 residual rank sweep 1–10 on CanvasMatte same-mode pairs. Confirmed median effective rank ≈5 (H5). |
+| `h13_m0m2.ts` | H13b/c | M0/M2 OBA emission model at anchors. Full-mode batch (98 BC same-mode pairs). D7 default ON. |
+| `h14_ink_diagnostic.ts` | H14 | CAE_LOO dynamic substrate latent optimization. Confirms H14 invariant: common RGB grid required. |
+| `h15_cyan_anchors.ts` | H15 | S1 + 4 cyan-ramp anchors (S5). Rejected: no P95 improvement on Canvas Matte; multiplicative model structurally biased. |
+| `h16_redband_yn.ts` | H16 | Per-substrate YN exponent at 640–680 nm from cyan ramp. Rejected: catastrophic regression on M-laden patches (unmasked), null effect (masked). |
+| `h17_residual_bands.ts` | H17 | Per-band spectral error decomposition for P95 group. Rejected as stated: UV/VIS ratio=0.933. Unexpected: error concentrated at 530–580 nm in dark blue-violet (C+M-heavy) patches. |
+| `h18_ink_coverage.ts` | H18 | Spearman correlation (ink vs ΔE00 / 530–580nm err) + S1 augmented with 3 high-CMY anchors. H18a confirmed (r=0.712), H18b rejected (r=−0.12), H18c confirmed (P95 6.42→4.79, Δ=1.63). |
 
 ### 2.5 UI components
 
