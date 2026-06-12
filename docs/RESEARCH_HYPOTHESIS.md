@@ -824,9 +824,48 @@ a different approach is needed.
 - **Reject:** UV/OBA error < 1.5× VIS error in P95 patches → OBA is not the primary
   driver; structural visible-range mismatch dominates.
 
-### Script
+### H17 script
 
 `frontend/scripts/experiments/h17_residual_bands.ts`
+
+### H17 result — **REJECTED (2026-06-12)**
+
+`h17_residual_bands.ts` executed: 905 patches aligned, k=13 S1 anchors, D1 rank-5 UV-clamp-4 D7 OBA.
+
+**D1 baseline on this pair:** median = 1.886, P95 = 6.419.
+
+**UV/VIS ratio for P95 group: 0.933** — far below the 2.0 threshold. H17 claim is refuted.
+
+**Actual spectral pattern in P95 patches:**
+
+| Band range | Mean |err| in P95 group | Ratio vs dataset mean |
+| --- | --- | --- |
+| 380–430 nm (UV/OBA) | 0.0150 | 0.93× (below average) |
+| 530–580 nm (green-yellow) | 0.0205–0.0234 | **1.28–1.56×** (elevated) |
+| 640–730 nm (red) | 0.0147–0.0170 | 0.79–0.86× |
+
+Top-5 bands by P95-group error: **570 nm, 580 nm, 540 nm, 560 nm, 380 nm**.
+
+**Worst 10 patches** (device values): all in the range R=31–63, G=0–28, B=63–191 — the
+dark blue/violet gamut boundary (heavy C+M, moderate Y coverage).
+
+**Conclusion:** The D7 OBA correction is working — UV/OBA error in P95 patches is
+*below* dataset average (ratio 0.93). The P95 residual is a **visible-range green-yellow
+mismatch at high CMY density**, not an OBA-fluorescence issue. ChromataWhite (bright-coated
+substrate) and DecorMatte (natural matte) have different ink-absorption behaviour at the
+C+M gamut boundary (530–580 nm where both C and M absorb), which the paper-ratio D1 model
+cannot capture with rank-5 residuals. OBA-targeted anchors (D-optimal on UV-band SVDs,
+H13c M2 anchors) would not help here.
+
+**Implication for next step:** The remaining ~1–2 ΔE00 P95 gap on CanvasMatte OBA-disparate
+pairs is likely driven by two mechanisms operating in *different* patch sectors:
+
+1. **UV (380–430 nm)**: handled adequately by D7 + rank-5 residual.
+2. **VIS green-yellow (530–580 nm) at high C+M coverage**: not addressed by any current predictor.
+
+Candidate H18: verify whether the gamut-boundary mismatch at 530–580 nm correlates with
+**total ink coverage** (C + M + Y device sum), and whether adding 2–3 high-ink-density
+chromatic anchors (near R≈40, G≈0, B≈100–200) to S1 closes the gap.
 
 ---
 

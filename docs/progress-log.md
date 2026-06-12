@@ -6,6 +6,36 @@
 
 ---
 
+## 2026-06-12 (cont.) — H17 написан и отклонён; неожиданная находка: P95 = green-yellow VIS, не OBA
+
+**Написан и запущен** `frontend/scripts/experiments/h17_residual_bands.ts`:
+
+- Пара: `BC_DecorMatte_P9000_mk_CanvasMatte` → `BC_ChromataWhite_P9000_mk_CanvasMatte`.
+- D1 baseline: median=1.886, P95=6.419. OBA mismatch=0.179.
+- Результат: UV/VIS ratio в P95-группе = **0.933** (< 1.0 — ниже среднего!).
+- D7 OBA-коррекция работает — UV-ошибка в P95-патчах не повышена.
+
+**Неожиданная находка:** P95-ошибка сосредоточена в **530–580 nm (green-yellow visible)**, а не в UV.
+Worst-10 патчи — тёмно-синие/фиолетовые (R=31–63, G=0–28, B=63–191) = тяжёлое C+M покрытие.
+При 530–580 nm циан И маджента поглощают одновременно; paper-ratio D1 не улавливает нелинейность
+взаимодействия высокой плотности C+M на ChromataWhite (coated) vs DecorMatte (matte natural).
+
+**Вывод по гипотезам:**
+
+- H17 **ОТКЛОНЕНА** как сформулирована (OBA-доминанта не подтверждена).
+- Стратегии OBA-ориентированных якорей (D-optimal по UV-SVD, H13c M2) не помогут этой паре.
+- Нарратив «OBA-mismatch как main driver» для DecorMatte↔ChromataWhite пересмотрен.
+
+**Следующий шаг (H18):** Проверить, коррелирует ли ошибка 530–580 nm с суммарным ink coverage
+(C+M+Y device sum). Добавить 2–3 high-CMY якоря (R≈40, G≈0, B≈100–200) к S1 и проверить,
+закрывает ли это P95 gap.
+
+→ `docs/EXPERIMENTS.md`: строка H17 добавлена.
+→ `docs/RESEARCH_HYPOTHESIS.md`: H17 раздел обновлён с результатами и кандидатом H18.
+→ `docs/ROADMAP.md`: H17 помечена как завершена (rejected), H18 добавлена как open item.
+
+---
+
 ## 2026-06-12 (cont.) — H16 скрипт написан; нестыковки устранены
 
 **Написан** `frontend/scripts/experiments/h16_redband_yn.ts`:

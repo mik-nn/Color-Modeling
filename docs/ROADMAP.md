@@ -63,7 +63,8 @@ Empirical spectral predictors + Conditional Autoencoder. Best results: CAE_D7 me
 - [x] Re-generate all per-mode evaluate JSONs from correct per-mode weights; `evaluate.py` gains `--mode` + `--payload` + `_test` set suffix (2026-06-12).
 - [ ] UI mode selector for per-mode CAE_D7 weight loading (`frontend/src/data/cae_weights_d7_*.json`).
 - [x] H16: per-substrate YN exponent at 640–680 nm — **REJECTED** (2026-06-12). Null effect on P95; P95 driver is OBA-mismatch in chromatic patches, not 640–680nm YN nonlinearity.
-- [ ] **H17 (next):** Spectral residual band analysis on DecorMatte→ChromataWhite (worst pair, P95=6.42). Identify which λ drive P95. Candidate fix: D-optimal anchor selection targeting OBA-band SVD components; or H13c measured OBA emission from M2 anchors on OBA-disparate pairs.
+- [x] **H17:** Spectral residual band analysis on DecorMatte→ChromataWhite — **REJECTED as stated** (2026-06-12). UV/VIS ratio=0.933 in P95 group (OBA-dominance hypothesis wrong). Unexpected finding: P95 error concentrated at 530–580 nm (green-yellow VIS) in dark blue/violet gamut-boundary patches (R=31–63, G=0–28, B=63–191, heavy C+M). D7 OBA correction works; the gap is nonlinear ink-substrate interaction at high CMY density.
+- [ ] **H18 (next):** Check whether 530–580 nm error correlates with total ink coverage (C+M+Y); test whether adding 2–3 high-CMY-density chromatic anchors (R≈40, G≈0, B≈100–200) to S1 closes the P95 gap on DecorMatte→ChromataWhite.
 
 ## Phase 2″ — Print-mode taxonomy + cross-vendor comparison (H11) — **CONFIRMED**
 
