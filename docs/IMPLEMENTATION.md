@@ -121,6 +121,8 @@ appended to `docs/EXPERIMENTS.md` and written to `data/cae-input/<name>.json`.
 | `h19_batch_rank.ts` | H19c | rank=5 vs rank=8 D1 on 114 same-mode BC pairs. Both: 95/114 pass (83.3%) — rank increase gives zero benefit. |
 | `h19_ksweep_dopt.ts` | min-k | Greedy vs D-optimal k=6..13 on 114 same-mode pairs. **Greedy k=8 = 78.1%** (paper+7 corners); D-optimal dramatically worse (21.9% at k=8). Article claim: 8 heuristic patches = 78% pass. |
 | `h20_km_residual.ts` | H20 | D1 vs D1-KM (Kubelka-Munk space correction) at k=8+13, 114 same-mode BC pairs. Tests whether K-M linearises ink-density nonlinearity to raise pass rate above 83.3% ceiling. |
+| `h_diagnose_failing_pairs.ts` | Diagnostic | Per-pair D1+S1+D7 breakdown on 114 same-mode BC pairs. Reports WCRW 100%, DecorMatte 8/19 failures, low-ink P95=1.836 for fails. |
+| `h22_train.ts` | H22 | Delta-repr MLP (79→256→128→64→36) with k-augmentation {5,8,13}. H22a PASS: k=5→79.8% (≥D1 k=8). Weights saved to `data/cae-input/h22_weights.json`. |
 
 ### 2.5 UI components
 

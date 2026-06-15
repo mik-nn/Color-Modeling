@@ -25,6 +25,7 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@tensorflow/tfjs-node": "^4.22.0",
     "@testing-library/jest-dom": "^6.4.0",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.0",

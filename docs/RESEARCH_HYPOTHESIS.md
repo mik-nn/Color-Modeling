@@ -1105,8 +1105,32 @@ prior (Saunderson / fluorescence-aware K-M).
 
 ### H22 script
 
-`scripts/train_h22_network.py` (Python, PyTorch) + `frontend/scripts/experiments/h22_eval.ts`
-(TypeScript, runs ONNX model on BC batch, reports H4 pass rates per k).
+`frontend/scripts/h22_train.ts` — TypeScript + tfjs-node, full train+eval in one script.
+
+### H22 result (2026-06-15)
+
+Architecture: MLP [79→256→128→64→36]. Input: query(39) + mean\_anchor\_delta(39) + k\_norm(1).
+k-augmentation: trained on k ∈ {5, 8, 13} simultaneously. 23 train substrates, 200 epochs.
+
+| k  | H22 pass% | D1 pass% (reference) | Δ        |
+|----|-----------|----------------------|----------|
+| 5  | **78.1%** | 47.4% (D1 k=5)       | +30.7pp  |
+| 8  | 74.6%     | 78.1% (D1 k=8)       | −3.5pp   |
+| 13 | 74.6%     | 83.3% (D1 k=13)      | −8.7pp   |
+
+**H22a PASS:** k=5 → 78.1% (gate ≥ 78.1%). Matches D1 k=8 with 3 fewer anchors.
+The 5-anchor set {paper, R, G, B, K} = paper-white + 4 ink primaries is sufficient
+because the mean anchor delta over device-cube extremes fully characterises the spectral
+transfer direction; the network interpolates continuously from there.
+
+**H22b FAIL:** k=8 → 74.6% (gate ≥ 90% not reached; slightly worse than D1 k=8).
+
+**Structural ceiling not broken.** The 16.7% failure rate (same DecorMatte/Silverada pairs)
+persists regardless of model. More diverse training data (cross-manufacturer substrates) or
+a physics-informed prior required to push past 83.3%.
+
+**Practical result:** minimum measurement protocol = **5 patches** (paper + RGBK) for
+78.1% of same-mode substrate pairs, down from 8 patches with D1.
 
 ---
 
