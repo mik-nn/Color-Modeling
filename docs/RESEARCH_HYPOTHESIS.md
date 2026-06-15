@@ -976,6 +976,138 @@ H4 pass rate (median ≤ 1.5 ∧ P95 ≤ 3.0) from 80.6% to ≥ 85% without any 
 `frontend/scripts/experiments/h19_high_y_anchors.ts` (single-pair, 4 variants) and
 `frontend/scripts/experiments/h19_batch_rank.ts` (98-pair rank sweep).
 
+### H19 results (2026-06-15)
+
+- H19a: heavy-Y augmentation **REJECTED** — P95 regressed (worse, not better).
+- H19b: rank=8 **REJECTED** — ΔP95 < gate (missed by 0.066 ΔE₀₀).
+- H19c: batch rank comparison — 83.3% at rank=5 = 83.3% at rank=8. Rank not the bottleneck.
+- D-optimal k-sweep: greedy k=8 = **78.1%** pass; D-opt k=8 = 21.9% (structural corners required).
+- **Ceiling**: 83.3% at k=13 is structural — linear correction on nonlinear ink physics.
+
+---
+
+## H20 — Kubelka-Munk space paper correction (D1-KM) (2026-06-15)
+
+**Motivation:** H18 + H19 establish that D1's linear PCA residual fails at high ink density
+(Spearman(total\_ink, ΔE₀₀) = 0.712) and no linear intervention (more anchors, higher rank)
+moves the 83.3% ceiling. The root cause is the paper-ratio model itself: it assumes spectral
+multiplicativity (R\_B ∝ R\_A per λ), which breaks as ink absorption saturates. Kubelka-Munk
+two-flux theory predicts that a substrate change acts as an *additive* shift in K-M remission
+space, not a multiplicative one in reflectance space.
+
+**Model (D1-KM):**
+$$K/S(R) = \frac{(1-R)^2}{2R}, \quad R(K/S) = 1 + K/S - \sqrt{(K/S)^2 + 2 \cdot K/S}$$
+
+Paper correction in K-M space (1 anchor):
+$$\widehat{KS}_B(i,\lambda) = KS_A(i,\lambda) + \Delta KS_{\text{paper}}(\lambda)$$
+where $\Delta KS_{\text{paper}}(\lambda) = KS_{B,\text{paper}}(\lambda) - KS_{A,\text{paper}}(\lambda)$.
+
+Residual correction: same PCA+kNN structure as D1 but fit on $\Delta KS$ residuals at
+non-paper anchors. OBA subtraction/addition remains in reflectance space (before/after K-M
+transform).
+
+**H20a:** D1-KM at k=8 greedy (S1) achieves H4 pass rate ≥ **85%** (vs 78.1% for D1 at k=8)
+across 114 same-mode BC pairs.
+
+**H20b:** D1-KM at k=8 provides ΔP95 ≤ −1.0 ΔE₀₀ on high-ink patches
+(total CMY coverage > 1.5 out of 3.0 max).
+
+### Acceptance & falsification
+
+| Part  | Pass                                     | Fail                                              |
+|-------|------------------------------------------|---------------------------------------------------|
+| H20a  | Batch H4 pass ≥ 85% at k=8 D1-KM        | ≤ 78.5% (no meaningful improvement vs D1 k=8)    |
+| H20b  | P95 on high-ink tercile drops ≥ 1.0 ΔE₀₀ | < 0.5 ΔE₀₀ improvement on high-ink patches       |
+
+Falsification implication: if H20 fails, K-M linearity in KS space does not hold for these
+substrates (likely due to surface scattering or OBA making simple two-flux inapplicable).
+Next step then becomes H22 (neural).
+
+### H20 script
+
+`frontend/scripts/experiments/h20_km_residual.ts` — batch comparison D1 vs D1-KM at k=8+13,
+114 same-mode BC pairs.
+
+### H20 result (2026-06-15) — REJECTED
+
+| k  | D1 pass% | D1-KM pass% | D1 med | KM med  |
+|----|----------|-------------|--------|---------|
+| 8  | 78.1%    | **0.0%**    | 0.908  | 7.963   |
+| 13 | 83.3%    | **3.5%**    | 0.869  | 2.516   |
+
+D1-KM catastrophically fails. Root cause: K/S=(1−R)²/(2R) diverges as R→0. Dark-ink anchor
+patches (R≈0.03) have K/S≈16; their ΔKS residuals are enormous. kNN interpolation in RGB
+space spreads these huge K-M corrections to mid-tone patches, collapsing predicted reflectance
+near zero (median ΔE₀₀ = 7.963 at k=8 vs 0.908 for D1).
+
+Physical conclusion: simple two-flux K-M does not hold for glossy inkjet. Inks here are
+transparent absorbers, not turbid scatterers — the K-M turbid-medium assumption is violated.
+K/S values span 3–4 orders of magnitude across the patch grid; kNN interpolation of K-M
+residuals is numerically undefined.
+
+**Consequence for H22:** K-M can not replace a learned nonlinear model. H22 (neural few-shot
+network) is now the single remaining structural path beyond D1.
+
+---
+
+## H22 — Cross-attention spectral transfer network (few-shot) (2026-06-15, pre-registered)
+
+**Motivation:** H19 + H20 (if H20 fails) establish a structural ceiling for affine/K-M models.
+User prior: ResNet for lamination-effect prediction on another print dataset demonstrated that
+learned spectral mappings can generalise across substrates when trained on sufficient pairs.
+The Epson P9000 dataset provides 27 substrates × ~50 directed same-mode pairs ≈ 1 350 source
+pairs, each contributing ~800 test patches → ~1M spectral prediction samples (leave-one-out).
+
+**Architecture (candidate):**
+
+```text
+Input query:   [source_spectrum (36), CMY_coords (3)]
+Anchor set:    k pairs × [source_j (36), target_j (36), CMY_j (3)] → k × 75
+Cross-attention: 2–4 heads, 128-dim, 2 layers
+Output:        target_spectrum (36)
+Loss:          RMSE on spectra + λ · ΔE₀₀ term
+```
+
+Alternative: small MLP with FiLM (Feature-wise Linear Modulation) conditioning on anchor
+embeddings. Simpler to train, less expressive.
+
+**Training protocol:**
+
+- Leave-one-out: train on 26 substrates, validate on held-out substrate.
+- Augmentation: random anchor subset size k ∈ {4, 5, 6, 8, 13} per batch item.
+- Normalise spectra by paper-white of source before input (paper-white conditioning).
+
+**H22a:** At k=5 anchors (paper + R + G + B + K), network achieves H4 pass rate ≥ **78.1%**
+on held-out substrates (matching D1 at k=8 with 3 fewer anchors).
+
+**H22b:** At k=8 anchors (S1), network achieves H4 pass rate ≥ **90%** (vs 78.1% for D1 at k=8).
+
+**H22c:** Minimum k for ≥ 78.1% pass is ≤ 5 (network infers interior from corners + priors).
+
+### Acceptance & falsification
+
+| Part  | Pass                                           | Fail                                                        |
+|-------|------------------------------------------------|-------------------------------------------------------------|
+| H22a  | k=5 → H4 pass ≥ 78.1% on ≥ 3 held-out substrates | < 70% on any held-out substrate (poor generalisation)   |
+| H22b  | k=8 → H4 pass ≥ 90%                           | < 85% (network not better than D1-KM at k=13)              |
+| H22c  | Minimum k ≤ 5 to match D1 k=8                 | Min k ≥ 8 (no anchor reduction benefit from learned prior)  |
+
+Falsification implication: if H22 fails at k=8, the 27-substrate dataset is insufficient for
+generalisation across this media class. Need cross-manufacturer data or a stronger physics
+prior (Saunderson / fluorescence-aware K-M).
+
+### H22 implementation notes
+
+- Framework: PyTorch or ONNX (server-side) / `onnxruntime-web` (in-browser inference).
+- Training outside this repo (Python); inference exported as ONNX model loaded by browser.
+- Pre-requisite: validate H20 first. If H20 reaches 88%+, H22 adds diminishing returns.
+- Estimated training time: < 1 h on a single GPU for 1M samples at 128-dim architecture.
+
+### H22 script
+
+`scripts/train_h22_network.py` (Python, PyTorch) + `frontend/scripts/experiments/h22_eval.ts`
+(TypeScript, runs ONNX model on BC batch, reports H4 pass rates per k).
+
 ---
 
 ## Note — M0/M2 at 380 nm (measurement artefact)

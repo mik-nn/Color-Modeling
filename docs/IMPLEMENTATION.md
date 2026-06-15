@@ -120,6 +120,7 @@ appended to `docs/EXPERIMENTS.md` and written to `data/cae-input/<name>.json`.
 | `h19_high_y_anchors.ts` | H19a/b | Heavy-Y anchors + rank=8 variants on DecorMatte→ChromataWhite. H19a rejected (P95 regresses), H19b just misses gate (ΔP95=0.934). Best combined (h19bc): P95=4.724. |
 | `h19_batch_rank.ts` | H19c | rank=5 vs rank=8 D1 on 114 same-mode BC pairs. Both: 95/114 pass (83.3%) — rank increase gives zero benefit. |
 | `h19_ksweep_dopt.ts` | min-k | Greedy vs D-optimal k=6..13 on 114 same-mode pairs. **Greedy k=8 = 78.1%** (paper+7 corners); D-optimal dramatically worse (21.9% at k=8). Article claim: 8 heuristic patches = 78% pass. |
+| `h20_km_residual.ts` | H20 | D1 vs D1-KM (Kubelka-Munk space correction) at k=8+13, 114 same-mode BC pairs. Tests whether K-M linearises ink-density nonlinearity to raise pass rate above 83.3% ceiling. |
 
 ### 2.5 UI components
 
