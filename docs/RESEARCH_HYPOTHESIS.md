@@ -322,6 +322,7 @@ because they touch all inks proportionally.
 ### First data point
 
 DecorMatte ↔ Lyve, both CanvasMatte, OBA mismatch 0.179:
+
 - A3 + S1 (k=13): median 1.54
 - C7 + S1 (k=13): median 1.28 — best at S1 budget
 - C7 + S3 neutral (k=5): median **1.06** — H9 confirmed for neutral ramp
@@ -1134,6 +1135,393 @@ a physics-informed prior required to push past 83.3%.
 
 ---
 
+## H23 — Neutral-ramp spreading divergence as primary non-metallic failure predictor
+
+**Pre-registered:** 2026-06-15
+
+### Motivation
+
+H22 diagnostic confirmed a 16.7% structural failure ceiling. H_diagnose_failing_pairs
+identified 19 failing pairs (k=13, D1 rank-5). Excluding 7 metallic-substrate pairs
+(Silverada CanvasSatin ×4, VibranceMetallic PremiumGlossy ×3) — physically distinct
+measurement geometry — leaves **12 non-metallic failing pairs**.
+
+H23 diagnostic (2026-06-15, `scripts/experiments/h23_spreading_diagnostic.ts`) showed:
+
+| Metric | Failing (non-metallic, n=12) | Passing (n≈95) |
+|--------|------------------------------|----------------|
+| ΔSpread median | **0.172** | 0.076 |
+| ΔSpread P75 | 0.248 | 0.094 |
+| ΔOBA R(380) median | 0.129 | 0.199 |
+
+**ΔSpread = ‖(Δc1, Δc2)‖₂** where c1, c2 are coefficients of the quadratic
+neutral-ramp fit at λ=560 nm: `R_norm(560, a) = 1 + c1·a + c2·a²`,
+`a = (255 − RGB) / 255` for neutral patches (R=G=B).
+
+**OBA Δ R(380) does NOT predict failure** — passing pairs have higher median ΔOBA than
+failing. This falsifies the "structural spectral incompatibility" conclusion from H22.
+
+Key pure-spreading evidence:
+
+- ArtPeelBlckt ↔ 1930 (EnhancedMatte, ×2): ΔSpread=0.156, ΔOBA≈0.003, p95_lo=3.22–3.25
+- DecorMatte → 800M (CanvasMatte, ×2): ΔSpread=0.248, ΔOBA=0.076, p95_lo=1.59–1.84
+
+DecorMatte spreading curve is a genuine outlier within CanvasMatte:
+
+- DecorMatte: c1=−1.469, c2=0.427
+- All other CanvasMatte: c1≈−1.55 to −1.66, c2≈0.55−0.64
+
+### H23a — Spreading Δ predicts non-metallic failure (diagnostic)
+
+**Claim:** ΔSpread > 0.10 is a statistically significant binary predictor of H4 failure
+among non-metallic same-mode pairs.
+
+**Acceptance gate:** AUC > 0.75 in ROC analysis over non-metallic pairs.
+
+**Script:** extend `h23_spreading_diagnostic.ts` to output ROC/AUC over all
+non-metallic pairs.
+
+**Status:** **PASS** — AUC=0.848 > 0.75 gate. Experiment 2026-06-15.
+
+### H23b — Explicit spreading correction from neutral-ramp anchors
+
+**Claim:** Adding a spreading-correction layer to D1 — fitting (c1_B, c2_B) from ≥3
+neutral-ramp anchor patches on substrate B, then applying a per-patch multiplicative
+correction derived from the spreading ratio f_B(a) / f_A(a) — reduces ΔE and
+increases non-metallic H4 pass rate to ≥90%.
+
+**Mechanism (as tested):**
+
+    f(a; substrate) = 1 + c1·a + c2·a²        (spreading function at 560 nm only)
+    s(a) = f_B(a) / f_A(a)                    (scalar ratio, same for all λ)
+
+For patch i with effective neutral ink level `a_i = (3·255 − R − G − B) / (3·255)`:
+
+    R̂_spreading[i, λ] = R̂_paper_ratio[i, λ] · s(a_i)
+
+**Status:** **FAIL** — neither acceptance gate reached.
+
+Results from `scripts/experiments/h23_spreading_correction.ts`:
+
+| Variant | Pass rate | vs baseline |
+| ------- | --------- | ----------- |
+| Baseline D1 k=13 | 92/104 = 88.5% | — |
+| Anchor-based (6 neutral patches) | 88/104 = 84.6% | −3.9% |
+| Oracle (all 36 neutral patches) | 88/104 = 84.6% | −3.9% |
+| Oracle + dSpread>0.13 threshold | 91/104 = 87.5% | −1.0% |
+
+High-dSpread spotlight (oracle):
+
+- DecorMatte→ChromataWhite: p95 6.42→3.59 (−2.83 ΔE) — significant improvement
+- DecorMatte→BelgianLinen: p95 4.00→2.98 — **PASS** (only 1 new passing pair)
+- ArtPeelBlckt↔1930: med 2.17→1.94 (improved but still above 1.5 gate)
+
+**Root cause of failure:** Spreading is wavelength-specific. A single scalar
+`s(a)` fitted at λ=560 nm and applied uniformly to all 36 bands is incorrect:
+
+1. Dot-gain curves c1(λ), c2(λ) vary across wavelengths — each ink absorbs differently
+2. OBA fluorescence (UV-band, λ<450 nm) cannot be described by a neutral-ramp
+   quadratic at 560 nm; OBA contribution has a different sign/magnitude there
+3. The uniform scalar creates regressions on borderline-passing pairs where the
+   spreading correction is small but has the wrong spectral shape
+
+The hypothesis is partially confirmed at the diagnostic level (H23a: AUC=0.848)
+but the **correction mechanism** is insufficient. See H24.
+
+---
+
+## H24 — Per-wavelength spreading correction (neutral-ramp per-λ fit)
+
+**Pre-registered:** 2026-06-15
+
+### Rationale
+
+H23b showed that a single scalar `s(a)` fitted at λ=560 nm is insufficient because:
+
+- Dot-gain `c1(λ)` and `c2(λ)` vary across wavelengths (ink absorption is spectrally selective)
+- OBA fluorescence contributes additively at λ<450 nm — a different functional form
+  from dot-gain absorption; fitting at 560 nm gives zero signal for OBA
+
+The correct model: fit independent quadratic spreading curves at **each of the 36 wavelength
+bands** from neutral-ramp patches, then apply the per-λ correction.
+
+### Mechanism
+
+For each wavelength λ ∈ {380, 390, …, 730} nm, fit from neutral patches of substrate X:
+
+    f(a, λ; X) = 1 + c1(λ; X) · a + c2(λ; X) · a²        (no bias — f(0,λ)=1 by construction)
+
+where `a = (255 − RGB) / 255` for neutral patch with RGB = R = G = B.
+
+Per-λ spreading ratio applied to patch i:
+
+    s(a_i, λ) = clamp( f_B(a_i, λ) / f_A(a_i, λ), 0.5, 2.0 )
+    R̂_corr[i, λ] = R̂_paper_ratio[i, λ] · s(a_i, λ)
+
+This correctly captures:
+
+- Wavelength-dependent dot gain (each ink's absorption peak affects c1(λ) differently)
+- OBA: at λ=380–420 nm, paper_B > paper_A → f_B/f_A > 1 → correction adds UV boost
+- Low-correction bypass: if ‖c1_B(λ) − c1_A(λ)‖ is small at a given λ, s≈1 → no change
+
+### Acceptance gate
+
+- ArtPeelBlckt↔1930 corrected med ≤ 1.5
+- Non-metallic H4 pass rate ≥ 90% (oracle: all neutral patches)
+- Oracle pass rate ≥ 88.5% (≥ baseline, no regressions)
+
+### Data requirement
+
+Needs ≥ 4 neutral patches at different ink densities (a ≈ 0.0, 0.25, 0.5, 0.75, 1.0).
+With 36 neutral patches available in the BC profiles, the per-λ fit is well-conditioned
+(36 observations, 2 free parameters per band).
+
+For the practical k=5 deployment: neutral ramp = paper + 3 neutral grays (RGB=R=G=B with
+R=192, 128, 64) — minimum 4 anchors for a stable 2-parameter fit per wavelength.
+
+**Script:** `scripts/experiments/h24_spreading_per_lambda.ts`
+
+**Status:** **PARTIAL** — experiment run 2026-06-15.
+
+Results (oracle: all 36 neutral patches, threshold dSpread560 > 0.10, 28 of 104 pairs corrected):
+
+| Gate | Result |
+| ---- | ------ |
+| No regressions (≥ baseline) | **PASS** — 0 regressions, 92/104=88.5% |
+| ArtPeelBlckt corrected med ≤ 1.5 | FAIL — med=1.82 (improved from 2.17) |
+| Non-metallic pass rate ≥ 90% | FAIL — 88.5% |
+
+Key improvements vs baseline:
+
+- DecorMatte→ChromataWhite: Δp95=−2.89 (6.42→3.53)
+- 1930→ArtPeelBlckt: Δp95=−1.45, Δmed=−0.36 (2.17→1.82)
+- DecorMatte→800M: Δp95=−1.65 (5.16→3.51)
+- 0 regressions (vs 5 in H23b scalar correction)
+
+Remaining gap: all DecorMatte group p95 = 3.05–4.02 (gate 3.0). Neutral-ramp
+quadratic captures combined-channel spreading but not per-channel differences
+(C vs M vs Y). High-CMY chromatic patches retain residual error. See H25.
+
+---
+
+### H23/H24 Scope exclusion
+
+Metallic substrates (Silverada, VibranceMetallic) are excluded from H23/H24 scope.
+Their neutral-ramp spreading curves are nearly identical to other substrates in the same
+mode (CanvasSatin all c1≈−2.02, c2≈1.05), yet they fail — indicating a different
+physical mechanism (metallic surface scattering geometry, not ink spreading). Separate
+investigation required; outside the scope of this ink-physics decomposition.
+
+---
+
+## H25 — Per-channel spreading correction (C/M/Y ramps, per-λ)
+
+**Pre-registered:** 2026-06-15
+
+### Rationale
+
+H24 proved that per-λ spreading correction is the correct model form (zero regressions,
+significant improvement on DecorMatte group). But the neutral-ramp quadratic gives ONE
+proxy for combined-channel spreading: `a_eff = (3·255 − R − G − B) / (3·255)`.
+
+For a chromatic patch such as (R=30, G=0, B=190):
+
+- a_C = (255−30)/255 = 0.882
+- a_M = (255−0)/255 = 1.000
+- a_Y = (255−190)/255 = 0.255
+- a_eff_neutral = (765−30−0−190)/765 = 0.706
+
+The neutral proxy (0.706) under-represents C and M, over-represents Y at this point.
+Per-channel: each ink spreads independently at its own density.
+
+Physical basis: in CMY subtractive model, ink spreading is per-colorant. The Yule-Nielsen
+exponent and dot-gain curve reflect the ink–substrate system for each pigment independently
+(different absorption spectra → different interaction with substrate chemistry).
+
+The 905-patch grid contains full single-channel ramps (verified 2026-06-15):
+
+| Channel | Pure-channel patches | Density range |
+| ------- | -------------------- | ------------- |
+| C | 9 patches (G=B=255, R=0,31,63,…,255) | a_C = 0 → 1 |
+| M | 10 patches (R=B=255, G=0,28,56,…,255) | a_M = 0 → 1 |
+| Y | 9 patches (R=G=255, B=0,31,63,…,255) | a_Y = 0 → 1 |
+| Neutral | 25 patches (R=G=B) | a = 0 → 1 |
+
+### Mechanism
+
+For each channel X ∈ {C, M, Y} and each wavelength λ:
+
+    f_X(a_X, λ; substrate) = 1 + c1_X(λ) · a_X + c2_X(λ) · a_X²
+
+where `a_C = (255−R)/255`, `a_M = (255−G)/255`, `a_Y = (255−B)/255`.
+
+Fit from the single-channel ramp patches of that substrate (9–10 data points per λ
+per channel — well-conditioned for a 2-parameter quadratic).
+
+Per-patch per-λ correction for patch i:
+
+    s_X(a_X, λ) = clamp( f_B_X(a_X, λ) / f_A_X(a_X, λ), 0.5, 2.0 )
+
+Ink-weighted composition (avoids multiplicative overcorrection at high density):
+
+    w_tot = a_C + a_M + a_Y  (total ink weight)
+    s_total(a_C, a_M, a_Y, λ) = (a_C · s_C + a_M · s_M + a_Y · s_Y) / max(w_tot, ε)
+
+For neutral patches (a_C = a_M = a_Y = a): s_total = (s_C + s_M + s_Y) / 3 — mean of channels.
+For paper (a_C = a_M = a_Y = 0): s_total undefined → no correction (same as H24).
+
+Threshold: apply only when `max(|s_C−1|, |s_M−1|, |s_Y−1|) > δ` (prevents noise
+from small spreading differences; exact value TBD experimentally).
+
+### Anchor requirements for deployment (practical k budget)
+
+The S1 heuristic already picks the **max-density endpoint** of each channel ramp:
+
+- cyan = (0,255,255): a_C = 1.0, verified dist=0 in 905-patch grid
+- magenta = (255,0,255): a_M = 1.0, verified dist=0
+- yellow = (255,255,0): a_Y = 1.0, verified dist=0
+
+Missing for a proper per-channel quadratic fit — 50%-density points:
+
+- C-50%: nearest to (128,255,255) = (127,255,255), dist=1
+- M-50%: nearest to (255,128,255) = (255,113,255), dist=13 (M=0.557)
+- Y-50%: nearest to (255,255,128) = (255,255,127), dist=1
+
+In oracle mode (all 905 patches available): use all 9 C-ramp, 10 M-ramp, 9 Y-ramp points.
+
+In k=5 deployment mode: paper + {C, M, Y} max + {C-50% or M-50% or Y-50%} → 5–7 patches.
+
+Note: the user's proposed anchor **(0,112,112) = C=1, M=0.557, Y=0.502** (nearest: (0,113,127),
+dist=16) is NOT a single-channel point. It sits in the C=1 interior face and captures
+C-channel behavior under partial M+Y load. Useful for characterising channel interaction
+but requires a different fitting model (cannot isolate M or Y spreading from it).
+
+### Acceptance gates
+
+- Gate 1: ArtPeelBlckt↔1930 corrected med ≤ 1.5
+- Gate 2: Non-metallic pass rate ≥ 90%
+- Gate 3: No regressions (≥ baseline 88.5%)
+
+**Script:** `scripts/experiments/h25_spreading_per_channel.ts`
+
+**Status:** **FAIL** — experiment run 2026-06-15.
+
+Results (oracle, dSpread560 > 0.10, 16 of 104 pairs corrected):
+
+| Gate | Result |
+| ---- | ------ |
+| No regressions | PASS — 0 regressions, 92/104=88.5% |
+| ArtPeelBlckt corrected med ≤ 1.5 | FAIL — med=1.91/1.87 |
+| Non-metallic pass rate ≥ 90% | FAIL — 88.5% |
+
+**Critically WORSE than H24 on spotlight pairs:**
+
+- DecorMatte→ChromataWhite: Δp95=−0.14 (H24 per-λ neutral gave −2.89)
+- BelgianLinen→DecorMatte: Δp95=+0.72 (regression)
+- DecorMatte→Lyve: Δp95=+0.51 (regression)
+
+Root cause: the ink-weighted average `(a_C·s_C + a_M·s_M + a_Y·s_Y) / w_tot`
+assumes per-channel spreading is additive. It is NOT. When C+M+Y inks are
+printed simultaneously, they compete for absorption sites on rough substrate
+surfaces — the combined spreading is less than the sum of individual channels.
+The neutral ramp (R=G=B) captures these ink-on-ink interactions directly; the
+per-channel ramp measures single-ink behavior without co-print load.
+
+**Conclusion: neutral ramp is the correct spreading basis for multi-ink systems.**
+H24 (neutral per-λ) remains the best spreading correction found.
+
+---
+
+## H26 — H22 anchor-composition nonlinearity analysis (2026-06-15)
+
+### Statement
+
+The H22 MLP's mean-delta architecture captures inter-substrate spectral nonlinearity that
+D1's linear layers miss. Specifically: (a) H22 k=5 should uniquely pass pairs that D1 k=13
+fails; (b) replacing S1-ordered k=5 anchors with CMY-primary-ordered anchors (paper + C +
+M + Y + black) should improve H22's ability to capture per-channel spreading differences via
+the mean_delta feature.
+
+### Acceptance gates
+
+- Gate A: H22 k=5 S1 uniquely passes ≥ 1 pair that D1 k=13 fails (H22-only > 0)
+- Gate B: H22 k=5 CMY-primary ≥ H22 k=5 S1 pass rate
+
+### Rationale
+
+CMY primaries {paper, (0,255,255), (255,0,255), (255,255,0), (0,0,0)} provide pure per-channel
+spreading information (single-ink channels + full black). S1 k=5 = {paper, R(M+Y), G(C+Y),
+B(C+M), cyan(C)} — missing pure M and Y channels. Mean_delta over CMY primaries should carry
+more informative per-channel spreading signal. This tests whether H22 generalizes from
+mean_delta features or memorizes specific anchor compositions.
+
+### Script
+
+`scripts/experiments/h22_anchor_comparison.ts` (2026-06-15)
+
+### Status: **FAIL (both gates)**
+
+**Results (104 non-metallic same-mode pairs):**
+
+| Method | Pass | % |
+|---|---|---|
+| D1 k=13 | 92/104 | 88.5% |
+| H22 k=5 S1 (paper+R+G+B+cyan) | 88/104 | 84.6% |
+| H22 k=5 CMY-primary (paper+C+M+Y+black) | 0/104 | **0.0%** |
+| H22 k=8 S1 | 87/104 | 83.7% |
+
+**Cross-tab D1 vs H22 k=5 S1:**
+
+| | H22 pass | H22 fail |
+|---|---|---|
+| D1 pass | 88 | 4 |
+| D1 fail | **0** | 12 |
+
+H22-only = **0**: the neural network uniquely passes zero pairs. D1 is strictly better.
+
+D1-only = 4: PhotoPeelGloss↔VibranceGloss (H22 p95=5.2–5.7 vs D1 2.3–2.4), 17MSatin/17MGloss→Crystalline
+(H22 p95=3.2–3.5 vs D1 2.6–2.7). D1's Layer 3 IDW correction is decisive for these pairs.
+
+**CMY-primary: 0%** — complete OOD failure. The model memorizes anchor composition, not a
+general transfer function. When given mean_delta over {paper,C,M,Y,black} (never seen during
+training), all outputs are meaningless.
+
+**k=8 S1 WORSE than k=5** (87 vs 88 pairs): 1-pair degradation at k=8 vs k=5 is marginal
+but counter-intuitive. Consistent with anchor-specific memorization: the model's k-conditional
+behavior is tied to the specific anchor subsets seen during training.
+
+### Root cause
+
+H22's mean_delta architecture compresses k anchor deltas into a single 39-dimensional mean
+vector. This loses:
+
+1. **Spatial information**: which anchor the delta came from (device-space location)
+2. **Local nonlinearity**: D1 Layer 3 IDW interpolates locally in CMY space; H22 can only apply
+   global correction
+3. **Anchor-invariance**: the model is NOT invariant to anchor reordering / composition changes
+
+The 4 D1-only failures all have D1 p95 = 2.3–2.7 (close to gate 3.0). IDW finds the nearest
+anchor in CMY space and applies its exact correction; H22's global mean cannot replicate this
+precision for isolated "correctable" regions.
+
+### Implication for architecture design
+
+H22 is a global model pretending to be local. The correct architecture for capturing local
+nonlinearity would be:
+
+- **Per-anchor attention**: give network the full (k × 39) anchor feature matrix, let attention
+  select which anchors matter for each query patch
+- **KNN-conditioned**: for each query patch, find nearest k anchors in CMY space, use only those
+  deltas (as D1 Layer 3 does, but learned)
+- **Invariant to anchor order/composition**: predictions should be equivariant to anchor set
+  permutations
+
+**H27 proposal**: D1 ablation — measure how much Layer 3 (IDW) contributes to the 4 D1-only
+failures by running D1 with Layer 3 disabled. If D1-no-L3 fails those 4 pairs too, this
+confirms IDW = the decisive difference.
+
+---
+
 ## Note — M0/M2 at 380 nm (measurement artefact)
 
 Independent of the ink-physics hypotheses: `mean(M0 − M2)` at 380 nm is **negative**
@@ -1219,7 +1607,6 @@ Exposed as an opt-in in TransferView once H14 work has shipped — OBA is the ch
   used only to evaluate.
 - Train/test splits are 50/50 by patch index parity unless otherwise stated (see
   `cynsn.ts:runCYNSNComparison`).
-
 
 ### Hypothesis 14: Dynamic LOO CAE Fine-Tuning per Target (Same Print Mode)
 
