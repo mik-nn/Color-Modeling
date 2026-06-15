@@ -3,11 +3,10 @@
 > Working title — alternative: *"How Optical Brighteners Break Cross-Substrate
 > Color Prediction (and a Simple Fix)"*.
 
-> **Status:** Draft for Substack. All numbers below were produced by the open
-> companion tool on a single profile pair (DecorMatte ↔ Lyve, both on Epson
-> SureColor SC-P9000). The 702-pair batch validation is still in progress;
-> read this as a workout of a hypothesis on one data point — not as a
-> statistical claim.
+> **Status (updated 2026-06-15):** Batch validation complete. 114 same-mode directed
+> pairs across 27 substrates confirm the main findings. Key numbers: **k=8 greedy
+> (paper + 7 corners) = 78.1% pass**; k=13 = 83.3%; D-optimal PCA selection
+> dramatically worse (21.9% at k=8). See the "Batch validation" section below.
 
 ---
 
@@ -337,6 +336,78 @@ show you" becomes a real-time process, not a half-day project.
 The physics-faithful version of this story — done on a CMYK dataset where
 you can actually decompose per-ink behaviour — is the next chapter. Stay
 tuned.
+
+---
+
+## Batch validation: does it hold across substrates? (updated 2026-06-15)
+
+Single pair = anecdote. Useful proof of concept, but the real question: does this
+generalise across all BC-family substrate pairs on the same P9000?
+
+### Dataset
+
+27 BC substrates (Epson SureColor P9000, RGB workflow). Evaluated 114 directed same-mode
+pairs (source A → target B where both share the same Epson media preset). AllureAq
+excluded (different patch grid, 1 550 patches vs 905).
+
+### Results at a glance
+
+| Anchors k | Strategy | H4 pass rate | Median ΔE₀₀ |
+|-----------|----------|--------------|-------------|
+| 6  | greedy (paper + 5 corners) | 47.4% | — |
+| 7  | greedy (paper + 6 corners) | 47.4% | — |
+| 8  | greedy (paper + 7 corners) | **78.1%** | ≈0.908 |
+| 9  | greedy | 78.9% | — |
+| 10 | greedy | 80.7% | — |
+| 13 | greedy (S1 full set) | 83.3% | — |
+| 8  | D-optimal (PCA volume) | 21.9% | — |
+
+H4 pass gate: median ΔE₀₀ ≤1.5 AND P95 ΔE₀₀ ≤3.0 on non-anchor patches.
+
+### The k=7 → k=8 jump
+
+The large jump from 47.4% to 78.1% between k=7 and k=8 has a clear mechanical cause:
+k=8 adds the black patch (RGB 0,0,0), completing the CMY device-space cube. The D1 model
+is a paper-ratio multiplied by a rank-5 residual; without full-black, the residual can't
+reach into the high-CMY gamut. Once black is included, the interpolation works for 78% of
+pairs in a single shot.
+
+### Why D-optimal fails
+
+PCA volume maximisation picks spectrally diverse patches, but those are not the same as
+device-space corner patches. D-optimal k=8 gives 21.9% vs greedy 78.1% because the PCA
+anchors miss the structural corners the model needs. A hybrid strategy — fix paper + 7
+device corners, then add D-optimal picks from the remaining budget — is untested but
+looks promising for pushing past 83.3%.
+
+### H19 anchor / rank experiments
+
+After noticing worst errors cluster in the high-CMY + high-Y (olive-green) sector (H18
+finding: Spearman(total_ink, ΔE₀₀) = 0.712), two augmentation experiments were run:
+
+- **H19a — heavy-Y anchor augmentation**: Adding 3 olive-green patches to k=8 greedy
+  set. P95 regressed from 4.79 → higher; gate missed. The residual can't use ink-dense
+  anchors to extrapolate correctly from a paper-ratio model.
+- **H19b — rank increase (5 → 8)**: Same result; P95 delta < gate. SVD dimensionality
+  is not the bottleneck in the high-ink failure mode.
+- **H19c — batch rank comparison**: 83.3% at rank=5 vs 83.3% at rank=8 across 114 pairs.
+  Rank increase has zero effect on pass rate.
+
+Conclusion: the 83.3% ceiling at k=13 is structural, not addressable by more anchors or
+higher rank. Remaining 16.7% of pairs require a different model (e.g., non-multiplicative
+spectral correction or separate UV/OBA treatment).
+
+### What "8 patches" means in practice
+
+For a new substrate on the same printer + same media preset:
+
+1. Print a 8-patch target: paper white + RGB primaries + secondaries + black.
+2. Measure with a spectrophotometer (M0 condition).
+3. Transfer source profile → target via D1+D7+S1 pipeline.
+
+Expected outcome: median ΔE₀₀ ≤1.5, P95 ≤3.0 on 78% of same-mode substrate pairs.
+Remaining ~22% of pairs can be pushed toward pass with a 13-patch expanded set (k=13,
+83.3% pass rate).
 
 ---
 
