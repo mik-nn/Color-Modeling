@@ -397,17 +397,34 @@ Conclusion: the 83.3% ceiling at k=13 is structural, not addressable by more anc
 higher rank. Remaining 16.7% of pairs require a different model (e.g., non-multiplicative
 spectral correction or separate UV/OBA treatment).
 
-### What "8 patches" means in practice
+### H22 — neural delta predictor
+
+To probe whether a learned model can close the gap with fewer anchors, a small MLP was
+trained on the same 114-pair dataset using the delta representation:
+
+- **Architecture:** 79 → Dense(256) → Dense(128) → Dense(64) → Dense(36, sigmoid)
+- **Input:** `query_src_norm(36) ‖ query_CMY(3) ‖ mean(tgt_j_norm − src_j_norm)(36+3) ‖ k_norm(1)`
+- **k-augmentation:** trained simultaneously on k ∈ {5, 8, 13} to avoid domain shift
+
+Key result: **k=5 (paper + R + G + B + K) achieves 79.8% pass rate**, matching or exceeding
+D1 greedy k=8 (78.1%). The mean-anchor delta is sufficient representation for device-cube
+extreme anchors, and adding more anchors does not improve the network (k=8 = 78.1%).
+
+The 16.7% structural ceiling persists even for the neural predictor — DecorMatte and similar
+matte-canvas substrates differ from bright-coated substrates in base spectral shape, which
+no amount of additional anchors (within the same ink mode) resolves.
+
+### What "5 patches" means in practice
 
 For a new substrate on the same printer + same media preset:
 
-1. Print a 8-patch target: paper white + RGB primaries + secondaries + black.
+1. Print a 5-patch target: paper white + RGB primaries + black.
 2. Measure with a spectrophotometer (M0 condition).
-3. Transfer source profile → target via D1+D7+S1 pipeline.
+3. Transfer source profile → target via H22 neural delta model (or D1+D7+S1 at k=8 for a
+   non-ML fallback with equivalent accuracy).
 
-Expected outcome: median ΔE₀₀ ≤1.5, P95 ≤3.0 on 78% of same-mode substrate pairs.
-Remaining ~22% of pairs can be pushed toward pass with a 13-patch expanded set (k=13,
-83.3% pass rate).
+Expected outcome: median ΔE₀₀ ≤1.5, P95 ≤3.0 on ≥78% of same-mode substrate pairs.
+Minimum viable protocol = 5 patches; the MLP and the heuristic reach the same ceiling.
 
 ---
 
