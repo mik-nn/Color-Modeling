@@ -943,6 +943,41 @@ Candidate H19: test residualRank 5 → 8 (SVD p95 rank from H8) and/or heavy-Y s
 
 ---
 
+## H19 — Residual rank increase and heavy-Y anchor augmentation (2026-06-12)
+
+**Motivation:** H18 confirmed total ink coverage is a strong predictor of D1 transfer error
+(Spearman 0.712). Augmenting S1 with 3 dark-blue/violet anchors drops P95 6.42→4.79, but
+the new worst sector shifts to heavy-Y olive-green (R≈100–160, G≈85–170, B≈0). Two candidate
+interventions address the same root cause (D1 inadequacy at high ink density) via different
+mechanisms:
+
+**H19a:** Adding 3 anchors in the heavy-Y sector (nearest patches to (R=130,G=130,B=0),
+(R=100,G=85,B=0), (R=160,G=170,B=0)) to S1+H18c (k=16 → k=19) further reduces P95 by ≥ 1.0
+ΔE00 on `BC_DecorMatte_P9000_mk_CanvasMatte` → `BC_ChromataWhite_P9000_mk_CanvasMatte`.
+
+**H19b:** Raising `residualRank` from 5 to 8 (the SVD p95 rank from the H8 analysis —
+effectively rank@99% energy for 100% of same-mode pairs) closes the high-ink gap. Gate: P95 drops
+≥ 1.0 ΔE00 on the worst pair (baseline P95 4.79 after H18c), without hurting same-mode
+median by > 0.05.
+
+**H19c (batch):** Raising residualRank 5→8 on the full 98-pair same-mode batch increases the
+H4 pass rate (median ≤ 1.5 ∧ P95 ≤ 3.0) from 80.6% to ≥ 85% without any additional anchors.
+
+### Acceptance & falsification
+
+| Part   | Pass                              | Fail                                          |
+|--------|-----------------------------------|-----------------------------------------------|
+| H19a   | ΔP95 ≤ −1.0 on DecorMatte→ChromataWhite (k=19 vs k=16 baseline) | ΔP95 > −0.3 |
+| H19b   | ΔP95 ≤ −1.0 on same pair (rank=8, k=13 vs rank=5, k=13) | ΔP95 > −0.3 |
+| H19c   | Same-mode H4 pass ≥ 85% at rank=8, k=13 | < 80% (regression) |
+
+### H19 script
+
+`frontend/scripts/experiments/h19_high_y_anchors.ts` (single-pair, 4 variants) and
+`frontend/scripts/experiments/h19_batch_rank.ts` (98-pair rank sweep).
+
+---
+
 ## Note — M0/M2 at 380 nm (measurement artefact)
 
 Independent of the ink-physics hypotheses: `mean(M0 − M2)` at 380 nm is **negative**
