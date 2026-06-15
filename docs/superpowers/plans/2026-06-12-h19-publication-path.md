@@ -1,6 +1,6 @@
 # H19 + Minimum-k Characterization — Publication Path
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Push same-mode H4 pass rate from 80.6% toward ≥90% by testing (a) heavy-Y sector anchors and (b) residualRank 5→8 (H19), then empirically confirm D-optimal anchor selection reaches ≥80% pass at k=8 — supporting the article claim "8 patches suffice for same-mode cross-substrate transfer."
 
@@ -31,7 +31,7 @@
 **Files:**
 - Modify: `docs/RESEARCH_HYPOTHESIS.md` — append H19 section after H18
 
-- [ ] **Step 1: Append H19 hypothesis block**
+- [x] **Step 1: Append H19 hypothesis block**
 
 Append immediately after the H18 section (before the `## Note — M0/M2` section):
 
@@ -72,7 +72,7 @@ H4 pass rate (median ≤ 1.5 ∧ P95 ≤ 3.0) from 80.6% to ≥ 85% without any 
 `frontend/scripts/experiments/h19_batch_rank.ts` (98-pair rank sweep).
 ```
 
-- [ ] **Step 2: Commit doc pre-registration**
+- [x] **Step 2: Commit doc pre-registration**
 
 ```bash
 git add docs/RESEARCH_HYPOTHESIS.md
@@ -93,7 +93,7 @@ This script runs the same DecorMatte→ChromataWhite pair as H18, but tests 4 va
 - `h19b`: S1 k=13, rank=8
 - `h19bc`: S1+3 high-CMY k=16, rank=8 (combined)
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 ```typescript
 // frontend/scripts/experiments/h19_high_y_anchors.ts
@@ -288,7 +288,7 @@ async function main() {
 main().catch(console.error)
 ```
 
-- [ ] **Step 2: Run to verify it executes without errors**
+- [x] **Step 2: Run to verify it executes without errors**
 
 ```bash
 cd frontend && bash -l -c "nvm use 20 && npx tsx scripts/experiments/h19_high_y_anchors.ts"
@@ -296,11 +296,11 @@ cd frontend && bash -l -c "nvm use 20 && npx tsx scripts/experiments/h19_high_y_
 
 Expected: prints 5 variant rows + H19 verdict. No TypeScript errors.
 
-- [ ] **Step 3: Record the actual output numbers**
+- [x] **Step 3: Record the actual output numbers**
 
 Copy the 5 result rows and verdict lines. They become the `EXPERIMENTS.md` row content.
 
-- [ ] **Step 4: Commit the script (before appending results)**
+- [x] **Step 4: Commit the script (before appending results)**
 
 ```bash
 git add frontend/scripts/experiments/h19_high_y_anchors.ts
@@ -316,7 +316,7 @@ git commit -m "feat(h19): add h19_high_y_anchors experiment script"
 
 This script mirrors h4_batch.ts but runs BOTH rank=5 and rank=8 for each same-mode pair. The goal is to see if H19c holds across the full dataset (not just the worst pair).
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 ```typescript
 // frontend/scripts/experiments/h19_batch_rank.ts
@@ -514,7 +514,7 @@ async function main() {
 main().catch(console.error)
 ```
 
-- [ ] **Step 2: Run to verify**
+- [x] **Step 2: Run to verify**
 
 ```bash
 cd frontend && bash -l -c "nvm use 20 && npx tsx scripts/experiments/h19_batch_rank.ts"
@@ -522,7 +522,7 @@ cd frontend && bash -l -c "nvm use 20 && npx tsx scripts/experiments/h19_batch_r
 
 Expected: runs ~98 pairs, prints progress, concludes with H19c verdict. Takes 30–120 seconds.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/scripts/experiments/h19_batch_rank.ts
@@ -538,7 +538,7 @@ git commit -m "feat(h19): add rank-sweep batch script for H19c — rank=5 vs ran
 
 This characterizes the **minimum k** for the article claim. Uses `dOptimalAnchors` from `kSweep.ts`. Key result: pass-fraction vs k table for D-optimal vs greedy.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 ```typescript
 // frontend/scripts/experiments/h19_ksweep_dopt.ts
@@ -748,7 +748,7 @@ async function main() {
 main().catch(console.error)
 ```
 
-- [ ] **Step 2: Run and record results**
+- [x] **Step 2: Run and record results**
 
 ```bash
 cd frontend && bash -l -c "nvm use 20 && npx tsx scripts/experiments/h19_ksweep_dopt.ts"
@@ -767,7 +767,7 @@ Expected output (approximate, based on SVD rank analysis):
 ```
 If D-optimal k=8 hits ≥80% pass, this is the article's "8 patches" claim.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/scripts/experiments/h19_ksweep_dopt.ts
@@ -780,7 +780,7 @@ git commit -m "feat(h19): D-optimal k-sweep batch script for min-k characterizat
 
 After running all three scripts, update docs. **Do not commit docs separately — combine with the next code commit.**
 
-- [ ] **Step 1: Append H19 rows to EXPERIMENTS.md**
+- [x] **Step 1: Append H19 rows to EXPERIMENTS.md**
 
 Three rows — one per script run. Template (fill in actual numbers):
 
@@ -792,11 +792,11 @@ Three rows — one per script run. Template (fill in actual numbers):
 | 2026-06-12 | D-optimal k-sweep — min-k for same-mode transfer (H4 revised) | 98 same-mode BC pairs. `h19_ksweep_dopt.ts`. D1 rank=5 D7 OBA. k=6..13, greedy vs D-optimal. | — | [paste table from script output] | [fill: D-optimal achieves ≥80% at k=?] | If k=8 passes: article claim confirmed. |
 ```
 
-- [ ] **Step 2: Update ROADMAP.md**
+- [x] **Step 2: Update ROADMAP.md**
 
-Change the H19 line from `- [ ] **H19 (next):**` to `- [x] **H19:**` and summarize result.
+Change the H19 line from `- [x] **H19 (next):**` to `- [x] **H19:**` and summarize result.
 
-- [ ] **Step 3: Update IMPLEMENTATION.md**
+- [x] **Step 3: Update IMPLEMENTATION.md**
 
 Add three rows to the experiment script table under §2.4.4:
 
@@ -806,7 +806,7 @@ Add three rows to the experiment script table under §2.4.4:
 | `h19_ksweep_dopt.ts`    | min-k  | D-optimal k=6..13 vs greedy on 98 same-mode pairs. Characterizes min k for article. |
 ```
 
-- [ ] **Step 4: Append progress-log.md entry**
+- [x] **Step 4: Append progress-log.md entry**
 
 One paragraph in Russian (per DDD rules):
 
@@ -816,7 +816,7 @@ YYYY-MM-DD — H19: протестированы heavy-Y якоря и ранг=
 при k=8 D-optimal достигает [%] — [подтверждение/опровержение] гипотезы о min-k.
 ```
 
-- [ ] **Step 5: Commit all docs**
+- [x] **Step 5: Commit all docs**
 
 ```bash
 git add docs/RESEARCH_HYPOTHESIS.md docs/EXPERIMENTS.md docs/ROADMAP.md docs/IMPLEMENTATION.md docs/progress-log.md
@@ -832,7 +832,7 @@ git commit -m "docs(h19): record H19 results — rank=8 batch + D-optimal k-swee
 
 The article narrative is now supported by confirmed experiments. This task creates the outline so the full draft can be written iteratively.
 
-- [ ] **Step 1: Create the outline file**
+- [x] **Step 1: Create the outline file**
 
 ```markdown
 # Article Draft — "8 Patches: Cross-Substrate Color Profile Adaptation for Inkjet Printing"
@@ -924,7 +924,7 @@ first-order model, a rank-5 PCA residual correction, and D7 OBA-fluorescence sep
 5. Example: DecorMatte → ChromataWhite predicted vs measured spectra
 ```
 
-- [ ] **Step 2: Verify the file saved**
+- [x] **Step 2: Verify the file saved**
 
 ```bash
 wc -l docs/article-draft.md
@@ -932,7 +932,7 @@ wc -l docs/article-draft.md
 
 Expected: > 80 lines.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/article-draft.md
