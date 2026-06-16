@@ -1851,6 +1851,70 @@ trivially specifiable chart.
 
 ---
 
+## H36 — spreadCurv as an interpretable substrate-compatibility parameter (2026-06-16, CONFIRMED)
+
+### Motivation
+
+H23/H33 found neutral-ramp spreading curvature `spreadCurv = ‖c1,c2‖` (from the per-λ fit
+`R(λ)/R_paper(λ) = 1 + c1·a + c2·a²`, `a` = ink coverage) is the only substrate property that
+correlates with failing-frequency (r=−0.64, H33). H36 promotes it from a post-hoc diagnostic to
+a **predictive, physically interpretable parameter**: substrates with similar `spreadCurv` should
+transfer well to each other, because `spreadCurv` encodes the substrate's ink-uptake nonlinearity
+(low = ink holdout / on-surface, high = absorbed — H35).
+
+`spreadCurv` is measurable from the **neutral ramp alone (~8 patches)** and uses only M0 spectra
+(no M2, so it is immune to the 380 nm M2 artefact below).
+
+### Formal statement
+
+For a same-mode pair (A→B), define `Δcurv = |spreadCurv(A) − spreadCurv(B)|` (scalar@560 nm or
+broadband mean over 36 bands). Claim: `Δcurv` predicts transfer error and pass/fail.
+
+### Acceptance & falsification
+
+- **Accept** if AUC(Δcurv → fail) ≥ 0.80 AND spreadCurv-nearest reference selection lowers mean p95.
+- **Falsify** if AUC ≤ 0.65 OR nearest-curv ref is no better than farthest.
+
+### Result (2026-06-16) — CONFIRMED
+
+`scripts/experiments/h36_spreadcurv_param.ts`, 104 non-metallic same-mode pairs at S1 k=13.
+
+| Test | Result |
+|---|---|
+| r(Δcurv560, p95) / r(Δcurv560, median) | 0.482 / 0.490 |
+| r(ΔcurvBB, p95) / r(ΔcurvBB, median) | 0.524 / 0.546 |
+| mean Δcurv560: fail vs pass | 0.147 vs 0.062 (2.4×) |
+| **AUC(Δcurv560 → fail)** | **0.841** |
+| Best threshold Δcurv560 ≥ 0.137 | catches **10/12 fails, 6/92 false-alarms** (Youden J=0.77) |
+| **Reference selection** (nearest vs farthest spreadCurv, 14 targets ≥3 candidates) | nearest better 10, farthest 1, tie 3 |
+| **mean p95: nearest-curv ref vs farthest** | **1.52 vs 2.96** |
+| pass-rate: nearest-curv ref vs farthest | 13/14 vs 9/14 |
+
+`spreadCurv` also **clusters substrates by print mode**: CanvasMatte 1.58–1.82 (DecorMatte the 1.577
+low outlier, gap 0.14 to Lyve ≈ the failure threshold 0.137), WatercolorRadiantWhite 1.98–2.14,
+PremiumLuster/CanvasSatin/Glossy 2.25–2.43. Physical ordering matte-canvas (low) → glossy (high).
+
+### Practical implication
+
+`spreadCurv` is a deployable, ~8-patch, M0-only substrate descriptor with two production uses:
+
+1. **Pre-flight failure flag.** `Δcurv560 ≥ 0.137` → warn of likely structural failure (83% recall,
+   6.5% false-alarm). No target profile or transfer run needed.
+2. **Reference recommendation.** When several candidate reference profiles exist (same mode), rank by
+   `|Δcurv|` and pick the nearest — halves mean p95 (2.96 → 1.52) and lifts pass-rate (9/14 → 13/14).
+
+Both consume only the target's neutral ramp. spreadCurv is the first interpretable physical knob
+validated as predictive in this project (vs the opaque neural / PCA descriptors).
+
+### Follow-ups
+
+- Use spreadCurv as a model INPUT (gate the H24/H25 spreading pre-correction strength by Δcurv) — open;
+  H32 showed neutral spreading under-corrects the chromatic residual, but a Δcurv-scaled correction on
+  the borderline DecorMatte sub-group might cross the gate.
+- UI: display per-substrate spreadCurv, flag spreading-outlier pairs, recommend nearest-curv reference.
+
+---
+
 ## Note — M0/M2 at 380 nm (measurement artefact)
 
 Independent of the ink-physics hypotheses: `mean(M0 − M2)` at 380 nm is **negative**
