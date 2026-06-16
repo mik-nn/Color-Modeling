@@ -6,6 +6,16 @@
 
 ---
 
+## 2026-06-16 — H31b: count-gap НЕ закрывается фиксированной сеткой; 13-й S1-якорь избыточен
+
+`scripts/experiments/h31b_coverage_tiers.ts`. Coverage tiers cov6/9/12 vs S1 при matched k.
+
+**Результат:** k≈6 coverage 76.9% ≫ S1 49.0%; k≈9 S1 86.5% > coverage 81.7%; k≈12 S1 88.5% > coverage 83.7%. Кроссовер ~k=8. Фиксированное покрытие плато ~84%. **Бонус: S1 k=12 = k=13 = 88.5% → 13-й якорь избыточен, D1 хватает 12.**
+
+**Вывод:** placement чинит только недоопределённый low-k. При k≥9 адаптивный per-pair выбор (S1) извлекает больше, чем ручная сетка — углы/нейтрали не таргетят остаток конкретной пары. Меню D1: фиксированный coverage-6 чарт (76.9%, target-agnostic, без эвристики) для дешёвого протокола; адаптивный S1-12 (88.5%) для пика. См. `EXPERIMENTS.md` H31b.
+
+---
+
 ## 2026-06-16 — H31: coverage-spanning якоря чинят low-k D1 — ОБА gate PASS
 
 `scripts/experiments/h31_coverage_anchors.ts`. Фиксированный набор: ближайшие патчи к RGB-таргетам {white(ink0), cyan/magenta/yellow(ink1), black(ink3), mid-gray(ink1.5)}, дедуп → медиана 6 якорей.
