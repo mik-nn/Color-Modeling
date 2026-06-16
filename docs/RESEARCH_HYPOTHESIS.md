@@ -1616,6 +1616,77 @@ locality problem (H27: D1 needs Layer-3 IDW for them).
 
 ---
 
+## H29 — Sharpened device attention = literal learned IDW (2026-06-16, pre-registered)
+
+### Statement
+
+H28 failed because softmax attention is too diffuse (best median, but the P95 tail loses
+locality). Sharpening the attention toward hard nearest-anchor behaviour should recover the
+locality that D1's fixed-k IDW supplies (H27) and pass the P95 gate. Two changes on top of H28:
+
+1. **Learnable temperature** τ on the scores: `a_j = softmax_j(score_j / τ)`, τ = exp(logτ)
+   learned. τ → 0 ⇒ hard argmax (single nearest anchor); τ large ⇒ diffuse (H28).
+2. **Hard top-k′ device gating**: before softmax, mask all but the k′ = 4 anchors nearest to
+   the query in device-CMY Euclidean distance. Attention runs over those 4 only — the literal
+   learned analogue of D1 Layer-3 IDW (`knnK = 4`).
+
+Everything else (residual form, OBA/paper-norm, k-aug, leave-3-out split) is identical to H28.
+
+### Acceptance gates
+
+- **Gate H29a**: all-pairs k=5 pass rate ≥ H22 k=5 S1 (84.6%) — beat mean-pool at low k.
+- **Gate H29b**: recover ≥ 2 of 3 H27 D1-only pairs (H28 got 1/3).
+- **Stretch**: all-pairs k=13 ≥ D1 88.5% — sharpened attention beats fixed IDW.
+
+### Rationale
+
+H28 already keeps the best median; the only deficit is tail sharpness. Top-k′=4 + low τ makes
+the attention put near-all weight on the single nearest device-space anchor — exactly D1's IDW
+behaviour, but with a learned (cross-substrate) kernel that can be smoother than fixed inverse
+distance where that helps. If this still fails to beat D1, the locality ceiling is structural
+and D1 stands as the production model.
+
+### Script
+
+`scripts/h29_train.ts` (2026-06-16)
+
+### Status: **FAIL (both gates) — but confirms the sharpness diagnosis**
+
+**Results (104 non-metallic same-mode pairs, leave-3-substrate-out):**
+
+| Method | k=5 | k=8 | k=13 | P95 (k=8) | learned τ |
+|---|---|---|---|---|---|
+| H22 mean-pool | 84.6% | 83.7% | — | — | — |
+| H28 soft attention | 80.8% | 78.8% | 84.6% | 2.842 | (fixed 1.0) |
+| **H29 sharpened** | **82.7%** | **85.6%** | 84.6% | **2.413** | **0.413** |
+| D1 (reference) | — | — | 88.5% | — | — |
+
+- **Gate H29a FAIL**: k=5 = 82.7% < 84.6% (still below H22 at low k).
+- **Gate H29b FAIL**: 1/3 H27 D1-only pairs (17MGloss→Crystalline PASS;
+  17MSatin→Crystalline p95=3.28; PhotoPeelGloss→VibranceGloss p95=3.04 — near miss).
+
+**The sharpness diagnosis (H28) is confirmed**: left free, the temperature learned **τ = 0.413
+< 1** (the network *chose* to sharpen), and that lifted **k=8 to 85.6%** — the best neural pass
+rate of any experiment, beating H22 — with P95 dropping 2.84 → 2.41. So locality sharpness is
+the right axis. But it is **not enough to beat D1**: the family asymptotes at ~85–86%. The
+stubborn H27 D1-only pairs only partly move (PhotoPeelGloss→VibranceGloss 4.83 → 3.04, almost
+passing; the reverse direction VibranceGloss→PhotoPeelGloss regressed 3.44 → 4.91), i.e. the
+sharpened attention helps some directions and hurts others — variance D1's deterministic IDW
+does not have.
+
+### Conclusion for the neural-locality line (H22 → H28 → H29)
+
+Three architectures (mean-pool, soft attention, sharpened/top-k attention) all asymptote
+**below D1's 88.5%**. The learned temperature confirms locality is the operative axis, but a
+*learned* device kernel on anchor *deltas* cannot match D1's IDW operating on full
+paper-normalised reflectance with a deterministic neighbourhood. **D1 (k=13, 88.5%) stands as
+the production cross-substrate model.** The neural path's practical value remains its low-k
+efficiency (H22: 5-patch protocol at ~80%), not peak accuracy. Recommend closing the
+neural-locality line unless a fundamentally different representation (e.g. attention over
+full anchor spectra, not deltas; or a graph over the device lattice) is motivated.
+
+---
+
 ## Note — M0/M2 at 380 nm (measurement artefact)
 
 Independent of the ink-physics hypotheses: `mean(M0 − M2)` at 380 nm is **negative**
