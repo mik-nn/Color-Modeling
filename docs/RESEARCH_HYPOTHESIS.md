@@ -1767,6 +1767,51 @@ anchors are available.
 
 ---
 
+## H31 — Coverage-spanning anchors fix D1's low-k collapse (2026-06-16, pre-registered)
+
+### Statement
+
+D1's collapse at k=5 (45.2%) is **anchor placement on the ink-coverage axis, not anchor
+count**. The diagnostic (`d1_lowk_patch_analysis.ts`) showed: at k=5 the per-patch error is
+ink-coverage-driven (Pearson r(ΔE, ink) = 0.606 ≫ r(ΔE, nnDist) = 0.363), and the default S1
+k=5 set {paper(ink0), red(2), green(2), blue(2), cyan(1)} has **no anchor at ink = 3** (full
+CMY) and only one pure primary — so the heavy-ink corner (ink > 2) is *extrapolated*, exactly
+where error explodes (mean ΔE 5.01 at ink∈[2.5,3.0]). Replacing those corners with anchors that
+**span each gamut direction at both low and high coverage** should let the rank-5 residual
+*interpolate* instead of extrapolate, recovering most of the k=13 accuracy at ~6 anchors.
+
+This formalises the user's CMYKOG intuition (6 inks × {100%, 50%} + paper = 13 anchors) for the
+RGB/CMY case: D1 needs the residual sampled at multiple coverage *levels* per direction.
+
+### Anchor set under test
+
+`H31 k≈6` = { paper (ink 0), C-primary (1,0,0), M-primary (0,1,0), Y-primary (0,0,1),
+full CMY (1,1,1 ink 3), + one mid-coverage neutral (~0.5,0.5,0.5) }. Matched against the device
+coordinates actually present in each profile's grid (nearest available patch).
+
+### Acceptance gates
+
+- **Gate H31a**: D1 with the coverage-spanning k≈6 set ≥ 75% pass (vs S1 k=5 = 45.2%) — the
+  placement fix recovers most of the gap to k=13 (88.5%) at ~6 anchors.
+- **Gate H31b**: the 12 persistent failers (fail @ S1 k=13) remain failing — confirms they are
+  structural (spectral-shape / spreading), not an anchor-placement artefact.
+
+### Rationale
+
+Error at k=5 concentrates at ink > 2 and at patches far from any anchor in device space; both
+are cured by adding the full-CMY and pure-primary anchors. If H31a passes, "D1 needs 13" becomes
+"D1 needs a coverage-spanning 6", shrinking the neural ladder's low-k niche to k ≤ 4. If it
+fails, the rank-5 residual genuinely needs ~13 samples to span the nonlinearity and the count
+(not just placement) matters.
+
+### Script
+
+`scripts/experiments/h31_coverage_anchors.ts` (planned)
+
+### Status: **pending**
+
+---
+
 ## Note — M0/M2 at 380 nm (measurement artefact)
 
 Independent of the ink-physics hypotheses: `mean(M0 − M2)` at 380 nm is **negative**
