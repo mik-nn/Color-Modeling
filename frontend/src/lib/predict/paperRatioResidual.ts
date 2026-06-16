@@ -63,6 +63,15 @@ export interface PaperRatioResidualOptions {
   /** kNN K for residual-score interpolation. Default 4. */
   knnK?: number;
   /**
+   * Layer-3 ablation switch. When true, the residual is NOT interpolated
+   * locally via IDW (`knnInterpolate`); instead every patch receives the
+   * MEAN of the anchor residual scores — a single global correction. This
+   * turns D1 into a global model (no device-space locality), matching the
+   * H22 mean_delta behaviour, and exists to quantify Layer 3's contribution.
+   * Default false (local IDW). See EXPERIMENTS H27 ablation.
+   */
+  globalResidual?: boolean;
+  /**
    * Lower / upper bound for the paper-white ratio r(λ) = B_paper / A_paper.
    * Default `[0.3, 3.0]`. Activates against OBA-disparate substrate pairs
    * where the legitimate ratio at 380 nm can exceed 5–7×. The clamped value
@@ -329,14 +338,27 @@ export function applyPaperRatioResidual(
 
   // Step 2: add residual ε̂ if a basis exists.
   if (fit.residualBasis && fit.residualAnchorScores.length > 0) {
-    const knnK = options.knnK ?? 4;
-    const queryScores = knnInterpolate(
-      fit.residualAnchorRGB,
-      fit.residualAnchorScores,
-      fit.residualRank,
-      D,
-      knnK,
-    );
+    const p = fit.residualRank;
+    let queryScores: Float64Array;
+    if (options.globalResidual) {
+      // Layer-3 ablation: every patch gets the mean anchor residual score.
+      const kAnch = fit.residualAnchorScores.length / p;
+      const meanScore = new Float64Array(p);
+      for (let a = 0; a < kAnch; a++)
+        for (let c = 0; c < p; c++) meanScore[c] += fit.residualAnchorScores[a * p + c];
+      for (let c = 0; c < p; c++) meanScore[c] /= kAnch;
+      queryScores = new Float64Array(N * p);
+      for (let q = 0; q < N; q++) queryScores.set(meanScore, q * p);
+    } else {
+      const knnK = options.knnK ?? 4;
+      queryScores = knnInterpolate(
+        fit.residualAnchorRGB,
+        fit.residualAnchorScores,
+        p,
+        D,
+        knnK,
+      );
+    }
     const eps = pcaReconstruct(queryScores, N, fit.residualBasis);
     for (let i = 0; i < N * L; i++) out[i] += eps[i];
   }
@@ -370,6 +392,8 @@ export interface PaperRatioResidualRunInput {
   ratioClampUV?: readonly [number, number];
   /** Number of leading bands treated as UV. Default 0 (uniform clamp). */
   uvBandCount?: number;
+  /** Layer-3 ablation: global mean residual instead of local IDW. Default false. */
+  globalResidual?: boolean;
 }
 
 export interface PaperRatioResidualRunResult {
@@ -402,6 +426,7 @@ export function runPaperRatioResidualTransfer(
   const X_pred = applyPaperRatioResidual(X_A, D, L, fit, {
     residualRank: input.residualRank,
     knnK: input.knnK,
+    globalResidual: input.globalResidual,
   });
 
   // Test set: non-anchor patches.
