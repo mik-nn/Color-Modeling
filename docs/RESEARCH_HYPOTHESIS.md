@@ -1674,16 +1674,28 @@ passing; the reverse direction VibranceGloss→PhotoPeelGloss regressed 3.44 →
 sharpened attention helps some directions and hurts others — variance D1's deterministic IDW
 does not have.
 
-### Conclusion for the neural-locality line (H22 → H28 → H29)
+### Conclusion for the neural-locality line (H22 → H28 → H29) — REVISED after D1 anchor sweep
 
-Three architectures (mean-pool, soft attention, sharpened/top-k attention) all asymptote
-**below D1's 88.5%**. The learned temperature confirms locality is the operative axis, but a
-*learned* device kernel on anchor *deltas* cannot match D1's IDW operating on full
-paper-normalised reflectance with a deterministic neighbourhood. **D1 (k=13, 88.5%) stands as
-the production cross-substrate model.** The neural path's practical value remains its low-k
-efficiency (H22: 5-patch protocol at ~80%), not peak accuracy. Recommend closing the
-neural-locality line unless a fundamentally different representation (e.g. attention over
-full anchor spectra, not deltas; or a graph over the device lattice) is motivated.
+The "all neural asymptote below D1" reading was based only on **D1 at k=13**. Measuring D1 at
+fewer anchors (`scripts/experiments/d1_anchor_sweep.ts`, 104 non-metallic pairs) changes the
+verdict — the comparison is **strongly k-dependent**:
+
+| anchors | D1 | H22 | H28 | H29 |
+|---|---|---|---|---|
+| **k=5** | **45.2%** | 84.6% | 80.8% | 82.7% |
+| **k=8** | **82.7%** | 83.7% | 78.8% | **85.6%** |
+| k=13 | **88.5%** | — | 84.6% | 84.6% |
+
+**D1 only wins at k=13.** At k=5 D1 collapses to 45.2% (paper-ratio + rank-5 residual is
+under-determined and IDW interpolates over too few device-space points), while the
+k-augmented neural models hold ~80–85%. At **k=8, H29 (85.6%) actually beats D1 (82.7%)** —
+the crossover is around 8 anchors. So locality sharpness (H29) *does* buy a win, but only in
+the few-anchor regime, which is precisely the project's goal (few-patch substrate adaptation).
+
+**Revised recommendation:** route by anchor budget — **neural (H29) for k ≤ 8, D1 for k ≥ ~10**.
+Do NOT ship D1 as the universal model; with a 5-patch protocol D1 is unusable (45%) and H22/H29
+are the only viable options. The earlier "close the neural line" call is withdrawn: the neural
+path is not a worse D1, it is the *low-anchor* regime D1 cannot serve.
 
 ---
 
