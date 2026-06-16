@@ -1699,6 +1699,74 @@ path is not a worse D1, it is the *low-anchor* regime D1 cannot serve.
 
 ---
 
+## H30 — Low-k retraining of sharpened attention (3–5 patch protocol) (2026-06-16, pre-registered)
+
+### Statement
+
+H29 (sharpened device attention) was trained with k-augmentation {5,8,13} and is best at k=8.
+The D1 sweep showed the *practical* battleground is k ≤ 8, where D1 collapses (k=5 = 45.2%).
+Retraining the same H29 architecture with **low-k augmentation {3,4,5}** should specialise it
+for the few-patch regime and push the 5-patch pass rate above H22's 84.6% — and make a 3-patch
+protocol viable where D1 is hopeless.
+
+### Changes vs H29
+
+- `K_TRAIN_LIST = [3, 4, 5]` (was {5,8,13}); evaluate at k ∈ {3,4,5,8}.
+- Architecture, τ, top-k′=4 gating, OBA/paper-norm, leave-3-out split all unchanged.
+- top-k′ degrades gracefully when k<4 (keeps all available anchors).
+
+### Acceptance gates
+
+- **Gate H30a**: k=5 pass rate > H22 k=5 S1 (84.6%) — beat the current 5-patch champion.
+- **Gate H30b**: k=3 pass rate ≥ 70% — a usable 3-patch protocol (D1 k=5 = 45%, so any
+  ≥70% at k=3 is a decisive few-patch win).
+
+### Rationale
+
+k-augmentation lets one network serve a range of k; H29 spread its capacity over {5,8,13}.
+Concentrating training mass on {3,4,5} should sharpen the low-k behaviour at the cost of high-k
+(which D1 already owns). Validates the routing rule (neural for low k) with a model actually
+optimised for that regime.
+
+### Script
+
+`scripts/h30_train.ts` (2026-06-16)
+
+### Status: **PARTIAL — H30b PASS, H30a FAIL**
+
+**Results (104 non-metallic same-mode pairs, leave-3-substrate-out, τ learned = 0.40):**
+
+| k | 3 | 4 | 5 | 8 |
+|---|---|---|---|---|
+| H30 pass | 82.7% | 82.7% | 82.7% | 80.8% |
+| H30 median | 0.714 | 0.706 | 0.738 | 0.919 |
+
+- **Gate H30b PASS**: k=3 = 82.7% ≥ 70% — a **viable 3-patch protocol** (D1 k=5 = 45.2%; D1 at
+  k=3 is far worse). This is the regime's decisive neural win.
+- **Gate H30a FAIL**: k=5 = 82.7% < H22 k=5 (84.6%). Sharpened attention does **not** beat the
+  H22 mean-pool at 5 patches.
+
+**Findings.** Low-k training makes H30 nearly **k-invariant across 3–5** (all 82.7%) — good for
+a "measure 3–5 patches, whatever you can" protocol. But it confirms H22's mean-pool is still the
+5-patch champion; H30's contribution is *extending usability down to k=3* (in-distribution for
+H30, OOD for H22 per H26), not raising the k=5 ceiling. The H27 D1-only pairs all fail at k=5
+(0/3) — those genuinely need D1's k=13 IDW.
+
+### Production routing (consolidated, H22 → H30)
+
+| anchor budget | model | pass rate | note |
+|---|---|---|---|
+| k = 3–4 | **H30** | 82.7% | only viable option; D1 ≪ 45% |
+| k = 5 | **H22** | 84.6% | mean-pool champion at 5 |
+| k = 6–8 | **H29** | 85.6% | sharpened attention peaks here |
+| k ≥ 10 | **D1** | 88.5% | high-anchor accuracy ceiling |
+
+The neural family is not one model beating D1; it is a **k-budget ladder** that makes few-patch
+substrate adaptation work (k=3 at 82.7%) where D1 is unusable, with D1 taking over once enough
+anchors are available.
+
+---
+
 ## Note — M0/M2 at 380 nm (measurement artefact)
 
 Independent of the ink-physics hypotheses: `mean(M0 − M2)` at 380 nm is **negative**
