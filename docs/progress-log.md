@@ -6,6 +6,18 @@
 
 ---
 
+## 2026-06-16 — UI: spreadCurv-панель в TransferView (флаг совместимости + рекомендатель reference)
+
+Деплой двух подтверждённых применений spreadCurv (H36/H37). Новый `lib/predict/spreadCurv.ts`: `computeSpreadCurv` (‖c1,c2‖ нейтральной рампы @560, M0-only, ≥3 патча), `classifyPairCompatibility` (warn при abs(Δcurv)≥0.137), `rankReferencesByProximity` (ближайший reference первым). 6 юнит-тестов (recovery известной квадратики, holdout<absorbed ordering, <3 нейтралей→null, CMYK→null, threshold, ranking).
+
+TransferView: `spreadCurvByName` memo по всем профилям; `compat` memo (target/ref curv + Δcurv-флаг + ранжированные same-mode кандидаты); панель «Substrate compatibility · spreadCurv» с amber warn-бейджем и кликабельным рекомендателем (★ ближайший → setRefName).
+
+**Верификация:** vitest 13/13 (spreadCurv 6 + heuristic 7); `npm run build` OK; Playwright (DecorMatte target + ChromataWhite ref + 800M) → панель рендерится, target spreadCurv=1.577 (точно H36), Δcurv 0.240 → ⚠ «likely structural failure», рекомендатель ★800M (Δcurv 0.203) первым, 0 console-ошибок. Скрин `/tmp/spreadcurv-ui.png`. См. IMPLEMENTATION.md (spreadCurv.ts), EXPERIMENTS H36/H37.
+
+NOT коррекция: H38 показал Δcurv-gated spreading чинит 0 провалов — панель только информирует/выбирает, не меняет предсказание.
+
+---
+
 ## 2026-06-16 — H37 + H38: few-patch spreadCurv + Δcurv-gated spreading
 
 **H37** (`h37_fewpatch_spreadcurv.ts`): spreadCurv держится на 3 нейтральных патчах (white/mid/black = нейтрали coverage-6). AUC=0.848 ≥ полная рампа 0.841; ref-selection 13/14 (лучший из всех бюджетов), p95 1.53/3.10. Бюджеты 4–8 тоже держат 0.81–0.84. → Один 6-патч чарт (H31) одновременно делает предсказание D1 И даёт spreadCurv для флага+рекомендателя. Без доп. измерений.

@@ -18,6 +18,10 @@
 import { useMemo, useState } from 'react'
 import type { AnchorSet, ProfileData, PredictionReport, WhitePointXYZ } from '../types'
 import { loadProfileMatrix, alignProfiles } from '../lib/dataset/matrix'
+import {
+  computeSpreadCurv, classifyPairCompatibility, rankReferencesByProximity,
+  SPREADCURV_FAIL_THRESHOLD, type SpreadCurv,
+} from '../lib/predict/spreadCurv'
 import { buildWlsInterpolator, type WlsInterpOptions } from '../lib/interp/wlsInterp'
 import type { InterpPoint } from '../lib/interp/rgbInterp'
 import { pickHeuristicAnchors, pickCoverageAnchors } from '../lib/sampling/heuristic'
@@ -271,6 +275,40 @@ export default function TransferView({ profiles }: Props) {
       })
       .filter((m): m is NonNullable<typeof m> => m !== null && m.channels === 3)
   }, [profiles, targetName])
+
+  // spreadCurv per loaded profile (H36/H37) — interpretable substrate-compat
+  // descriptor from the neutral ramp (M0-only, ~3+ patches). Drives the
+  // compatibility flag + reference recommender below.
+  const spreadCurvByName = useMemo(() => {
+    const map = new Map<string, SpreadCurv | null>()
+    for (const p of profiles) {
+      try { map.set(p.metadata.full_name, computeSpreadCurv(loadProfileMatrix(p))) }
+      catch { map.set(p.metadata.full_name, null) }
+    }
+    return map
+  }, [profiles])
+
+  // Compatibility (Δcurv flag) + nearest-spreadCurv reference recommendation.
+  const compat = useMemo(() => {
+    const tgtCurv = targetName ? spreadCurvByName.get(targetName) ?? null : null
+    if (!tgtCurv) return null
+    const refCurv = refName ? spreadCurvByName.get(refName) ?? null : null
+    const pair = refCurv ? classifyPairCompatibility(refCurv, tgtCurv) : null
+    // candidate refs = same print mode as target, excluding the target itself
+    const tgtProfile = profiles.find((p) => p.metadata.full_name === targetName)
+    const tgtMode = tgtProfile ? canonicalPrintMode(tgtProfile.metadata) : null
+    const candidates = profiles
+      .filter((p) => p.metadata.full_name !== targetName)
+      .map((p) => {
+        let mode: string | null = null
+        try { mode = canonicalPrintMode(p.metadata) } catch { mode = null }
+        const curv = spreadCurvByName.get(p.metadata.full_name) ?? null
+        return curv && mode === tgtMode ? { ref: p.metadata.full_name, curv } : null
+      })
+      .filter((x): x is { ref: string; curv: SpreadCurv } => x !== null)
+    const ranked = rankReferencesByProximity(tgtCurv, candidates)
+    return { tgtCurv, refCurv, pair, ranked }
+  }, [profiles, refName, targetName, spreadCurvByName])
 
   const result = useMemo<RunResult | null>(() => {
     if (!refProfile || !targetProfile || refProfile === targetProfile) return null
@@ -944,6 +982,71 @@ export default function TransferView({ profiles }: Props) {
           </select>
         </label>
       </div>
+
+      {compat && (
+        <div
+          data-testid="spreadcurv-panel"
+          className="rounded border border-gray-700 bg-gray-900/60 p-3 text-sm"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs uppercase tracking-wider text-gray-500">
+              Substrate compatibility · spreadCurv (H36)
+            </span>
+            {compat.pair && (
+              <span
+                data-testid="spreadcurv-risk"
+                className={
+                  compat.pair.risk === 'warn'
+                    ? 'rounded bg-amber-900/60 px-2 py-0.5 text-xs font-semibold text-amber-300'
+                    : 'rounded bg-emerald-900/60 px-2 py-0.5 text-xs font-semibold text-emerald-300'
+                }
+              >
+                {compat.pair.risk === 'warn'
+                  ? `⚠ likely structural failure · Δcurv ${compat.pair.dCurv.toFixed(3)} ≥ ${SPREADCURV_FAIL_THRESHOLD}`
+                  : `✓ compatible · Δcurv ${compat.pair.dCurv.toFixed(3)}`}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex gap-6 text-gray-300">
+            <span>
+              target spreadCurv:{' '}
+              <span className="font-mono text-gray-100">{compat.tgtCurv.s560.toFixed(3)}</span>
+            </span>
+            {compat.refCurv && (
+              <span>
+                reference spreadCurv:{' '}
+                <span className="font-mono text-gray-100">{compat.refCurv.s560.toFixed(3)}</span>
+              </span>
+            )}
+          </div>
+          {compat.ranked.length > 0 && (
+            <div className="mt-2">
+              <span className="text-xs uppercase tracking-wider text-gray-500">
+                Recommended references (nearest spreadCurv first — halves transfer p95, H36)
+              </span>
+              <ol className="mt-1 space-y-0.5">
+                {compat.ranked.slice(0, 3).map((r, i) => (
+                  <li key={r.ref} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRefName(r.ref)}
+                      className={
+                        'text-left font-mono text-xs hover:underline ' +
+                        (i === 0 ? 'text-emerald-300' : 'text-gray-300')
+                      }
+                    >
+                      {i === 0 ? '★ ' : `${i + 1}. `}
+                      {r.ref.replace(/^BC_/, '').replace(/_P9000.*/, '')}
+                    </button>
+                    <span className="text-xs text-gray-500">Δcurv {r.dCurv.toFixed(3)}</span>
+                    {r.risk === 'warn' && <span className="text-xs text-amber-400">⚠</span>}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-5 gap-4">
         <label className="block">
