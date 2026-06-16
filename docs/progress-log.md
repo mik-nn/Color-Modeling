@@ -6,6 +6,16 @@
 
 ---
 
+## 2026-06-16 — H39: primary-aligned spreadCurv vs нейтраль (гипотеза пользователя) — REJECTED
+
+Гипотеза: дескриптор по праймерис (max-Lab-chroma на hue, кривизна вектора paper→primary в полосе поглощения) предскажет провал лучше нейтрали, т.к. провалы в хроматических секторах. `h39_primary_spreadcurv.ts`, 104 пары.
+
+Отклонено: neutral AUC=0.841 остаётся лучшим. primMean=0.46, primVec=0.55, primMax=0.42, neutPlusVec=0.77. Праймерис-варианты ловят 12/12 но с 60–76 false-alarm — стреляют по всему. DecorMatte по праймерис [1.71,1.75,1.53] НОРМАЛЬНЫЙ (≈800M), выброс только в нейтрали (1.577).
+
+Причина: ink holdout = эффект СТЭКИНГА краски (C+M+Y друг на друга, H35). Один праймерис = одна краска = мало стэка → не вскрывает holdout. Нейтраль = max стэк всех красок → самый чувствительный зонд. Смещение к праймерис УМЕНЬШАЕТ стэк → теряет сигнал. **Негатив усиливает H35:** лучший предиктор = именно максимально-стэкающая рампа (нейтраль). Держим neutral spreadCurv. См. EXPERIMENTS H39.
+
+---
+
 ## 2026-06-16 — UI: spreadCurv-панель в TransferView (флаг совместимости + рекомендатель reference)
 
 Деплой двух подтверждённых применений spreadCurv (H36/H37). Новый `lib/predict/spreadCurv.ts`: `computeSpreadCurv` (‖c1,c2‖ нейтральной рампы @560, M0-only, ≥3 патча), `classifyPairCompatibility` (warn при abs(Δcurv)≥0.137), `rankReferencesByProximity` (ближайший reference первым). 6 юнит-тестов (recovery известной квадратики, holdout<absorbed ordering, <3 нейтралей→null, CMYK→null, threshold, ranking).
