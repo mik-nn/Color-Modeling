@@ -6,6 +6,16 @@
 
 ---
 
+## 2026-06-16 — H34 + H35: OBA-диагностика и ink-holdout — корневая причина структурных провалов
+
+**H34** (`h34_m2_oba_diagnosis.ts`): OBA — НЕ причина провала. 23 профиля с paired M0+M2; условия: M0+OBA-сепаратор (продакшн), M2 UV-cut без коррекции, M0 без коррекции. Результат: M2 vs M0 разница 0.05–0.13 median, никакая пара ворота не проходит. Побочная находка: **DecorMatte — UV-поглотитель**: M0 < M2 при 380nm (−0.165), тогда как у peers M0 > M2 (+0.020). Декоративное покрытие поглощает UV вместо флюоресценции — физически уникальная аномалия в датасете.
+
+**H35** (`h35_ink_overflow.ts`): Гипотеза пользователя «нелинейности в тенях = перелив краски» — верна по направлению, но с обратным знаком. DecorMatte: **ink holdout** (краска не уходит в ткань, сидит на поверхности). Доказательства: c1=−1.50 слабее peers −1.66–1.69; cyan R(560)/R_paper = 0.256 vs peers 0.206–0.219 (+24%); min-L* = 19.1 vs peers 17–18.5. Тени СВЕТЛЕЕ = меньше поглощения, не больше. Физика: tight-weave декоративная ткань с coating → on-surface ink mixing (trapping/coalescence) vs absorbed mixing у peers → D1, обученный на нейтральной рампе, не умеет экстраполировать in-surface→on-surface переход в CMY-тёмных секторах. Это объясняет H33: наихудший fail-excess именно в C+M+Y тёмном (+2.20) и Yellow (+1.37).
+
+**Итог:** root cause = ink holdout + on-surface ink interaction. Actionable предиктор провала = spreadCurv outlier (H33, r=−0.64). Фикс требует per-channel хроматического spreading (не тянем — убывающая отдача). См. EXPERIMENTS.md H34, H35.
+
+---
+
 ## 2026-06-16 — UI: интеграция H31 Coverage-чарта в TransferView (anchor strategy)
 
 Добавил `pickCoverageAnchors` в `lib/sampling/heuristic.ts` — фиксированный 6-патч чарт {white, C, M, Y, black, mid-gray} (H31), target-agnostic, paper первым (chosenIdx[0]=paper row). Подключил в `TransferView.tsx`: тип `AnchorStrategy` += `'Coverage'`, ветка в выборе якорей, опция в dropdown «Coverage — fixed 6-patch chart (~77%)». 3 юнит-теста (paper-first, dedupe на разреженной сетке, throw на CMYK).
