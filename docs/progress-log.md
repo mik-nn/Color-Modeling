@@ -6,6 +6,16 @@
 
 ---
 
+## 2026-06-16 — H32: атака на 12 структурных провалов — 0/12, потолок структурный
+
+`scripts/experiments/h32_structural_attack.ts`. 4 рычага на пару при k=13: B=base rank5; S=+oracle per-λ neutral spreading UNCLAMPED без порога; R8=rank8; S+R8.
+
+**Результат: 0/12 пробивают ворота.** Но spreading — доминирующий рычаг: DecorMatte→ChromataWhite p95 6.42→3.64, →800M 5.16→3.51, →BelgianLinen 4.00→**3.03** (0.03 от ворот!), →Lyve 4.06→3.42. rank8 почти не помогает (переобучение якорей). VibranceLuster↔RiverStone едва движутся (6.52→5.60).
+
+**3 механизма подтверждены откликом:** (1) DecorMatte — spreading-доминирован, p95 3.0–3.6 (остаток = хроматический spreading, нейтральная рампа недокорректирует, урок H25); (2) 1930↔ArtPeel — чистый но ХРОМАТИЧЕСКИЙ spreading; (3) VibranceLuster↔RiverStone — несовместимость базовых спектров, spreading нерелевантен. **Потолок 11.5% принят как структурный для методов на нейтральных данных.** DecorMatte-подгруппа близка — мог бы пробить полноценный 2D ink-interaction хроматический spreading, но убывающая отдача. См. `EXPERIMENTS.md` H32.
+
+---
+
 ## 2026-06-16 — H31b: count-gap НЕ закрывается фиксированной сеткой; 13-й S1-якорь избыточен
 
 `scripts/experiments/h31b_coverage_tiers.ts`. Coverage tiers cov6/9/12 vs S1 при matched k.
