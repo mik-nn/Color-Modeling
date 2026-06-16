@@ -20,7 +20,7 @@ import type { AnchorSet, ProfileData, PredictionReport, WhitePointXYZ } from '..
 import { loadProfileMatrix, alignProfiles } from '../lib/dataset/matrix'
 import { buildWlsInterpolator, type WlsInterpOptions } from '../lib/interp/wlsInterp'
 import type { InterpPoint } from '../lib/interp/rgbInterp'
-import { pickHeuristicAnchors } from '../lib/sampling/heuristic'
+import { pickHeuristicAnchors, pickCoverageAnchors } from '../lib/sampling/heuristic'
 import {
   runPerLambdaAffineTransfer,
   paperWPFromBrightestPatch,
@@ -102,7 +102,7 @@ function pickCaeD7Bundle(
   }
   return { weights: CAE_WEIGHTS_D7_FULL36, mode: 'full36', matched: false }
 }
-type AnchorStrategy = 'S1' | 'S2' | 'S3' | 'S4'
+type AnchorStrategy = 'S1' | 'S2' | 'S3' | 'S4' | 'Coverage'
 
 interface Props {
   profiles: ProfileData[]
@@ -312,6 +312,11 @@ export default function TransferView({ profiles }: Props) {
         }
         if (anchorStrategy === 'S4') {
           return pickLabSaturationAnchors(Baligned, { count: 2, minHueSeparationDeg: 90 })
+        }
+        if (anchorStrategy === 'Coverage') {
+          // H31 fixed 6-patch chart: {white, C, M, Y, black, mid-gray}. Target-
+          // agnostic, ~77% pass at k≈6 — the cheapest deployable few-patch set.
+          return pickCoverageAnchors(Baligned)
         }
         return pickHeuristicAnchors(Baligned)
       })()
@@ -1033,6 +1038,9 @@ export default function TransferView({ profiles }: Props) {
             <option value="S3">S3 — single-channel ramp (paper + N ramp anchors)</option>
             <option value="S4">
               S4 — three anchors: paper + two along dominant directions at fixed chroma
+            </option>
+            <option value="Coverage">
+              Coverage — fixed 6-patch chart: white + C/M/Y + black + mid-gray (H31, ~77%)
             </option>
           </select>
         </label>

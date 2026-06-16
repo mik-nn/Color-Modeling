@@ -90,7 +90,7 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 
 | File                           | Strategy | Purpose                                                                                                                                          |
 | ------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `lib/sampling/heuristic.ts`    | **S1** | Forced set: paper + RGB corners (8) + black + neutrals. Total k=13. Baseline; comprehensive coverage.                                          |
+| `lib/sampling/heuristic.ts`    | **S1** | Forced set: paper + RGB corners (8) + black + neutrals. Total k=13. Baseline; comprehensive coverage. Also exports **`pickCoverageAnchors`** (H31, "Coverage" strategy in TransferView): fixed 6-patch chart {white, C, M, Y, black, mid-gray}, target-agnostic, ~77% pass at k≈6. H31 proved D1's low-k deficit is anchor PLACEMENT on the ink-coverage axis, not count (S1 k=6=49% → coverage k=6=77%); S1 k=12 already matches k=13 (88.5%, 13th redundant). |
 | `lib/sampling/channelRamp.ts`  | **S3** | Single-channel or neutral ramps (k=5). For H9: test if per-λ substrate transform `f_λ` shared across inks. Neutral ramps work; cyan ramps fail. |
 | `lib/sampling/labSaturation.ts` | **S4** | Lab-saturation anchors: paper + high-chroma patches. Experimental; rejected on OBA-disparate pairs (H12).                                       |
 

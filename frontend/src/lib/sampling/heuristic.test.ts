@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickHeuristicAnchors } from './heuristic';
+import { pickHeuristicAnchors, pickCoverageAnchors } from './heuristic';
 import type { ProfileMatrices } from '../dataset/matrix';
 
 function mkProfile(patches: { id: string; rgb: [number, number, number] }[]): ProfileMatrices {
@@ -89,5 +89,52 @@ describe('pickHeuristicAnchors', () => {
       droppedCount: 0,
     };
     expect(() => pickHeuristicAnchors(cmykProfile)).toThrow(/RGB-only/);
+  });
+});
+
+describe('pickCoverageAnchors (H31 fixed chart)', () => {
+  const targets: { id: string; rgb: [number, number, number] }[] = [
+    { id: 'white',   rgb: [255, 255, 255] },
+    { id: 'cyan',    rgb: [0, 255, 255] },
+    { id: 'magenta', rgb: [255, 0, 255] },
+    { id: 'yellow',  rgb: [255, 255, 0] },
+    { id: 'black',   rgb: [0, 0, 0] },
+    { id: 'gray',    rgb: [128, 128, 128] },
+  ];
+
+  it('picks the 6 coverage targets with paper (white) first', () => {
+    // include distractor patches so nearest-match is exercised.
+    const profile = mkProfile([
+      { id: 'red', rgb: [255, 0, 0] },
+      ...targets,
+      { id: 'mid', rgb: [200, 100, 50] },
+    ]);
+    const set = pickCoverageAnchors(profile);
+    expect(set.meta?.chosenIdx).toHaveLength(6);
+    // chosenIdx[0] must be the paper row (white) so D1 can use it as paperRowIdx.
+    const idx0 = set.meta!.chosenIdx![0];
+    expect([profile.D[idx0 * 3], profile.D[idx0 * 3 + 1], profile.D[idx0 * 3 + 2]]).toEqual([255, 255, 255]);
+    expect(set.sampleIds[0]).toBe('white');
+  });
+
+  it('dedupes when a sparse grid maps two targets to one patch', () => {
+    // only white + a single dark patch → black, gray, C, M, Y collapse onto nearest available
+    const profile = mkProfile([
+      { id: 'white', rgb: [255, 255, 255] },
+      { id: 'dark',  rgb: [10, 10, 10] },
+    ]);
+    const set = pickCoverageAnchors(profile);
+    // deduped to the 2 distinct patches, never more than the grid size.
+    expect(set.meta!.chosenIdx!.length).toBeLessThanOrEqual(2);
+    expect(new Set(set.meta!.chosenIdx)).toEqual(new Set(set.meta!.chosenIdx)); // no dup indices
+    expect(new Set(set.meta!.chosenIdx).size).toBe(set.meta!.chosenIdx!.length);
+  });
+
+  it('throws on CMYK profile (RGB-only)', () => {
+    const cmyk: ProfileMatrices = {
+      X: new Float64Array(3), D: new Float64Array([0, 0, 0, 0]),
+      channels: 4, N: 1, L: 3, wavelengths: [380, 390, 400], sampleIds: ['c1'], droppedCount: 0,
+    };
+    expect(() => pickCoverageAnchors(cmyk)).toThrow(/RGB-only/);
   });
 });

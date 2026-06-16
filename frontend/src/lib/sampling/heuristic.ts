@@ -141,3 +141,54 @@ export function pickHeuristicAnchors(
     },
   };
 }
+
+/**
+ * Coverage-spanning fixed 6-patch chart (H31, 2026-06-16).
+ *
+ * Anchors every gamut direction at low AND high ink coverage:
+ *   white (ink 0), C/M/Y primaries (ink 1), black (full CMY, ink 3),
+ *   mid-gray (ink ~1.5).
+ *
+ * Unlike S1, this set is target-agnostic (no per-pair heuristic) and needs no
+ * secondary corners. H31 showed it lifts D1 from 45.2% (S1 k=5) to 76.9% at
+ * k≈6 on 104 non-metallic pairs — the bulk of D1's low-anchor deficit is anchor
+ * PLACEMENT on the ink-coverage axis, not count. Use as the cheapest deployable
+ * few-patch substrate-adaptation chart; for peak accuracy use S1 with k≈12.
+ *
+ * Paper (white) is always returned first so `chosenIdx[0]` is the paper row.
+ */
+const COVERAGE_TARGETS: CornerTarget[] = [
+  { name: 'white',   rgb: [255, 255, 255] }, // ink 0 (paper)
+  { name: 'cyan',    rgb: [  0, 255, 255] }, // ink 1
+  { name: 'magenta', rgb: [255,   0, 255] }, // ink 1
+  { name: 'yellow',  rgb: [255, 255,   0] }, // ink 1
+  { name: 'black',   rgb: [  0,   0,   0] }, // ink 3 (full CMY)
+  { name: 'mid-gray', rgb: [128, 128, 128] }, // ink ~1.5
+];
+
+export function pickCoverageAnchors(profile: ProfileMatrices): AnchorSet {
+  if (profile.channels !== 3) {
+    throw new Error(`pickCoverageAnchors: RGB-only for now (got ${profile.channels} channels)`);
+  }
+  const N = profile.N;
+  const taken = new Set<number>();
+  const pickedIdx: number[] = [];
+  const pickedLabels: string[] = [];
+  for (const target of COVERAGE_TARGETS) {
+    const idx = nearestRgbIdx(profile.D, N, target.rgb);
+    if (idx < 0 || taken.has(idx)) continue; // dedupe: a sparse grid may map two targets to one patch
+    taken.add(idx);
+    pickedIdx.push(idx);
+    pickedLabels.push(target.name);
+  }
+  return {
+    sampleIds: pickedIdx.map(i => profile.sampleIds[i]),
+    strategy: 'forced',
+    meta: {
+      labels: pickedLabels,
+      chosenIdx: pickedIdx,
+      neutralCount: 1,
+      cornerCount: pickedIdx.length,
+    },
+  };
+}

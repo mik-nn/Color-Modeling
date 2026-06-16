@@ -6,6 +6,16 @@
 
 ---
 
+## 2026-06-16 — UI: интеграция H31 Coverage-чарта в TransferView (anchor strategy)
+
+Добавил `pickCoverageAnchors` в `lib/sampling/heuristic.ts` — фиксированный 6-патч чарт {white, C, M, Y, black, mid-gray} (H31), target-agnostic, paper первым (chosenIdx[0]=paper row). Подключил в `TransferView.tsx`: тип `AnchorStrategy` += `'Coverage'`, ветка в выборе якорей, опция в dropdown «Coverage — fixed 6-patch chart (~77%)». 3 юнит-теста (paper-first, dedupe на разреженной сетке, throw на CMYK).
+
+**Верификация:** `npx vitest run heuristic.test.ts` 7/7 PASS; `npm run build` OK; Playwright (Node 20, headless) — загрузил 2 реальных CanvasMatte профиля (800M→ChromataWhite), выбрал Coverage + ref/target, предсказание считается (OBA-mismatch + спектры рендерятся), 0 console-ошибок. Скрин `/tmp/coverage-ui2.png`.
+
+Практика: D1 теперь доступен в UI с дешёвым few-patch coverage-чартом без per-pair эвристики, рядом с S1-S4. См. `IMPLEMENTATION.md` (heuristic.ts), `RESEARCH_HYPOTHESIS.md` H31.
+
+---
+
 ## 2026-06-16 — H32: атака на 12 структурных провалов — 0/12, потолок структурный
 
 `scripts/experiments/h32_structural_attack.ts`. 4 рычага на пару при k=13: B=base rank5; S=+oracle per-λ neutral spreading UNCLAMPED без порога; R8=rank8; S+R8.
