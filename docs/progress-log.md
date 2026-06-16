@@ -6,6 +6,14 @@
 
 ---
 
+## 2026-06-16 — H37 + H38: few-patch spreadCurv + Δcurv-gated spreading
+
+**H37** (`h37_fewpatch_spreadcurv.ts`): spreadCurv держится на 3 нейтральных патчах (white/mid/black = нейтрали coverage-6). AUC=0.848 ≥ полная рампа 0.841; ref-selection 13/14 (лучший из всех бюджетов), p95 1.53/3.10. Бюджеты 4–8 тоже держат 0.81–0.84. → Один 6-патч чарт (H31) одновременно делает предсказание D1 И даёт spreadCurv для флага+рекомендателя. Без доп. измерений.
+
+**H38** (`h38_dcurv_gated_spreading.ts`): spreadCurv как model-input (gate spreading-коррекции). BASE 92/104, GATE 92/104 (fixed 0, broke 0), ALL 90/104 (broke 2). Realistic нейтральный spreading чинит 0 из 20 high-Δcurv пар (подтверждает H32). Blanket spreading ломает 2 passers; Δcurv-gating их экранирует. Вывод: gating предотвращает вред, но не добавляет пользы — корректор бессилен против хроматического остатка. Model-input путь закрыт. Деплоим spreadCurv как флаг + reference-рекомендатель, НЕ коррекцию. См. EXPERIMENTS H37, H38.
+
+---
+
 ## 2026-06-16 — H36: spreadCurv как интерпретируемый параметр совместимости подложек (CONFIRMED)
 
 Гипотеза пользователя: подложки с похожим spreadCurv ведут себя похоже; это физически интерпретируемый фактор. **Подтверждено сильно.** `h36_spreadcurv_param.ts`, 104 пары k=13.
