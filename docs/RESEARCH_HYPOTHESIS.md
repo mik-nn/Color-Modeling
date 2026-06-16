@@ -1806,9 +1806,48 @@ fails, the rank-5 residual genuinely needs ~13 samples to span the nonlinearity 
 
 ### Script
 
-`scripts/experiments/h31_coverage_anchors.ts` (planned)
+`scripts/experiments/h31_coverage_anchors.ts` (2026-06-16)
 
-### Status: **pending**
+### Status: **PASS (both gates)**
+
+**Results (104 non-metallic same-mode pairs, coverage set median size = 6):**
+
+| anchor set (k=6 unless noted) | pass |
+|---|---|
+| S1 k=5 (baseline) | 45.2% |
+| S1 k=6 (count control) | 49.0% |
+| **H31 coverage k=6 (test)** | **76.9%** |
+| S1 k=13 (ceiling) | 88.5% |
+
+- **Gate H31a PASS**: H31 coverage = 76.9% ≥ 75%. Placement alone lifts D1 **+31.7 pp** over
+  S1 k=5 at the same anchor budget (~6).
+- **Gate H31b PASS**: 12/12 persistent failers still fail under coverage (med 1.5–2.4,
+  p95 5.4–8.8) — confirmed structural, not a placement artefact.
+
+**Placement vs count, isolated.** At identical k=6, coverage gains 34 pairs and loses 5 (net
+**+29**) over the S1 k=6 heuristic. S1 k=6 (49.0%) → H31 coverage k=6 (76.9%) is **+27.9 pp from
+WHERE the 6 anchors sit, not how many.** This proves D1's low-k collapse is anchor placement on
+the ink-coverage axis. The user's CMYKOG framing is validated: D1 needs each gamut direction
+sampled at low and high coverage (white + 3 primaries + full-CMY + mid-gray), not the secondary
+corners S1 picks first.
+
+**"D1 needs 13" → "D1 needs a coverage-spanning 6."** The remaining gap to k=13 (76.9% → 88.5%,
+11.6 pp) is genuine count/density (finer coverage), but the bulk of the low-k deficit (28 of
+~43 pp) is placement.
+
+### Practical implication
+
+The coverage set is a **fixed 6-patch chart** {white, cyan, magenta, yellow, black, mid-gray} —
+no per-pair S1 heuristic and no target-profile knowledge required. This is a deployable
+6-measurement substrate-adaptation protocol at ~77% pass (vs D1-S1 k=5 = 45%, H22 neural k=5 =
+84.6%). Neural still wins at k=5–6 on pass rate, but H31 gives D1 a usable few-patch mode with a
+trivially specifiable chart.
+
+### Follow-ups
+
+- H31b-extended: coverage k=8/10 (add secondaries + a second neutral level) — does it reach
+  88.5% faster than S1 k=13, i.e. is the count gap also placeable?
+- Compare H31 fixed-chart D1 vs H22 neural at matched k=6 as the deployable few-patch options.
 
 ---
 
