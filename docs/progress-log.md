@@ -6,6 +6,16 @@
 
 ---
 
+## 2026-06-16 — UI: Batch matrix-вид (pass/fail грид по всем same-mode парам)
+
+Закрывает претензию пользователя «в упор не вижу при каких условиях H4 даёт 88%» — теперь видно в UI. `lib/predict/batchEval.ts`: `evalLoadedPairs(profiles, opts)` гоняет продакшн D1 (S1 k=13, OBA-separate, paper-ratio+PCA residual, OBA назад) по всем упорядоченным same-mode парам загруженных профилей → per-pair med/p95/pass по воротам H4 + per-mode и общий pass-rate. 4 юнит-теста (same-mode pairing, identical→pass, per-mode aggregate, <2 same-mode→empty).
+
+TransferView: кнопка «Run batch» + state (deferred eval, не блокирует paint) + ref×tgt цветной грид (зелёный pass / розовый fail, ячейка = p95, вертикальные заголовки), общий pass-rate, per-mode разбивка.
+
+**Верификация:** vitest 10/10 (batchEval 4 + spreadCurv 6); build OK; Playwright (5 CanvasMatte) → 20 пар, 12/20 (60%), грид показывает строку+столбец DecorMatte полностью красными (p95 5.2/4.0/6.4/4.1) = все 8 провалов вокруг DecorMatte (подтверждает H33/H36 визуально), 0 console-ошибок. Скрин `/tmp/batch-ui.png`. См. IMPLEMENTATION.md (batchEval.ts).
+
+---
+
 ## 2026-06-16 — H39: primary-aligned spreadCurv vs нейтраль (гипотеза пользователя) — REJECTED
 
 Гипотеза: дескриптор по праймерис (max-Lab-chroma на hue, кривизна вектора paper→primary в полосе поглощения) предскажет провал лучше нейтрали, т.к. провалы в хроматических секторах. `h39_primary_spreadcurv.ts`, 104 пары.

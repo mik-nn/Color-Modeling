@@ -22,6 +22,7 @@ import {
   computeSpreadCurv, classifyPairCompatibility, rankReferencesByProximity,
   SPREADCURV_FAIL_THRESHOLD, type SpreadCurv,
 } from '../lib/predict/spreadCurv'
+import { evalLoadedPairs, type BatchEvalResult } from '../lib/predict/batchEval'
 import { buildWlsInterpolator, type WlsInterpOptions } from '../lib/interp/wlsInterp'
 import type { InterpPoint } from '../lib/interp/rgbInterp'
 import { pickHeuristicAnchors, pickCoverageAnchors } from '../lib/sampling/heuristic'
@@ -230,6 +231,8 @@ function pickLabDirectionAnchorIdx(
 export default function TransferView({ profiles }: Props) {
   const [refName, setRefName] = useState<string>('')
   const [targetName, setTargetName] = useState<string>('')
+  const [batch, setBatch] = useState<BatchEvalResult | null>(null)
+  const [batchRunning, setBatchRunning] = useState(false)
   const [predictor, setPredictor] = useState<PredictorKey>('A3_vs_D1')
   const [residualRank, setResidualRank] = useState<number>(5)
   const [poolBasisRank, setPoolBasisRank] = useState<number>(6)
@@ -309,6 +312,17 @@ export default function TransferView({ profiles }: Props) {
     const ranked = rankReferencesByProximity(tgtCurv, candidates)
     return { tgtCurv, refCurv, pair, ranked }
   }, [profiles, refName, targetName, spreadCurvByName])
+
+  // Batch matrix: D1 pass/fail over every same-mode pair among loaded profiles.
+  // Synchronous but deferred a tick so the "running…" state paints first.
+  const runBatch = () => {
+    setBatchRunning(true)
+    setBatch(null)
+    setTimeout(() => {
+      try { setBatch(evalLoadedPairs(profiles, { obaSeparate })) }
+      finally { setBatchRunning(false) }
+    }, 20)
+  }
 
   const result = useMemo<RunResult | null>(() => {
     if (!refProfile || !targetProfile || refProfile === targetProfile) return null
@@ -1047,6 +1061,108 @@ export default function TransferView({ profiles }: Props) {
           )}
         </div>
       )}
+
+      {/* Batch matrix — D1 pass/fail over every same-mode pair (the aggregate "88%"). */}
+      <div className="rounded border border-gray-700 bg-gray-900/40 p-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs uppercase tracking-wider text-gray-500">
+            Batch matrix · D1 pass/fail over all same-mode pairs (H4)
+          </span>
+          <button
+            type="button"
+            data-testid="run-batch"
+            onClick={runBatch}
+            disabled={batchRunning || profiles.length < 2}
+            className="rounded bg-blue-700 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-40"
+          >
+            {batchRunning ? 'Running…' : `Run batch (${profiles.length} profiles)`}
+          </button>
+        </div>
+
+        {batch && (
+          <div data-testid="batch-result" className="mt-3">
+            <div className="text-sm text-gray-200">
+              Overall pass-rate:{' '}
+              <span
+                data-testid="batch-passrate"
+                className={
+                  'font-mono font-semibold ' +
+                  (batch.passRate >= 0.8 ? 'text-emerald-300' : 'text-amber-300')
+                }
+              >
+                {batch.passed}/{batch.total} ({(batch.passRate * 100).toFixed(1)}%)
+              </span>
+              <span className="ml-2 text-xs text-gray-500">
+                gate: median ΔE00 ≤ 1.5 &amp; p95 ≤ 3.0 · k=13 · OBA-sep {obaSeparate ? 'on' : 'off'}
+              </span>
+            </div>
+
+            {batch.byMode.map((m) => {
+              const cells = batch.pairs.filter((p) => p.mode === m.mode && !p.skipped)
+              const subs = [...new Set(cells.flatMap((c) => [c.ref, c.tgt]))].sort()
+              const sn = (n: string) => n.replace(/^BC_/, '').replace(/_P9000.*/, '')
+              const cellOf = (ref: string, tgt: string) =>
+                cells.find((c) => c.ref === ref && c.tgt === tgt)
+              return (
+                <div key={m.mode} className="mt-3">
+                  <div className="text-xs text-gray-400">
+                    <span className="font-semibold text-gray-200">{m.mode}</span> —{' '}
+                    <span className={m.passRate >= 0.8 ? 'text-emerald-300' : 'text-amber-300'}>
+                      {m.passed}/{m.total} ({(m.passRate * 100).toFixed(0)}%)
+                    </span>
+                  </div>
+                  <div className="mt-1 overflow-x-auto">
+                    <table className="border-collapse text-[10px]">
+                      <thead>
+                        <tr>
+                          <th className="p-1 text-right text-gray-500">ref ↓ / tgt →</th>
+                          {subs.map((t) => (
+                            <th key={t} className="p-1 text-gray-400 [writing-mode:vertical-rl] rotate-180">
+                              {sn(t)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {subs.map((ref) => (
+                          <tr key={ref}>
+                            <td className="whitespace-nowrap p-1 text-right text-gray-400">{sn(ref)}</td>
+                            {subs.map((tgt) => {
+                              const c = cellOf(ref, tgt)
+                              if (ref === tgt)
+                                return <td key={tgt} className="p-1 text-center text-gray-700">·</td>
+                              if (!c)
+                                return <td key={tgt} className="p-1 text-center text-gray-700">—</td>
+                              return (
+                                <td
+                                  key={tgt}
+                                  title={`${sn(ref)}→${sn(tgt)}  med ${c.median.toFixed(2)} / p95 ${c.p95.toFixed(2)}`}
+                                  className={
+                                    'p-1 text-center font-mono ' +
+                                    (c.pass ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300')
+                                  }
+                                >
+                                  {c.p95.toFixed(1)}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            })}
+
+            {batch.total === 0 && (
+              <p className="mt-2 text-xs text-amber-300">
+                No same-mode pairs among loaded profiles — load ≥2 profiles of the same print mode.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-5 gap-4">
         <label className="block">
