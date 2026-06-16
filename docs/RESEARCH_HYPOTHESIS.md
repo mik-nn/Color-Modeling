@@ -1522,6 +1522,100 @@ confirms IDW = the decisive difference.
 
 ---
 
+## H27 result (2026-06-16) — CONFIRMED
+
+D1 Layer-3 ablation (`globalResidual` switch on `applyPaperRatioResidual`,
+`scripts/experiments/h27_layer3_ablation.ts`). On 104 non-metallic same-mode pairs:
+D1 FULL (local IDW) **92/104 = 88.5%** → D1 noL3 (global mean residual) **79/104 = 76.0%**.
+Layer 3 is worth **+12.5 pp**; 13 pairs lost, 0 gained; Δp95(noL3−full) ≥ 0 everywhere.
+All 3 H27/H26 D1-only pairs (17MGloss→Crystalline, 17MSatin→Crystalline,
+PhotoPeelGloss→VibranceGloss) collapse without Layer 3. Confirms H26 root-cause: **D1's
+entire edge over H22 mean_delta IS the device-space-local correction (Layer 3).** noL3 D1
+(76.0%) is below H22 k=5 S1 (84.6%) — locality, not the linear layers, carries D1.
+
+---
+
+## H28 — Per-anchor device-space attention (learned IDW analogue) (2026-06-16, pre-registered)
+
+### Statement
+
+H22's failure (H26: H22-only = 0; H27: D1 needs Layer 3) is caused by mean-pooling the k
+anchor deltas into one global vector, discarding device-space locality. Replacing the mean
+pool with a **learned attention over individual anchors, keyed on device coordinates**, lets
+the network weight nearby anchors more — a soft, learnable, cross-substrate-trained analogue
+of D1's fixed-k IDW Layer 3. This should (a) match or beat H22's pass rate, and (b) recover
+the locality that makes D1's marginal pairs pass.
+
+### Architecture
+
+For query patch q with normalised source spectrum `s_q ∈ ℝ³⁶` and device coords `c_q ∈ ℝ³`
+(CMY = (255−RGB)/255), and k anchors each with `(s_j, t_j, c_j)`:
+
+```text
+delta_j   = t_j − s_j                              ∈ ℝ³⁶   (normalised tgt−src per anchor)
+score_j   = (Wq·c_q) · (Wk·c_j) / √d                       (d = 8 attention dim)
+a_j       = softmax_j(score_j)   over real anchors (k<K_MAX padded + masked)
+attended  = Σ_j a_j · delta_j                       ∈ ℝ³⁶
+corr      = α · tanh( MLP([s_q, c_q, attended]) )   ∈ ℝ³⁶   (α small, learned head)
+pred      = clamp(s_q + attended + corr, 0, ∞)
+```
+
+Locality lives in the learned bilinear kernel `Wq, Wk` on device coords (not fixed Euclidean
+IDW). The residual form `pred = s_q + attended + corr` mirrors D1 (paper-ratio base +
+anchor-driven local residual). Trained k-augmented (k ∈ {5,8,13}), same OBA handling and
+leave-out-substrate split as H22. Loss = MSE in normalised reflectance.
+
+### Acceptance gates
+
+- **Gate H28a**: all-pairs k=5 pass rate ≥ H22 k=5 S1 (84.6%) — attention ≥ mean-pool.
+- **Gate H28b**: recover ≥ 2 of the 3 H27 D1-only pairs (17MGloss→Crystalline,
+  17MSatin→Crystalline, PhotoPeelGloss→VibranceGloss) — locality captured.
+- **Stretch**: all-pairs k=13 ≥ D1 88.5% — attention beats fixed IDW.
+
+### Rationale
+
+H26 named the fix explicitly: per-anchor attention, KNN-conditioned, invariant to anchor
+order. Attention with masked softmax is permutation-invariant over anchors by construction,
+killing the CMY-primary OOD collapse (H26: 0%). Keying on device coords reproduces IDW's
+"nearest anchor dominates" behaviour but with a learned bandwidth/metric shared across all
+substrate pairs, so it can be smoother than fixed k=4 inverse-distance.
+
+### Script
+
+`scripts/h28_train.ts` (2026-06-16)
+
+### Status: **FAIL (both gates)**
+
+**Results (104 non-metallic same-mode pairs, leave-3-substrate-out):**
+
+| Method | k=5 | k=8 | k=13 | median ΔE₀₀ (k=13) | P95 (k=13) |
+|---|---|---|---|---|---|
+| H22 mean-pool | 84.6% | 83.7% | — | 0.81 | — |
+| **H28 attention** | **80.8%** | 78.8% | **84.6%** | **0.735** | 2.662 |
+| D1 (reference) | — | — | 88.5% | ~0.9 | — |
+
+- **Gate H28a FAIL**: k=5 = 80.8% < 84.6% (H22 k=5). Attention does NOT beat mean-pool at low k.
+- **Gate H28b FAIL**: recovered 1/3 H27 D1-only pairs (17MGloss→Crystalline PASS;
+  17MSatin→Crystalline p95=3.12 fail; PhotoPeelGloss→VibranceGloss p95=4.83 fail).
+
+**Diagnosis.** H28 has the *best median* of any method (0.735 — beats H22 0.81, matches D1):
+the device-keyed attention captures the bulk transfer well. But the gate is defined by the
+**P95 tail**, and there H28 still loses near-gate pairs. Root cause: **softmax attention is too
+diffuse** — divided by √d it spreads weight over many anchors, behaving like a smoother
+mean-pool rather than IDW's "nearest anchor dominates". The residual `corr` (α=0.25) cannot
+sharpen the tail. Median improves because soft averaging is a good *global* estimator;
+the tail fails because the *local* sharpness that makes D1's marginal pairs pass is absent.
+Permutation-invariance did fix the H26 CMY-primary OOD collapse (not retested here), but
+invariance alone is not the locality mechanism.
+
+**H29 proposal.** Sharpen the attention to recover IDW behaviour: (a) learnable temperature τ
+on the scores (`score/τ`, τ→0 ⇒ hard nearest-anchor), and/or (b) hard top-k gating (mask all
+but the nearest k′=4 anchors in device space before softmax — the literal learned-IDW). Expect
+the P95 tail to drop and the 3 D1-only pairs to pass, since their failure is precisely a
+locality problem (H27: D1 needs Layer-3 IDW for them).
+
+---
+
 ## Note — M0/M2 at 380 nm (measurement artefact)
 
 Independent of the ink-physics hypotheses: `mean(M0 − M2)` at 380 nm is **negative**

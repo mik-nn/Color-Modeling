@@ -6,6 +6,18 @@
 
 ---
 
+## 2026-06-16 — H28: per-anchor device-space attention (learned IDW) — FAIL обоих ворот
+
+Построил `scripts/h28_train.ts` (tfjs-node, ручной градиентный цикл с кастомным masked-attention). Архитектура: `pred = relu(s_q + Σ_j a_j·delta_j + α·tanh(MLP[s_q, c_q, attended]))`, веса `a_j = softmax(masked (Wq·c_q)·(Wk·c_j)/√8)` по device-CMY — мягкий обучаемый IDW. Residual-форма как у D1. Обучение: 24 субстрата (leave-out DecorMatte/Silverada/VibranceLuster), k-aug {5,8,13}, 263 522 сэмпла, 200 эпох.
+
+**Результат:** k=5=80.8%, k=8=78.8%, k=13=84.6% (104 неметаллические пары). **Лучшая медиана из всех методов — 0.735** (H22=0.81, ≈D1), но ворота определяются по P95-хвосту, и там H28 теряет приграничные пары. H28b: 1/3 D1-only пар восстановлено.
+
+**Why FAIL:** softmax/√d слишком размазан — усредняет по многим якорям как взвешенное среднее, а не «ближайший якорь доминирует» (IDW). Median хорош (мягкое усреднение = хороший глобальный оценщик), но локальная резкость, которая вытягивает приграничные пары D1 (H27 Layer 3), отсутствует. Permutation-invariance (фикс H26 CMY-primary OOD) есть, но сама по себе она не механизм локальности. **D1 fixed-k IDW остаётся чемпионом локальности (88.5%).** См. `EXPERIMENTS.md` H28, `RESEARCH_HYPOTHESIS.md` H28.
+
+**Next (H29):** заострить attention — обучаемая температура τ (τ→0 ⇒ hard nearest) и/или hard top-k′=4 device-gating перед softmax (буквальный обучаемый IDW). Ожидаем падение P95-хвоста и проход 3 D1-only пар.
+
+---
+
 ## 2026-06-16 — H27: D1 Layer-3 ablation — локальный IDW-остаток даёт +12.5 pp, это весь отрыв D1 от H22
 
 Добавил переключатель `globalResidual` в `applyPaperRatioResidual` (paperRatioResidual.ts): при `true` каждый патч получает СРЕДНИЙ остаточный score по якорям (глобальная коррекция, как H22 mean_delta) вместо локальной IDW-интерполяции в RGB device-пространстве. Скрипт `scripts/experiments/h27_layer3_ablation.ts` гоняет D1 FULL vs noL3 на 104 неметаллических same-mode парах.
