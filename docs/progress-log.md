@@ -6,6 +6,21 @@
 
 ---
 
+## 2026-06-17 — Build step 1: coverage6Chart.ts (anchor mapping 6/8/12, TDD GREEN)
+
+`src/lib/core/coverage6Chart.ts` + `.test.ts`, 8 unit tests (all pass, Node 20).
+
+Первый модуль финального генератора: фиксированное сопоставление device-RGB
+целей с индексами якорей. Поддерживает **cov6** (6 патчей, 76.9%), **cov8n**
+(cov6+gray64+gray192, 82.7%, sweet spot), **cov12** (88.5%, пик). API:
+`mapDeviceToAnchorIdx(profile, k)` → `{anchorIdx[], metadata}`. Детерминированный,
+без знания спектров (target-agnostic), дедупирует совпадения.
+
+**Why:** заложить фундамент для оркестратора (step 2: generateDataset.ts) и
+biasDetector (step 3) на основе уже испытанной структуры h31b/h42.
+
+---
+
 ## 2026-06-17 — H41/H42: анатомия разрыва cov6→S1-12, чарт-лестница 6/8/12
 
 `h41_cov6_gap_anatomy.ts`, `h42_cov8_neutral_vs_secondary.ts`, 104 non-metallic пары.
