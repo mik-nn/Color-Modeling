@@ -6,6 +6,28 @@
 
 ---
 
+## 2026-06-17 — Build step 3: biasWarning.ts (spreadCurv bias detector, TDD GREEN)
+
+`src/lib/core/biasWarning.ts` + `.test.ts`, 10 unit tests (all pass, Node 20).
+`src/lib/core/` итого: 29/29.
+
+SpreadCurv-based Hue/Saturation Bias детектор. Вычисляет spreadCurv реф-профиля
+(из полной нейтральной рампы) и target-субстрата (из 3 нейтралей coverage-6:
+white/gray128/black). Сравнивает пару через `classifyPairCompatibility` (threshold
+0.137, H36). Для N рефов: `rankReferencesByProximity` → рекомендует ближайший.
+
+Нетривиальный момент: `computeSpreadCurv` требует ≥3 не-paper нейтралей, но
+coverage-6 даёт только 2 (gray128 + black). Решение: `fitSpreadQuad` — точный
+решатель 2×2 для n=2 (OLS для n≥3). При n=2 система определена при условии
+paper = неявный якорь a=0.
+
+level='hue-sat-bias' → recoverable=false (H38/H40: хвост хроматический,
+нейтральные данные не правят). Рекомендатор (multi-ref) из H37.
+
+**Why:** step 3 из build-sequence (план §6). Детектор завершает core/ слой.
+
+---
+
 ## 2026-06-17 — Build step 2: generateDataset.ts (pipeline orchestrator, TDD GREEN)
 
 `src/lib/core/generateDataset.ts` + `.test.ts`, 11 unit tests (all pass, Node 20).
