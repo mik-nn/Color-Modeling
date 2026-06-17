@@ -5,6 +5,7 @@ import ProfileUploader from './components/ProfileUploader';
 import ProfileList from './components/ProfileList';
 import TransferView from './components/TransferView';
 import KSweepView from './components/KSweepView';
+import GenerateView from './components/GenerateView';
 
 // Dev-only: expose store on window for Playwright introspection and console
 // debugging (e.g. extracting paper spectra to investigate OBA effects).
@@ -22,7 +23,7 @@ function App() {
   } = useProfileStore();
 
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'transfer' | 'ksweep'>('transfer');
+  const [activeTab, setActiveTab] = useState<'generate' | 'transfer' | 'ksweep'>('generate');
 
   const handleFilesSelected = async (files: File[]) => {
     setLoadError(null);
@@ -100,7 +101,7 @@ function App() {
           <div className="flex-1 overflow-auto">
             {/* Tab bar */}
             <div className="flex gap-0 border-b border-gray-800 px-6 pt-4 bg-gray-950 sticky top-0 z-10">
-              {(['transfer', 'ksweep'] as const).map(tab => (
+              {(['generate', 'transfer', 'ksweep'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -110,12 +111,14 @@ function App() {
                       : 'border-transparent text-gray-400 hover:text-gray-200'
                   }`}
                 >
-                  {tab === 'transfer' ? 'Transfer' : 'k-Sweep'}
+                  {tab === 'generate' ? 'Generate' : tab === 'transfer' ? 'Transfer' : 'k-Sweep'}
                 </button>
               ))}
             </div>
             <div className="p-8">
-              {activeTab === 'transfer' ? (
+              {activeTab === 'generate' ? (
+                <GenerateView profiles={profiles} />
+              ) : activeTab === 'transfer' ? (
                 <TransferView profiles={profiles} />
               ) : (
                 <KSweepView profiles={profiles} />

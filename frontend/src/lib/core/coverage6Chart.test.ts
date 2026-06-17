@@ -17,18 +17,13 @@ function mockProfile(): ProfileMatrices {
   const samples: string[] = []
 
   // Add cov6 targets + nearby
-  const targets6 = [
+  const targets6: Array<[number, number, number, string]> = [
     [255, 255, 255, 'paper'],
     [0, 255, 255, 'cyan'],
     [255, 0, 255, 'magenta'],
     [255, 255, 0, 'yellow'],
     [0, 0, 0, 'black'],
     [128, 128, 128, 'gray128'],
-  ]
-  const targets8n = [
-    ...targets6.slice(0, 6),
-    [64, 64, 64, 'gray64'],
-    [192, 192, 192, 'gray192'],
   ]
 
   let idx = 0
@@ -116,7 +111,7 @@ describe('coverage6Chart', () => {
     it('cov8n includes all cov6 + 2 neutrals', () => {
       const res6 = mapDeviceToAnchorIdx(prof, 6)
       const res8n = mapDeviceToAnchorIdx(prof, 8)
-      expect(res8n.anchorIdx).toContain(...res6.anchorIdx.slice(0, 6))
+      expect(res8n.anchorIdx).toEqual(expect.arrayContaining(res6.anchorIdx.slice(0, 6)))
     })
   })
 })

@@ -96,7 +96,7 @@ function idx560(L: number): number {
 function fitSpreadQuad(ai: number[], yi: number[]): [number, number] {
   const n = ai.length
   if (n === 0) return [0, 0]
-  const ri = yi.map((y, i) => y - 1) // r = y - 1
+  const ri = yi.map((y) => y - 1) // r = y - 1
   if (n === 1) {
     // c1 only: c1*a = r → c1 = r/a (c2=0)
     return [ai[0] > 0 ? ri[0] / ai[0] : 0, 0]
@@ -112,8 +112,8 @@ function fitSpreadQuad(ai: number[], yi: number[]): [number, number] {
   }
   // n≥3: OLS via normal equations
   let S11 = 0, S12 = 0, S22 = 0, T1 = 0, T2 = 0
-  for (let i = 0; i < n; i++) {
-    const a = ai[i], a2 = a * a, r = ri[i]
+  for (let j = 0; j < n; j++) {
+    const a = ai[j], a2 = a * a, r = ri[j]
     S11 += a * a; S12 += a * a2; S22 += a2 * a2; T1 += a * r; T2 += a2 * r
   }
   const det = S11 * S22 - S12 * S12
@@ -125,6 +125,8 @@ function fitSpreadQuad(ai: number[], yi: number[]): [number, number] {
  * Compute spreadCurv from sparse neutral anchor measurements.
  * Accepts ≥1 non-paper neutral. Paper is the implicit a=0 anchor.
  */
+interface SpreadCurv { s560: number; bb: number; nNeutrals: number }
+
 function targetSpreadCurv(anchors: AnchorMeasurement[]): SpreadCurv | null {
   const L = 36
 

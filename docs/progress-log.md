@@ -6,6 +6,31 @@
 
 ---
 
+## 2026-06-17 — Build step 6: GenerateView.tsx + TS чистка (0 ошибок, 269/269 тестов)
+
+`src/components/GenerateView.tsx` — production UI для генерации датасетов. Workflow:
+выбор 1+ референсных профилей → тип чарта (6/8/12) → таблица целевых патчей →
+загрузка CGATS с измерениями → biasWarning баннер → кнопка Generate → Export CGATS.
+
+Встроенный CGATS-парсер `parseCGATSAnchors` (SAMPLE_ID + RGB + SPECTRAL_NM_*).
+App.tsx: добавлен таб "Generate" (открывается по умолчанию).
+
+TS чистка: 0 ошибок. Исправлено 13 проблем в 8 файлах:
+- `coverage6Chart.test.ts`: tuple type, `arrayContaining`, убран unused `targets8n`
+- `generateDataset.test.ts`: убраны unused type imports, `any[]` вместо `ProfileData['measurements']`
+- `biasWarning.ts/test`: убраны unused `i`, unused type imports
+- `cgatsParser.ts`: `_row`
+- `matrix.ts`: добавлено `wavelengths?: number[]` в AlignedProfiles
+- `predictSubstrateB.ts`: убрана unused `getRow`
+- `heuristic.test.ts`: cast `as number[]` для `meta.chosenIdx`
+- `TransferView.tsx`: `_D` в pickLabDirectionAnchorIdx
+- `optimizer.ts`: `_v`
+- `colormath.ts`: убрана `extractSubstrateDescriptor` с `require()` (не использовалась)
+
+269/269 тестов GREEN.
+
+---
+
 ## 2026-06-17 — Build step 5: cgatsDataset.ts (CGATS.17 export for predicted datasets, TDD GREEN)
 
 `src/lib/core/cgatsDataset.ts` + `.test.ts`, 11 unit tests (11/11 GREEN, Node 20).

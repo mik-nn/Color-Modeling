@@ -41,7 +41,7 @@ export function nelderMead(
 
   for (let iter = 0; iter < max_iter; iter++) {
     iterations = iter + 1
-    const order = fValues.map((v, i) => i).sort((a, b) => fValues[a] - fValues[b])
+    const order = fValues.map((_v, i) => i).sort((a, b) => fValues[a] - fValues[b])
     const sortedSimplex = order.map(i => simplex[i])
     const sortedFValues = order.map(i => fValues[i])
     for (let i = 0; i <= n; i++) {

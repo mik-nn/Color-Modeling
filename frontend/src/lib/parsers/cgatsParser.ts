@@ -92,7 +92,7 @@ export function parseCgats17Text(text: string): CgatsParseResult {
   const startWL = spectralColumns[0]?.wavelength ?? 380
   const wavelengths = spectralColumns.map((c) => c.wavelength)
 
-  const measurements: Measurement[] = raw.map((item, row) => {
+  const measurements: Measurement[] = raw.map((item, _row) => {
     const [X, Y, Z] = spectraToXYZ(item.spectra, startWL)
     const [L, a, bLab] = xyzToLab(X, Y, Z, paperWP)
     const hasRgb = item.r !== undefined && item.g !== undefined && item.b !== undefined

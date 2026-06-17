@@ -13,7 +13,7 @@
  */
 
 import type { ProfileData } from '../../types'
-import { loadProfileMatrix, alignProfiles } from '../dataset/matrix'
+import { loadProfileMatrix } from '../dataset/matrix'
 import { mapDeviceToAnchorIdx } from './coverage6Chart'
 import {
   extractOBAEmission,
@@ -135,7 +135,7 @@ function findPaperRow(D: Float64Array, N: number): number {
 function runD1(
   ref: ProfileData,
   anchors: AnchorMeasurement[],
-  chartK: number,
+  _chartK: number,
   targetName: string,
   anchorIdx: number[],
 ): GenerateDatasetResult {
@@ -231,7 +231,7 @@ function runD1(
 function runPoolPCA(
   refs: ProfileData[],
   anchors: AnchorMeasurement[],
-  chartK: number,
+  _chartK: number,
   targetName: string,
   anchorIdx: number[],
 ): GenerateDatasetResult {

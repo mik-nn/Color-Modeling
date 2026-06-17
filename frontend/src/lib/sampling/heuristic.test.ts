@@ -112,7 +112,7 @@ describe('pickCoverageAnchors (H31 fixed chart)', () => {
     const set = pickCoverageAnchors(profile);
     expect(set.meta?.chosenIdx).toHaveLength(6);
     // chosenIdx[0] must be the paper row (white) so D1 can use it as paperRowIdx.
-    const idx0 = set.meta!.chosenIdx![0];
+    const idx0 = (set.meta!.chosenIdx as number[])[0];
     expect([profile.D[idx0 * 3], profile.D[idx0 * 3 + 1], profile.D[idx0 * 3 + 2]]).toEqual([255, 255, 255]);
     expect(set.sampleIds[0]).toBe('white');
   });
@@ -124,10 +124,11 @@ describe('pickCoverageAnchors (H31 fixed chart)', () => {
       { id: 'dark',  rgb: [10, 10, 10] },
     ]);
     const set = pickCoverageAnchors(profile);
+    const chosenIdx = set.meta!.chosenIdx as number[];
     // deduped to the 2 distinct patches, never more than the grid size.
-    expect(set.meta!.chosenIdx!.length).toBeLessThanOrEqual(2);
-    expect(new Set(set.meta!.chosenIdx)).toEqual(new Set(set.meta!.chosenIdx)); // no dup indices
-    expect(new Set(set.meta!.chosenIdx).size).toBe(set.meta!.chosenIdx!.length);
+    expect(chosenIdx.length).toBeLessThanOrEqual(2);
+    expect(new Set(chosenIdx)).toEqual(new Set(chosenIdx)); // no dup indices
+    expect(new Set(chosenIdx).size).toBe(chosenIdx.length);
   });
 
   it('throws on CMYK profile (RGB-only)', () => {

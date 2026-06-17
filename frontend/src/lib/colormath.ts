@@ -203,18 +203,3 @@ export function deltaE00(L1: number, a1: number, b1: number, L2: number, a2: num
   );
 }
 
-/**
- * Extract learnable substrate descriptor: [OBA_score, WP_X_norm, WP_Y_norm, WP_Z_norm].
- * OBA score from predict/oba.ts detectOBA.
- * WP normalized to [0, 1] range (divide by 100).
- */
-export function extractSubstrateDescriptor(
-  paperSpectrum: number[],
-  startWL = 380,
-): Float64Array {
-  // Import detectOBA dynamically to avoid circular deps
-  const { detectOBA } = require('../lib/predict/oba');
-  const obaInfo = detectOBA(paperSpectrum, { startWL });
-  const [wpX, wpY, wpZ] = spectraToXYZ(paperSpectrum, startWL);
-  return new Float64Array([obaInfo.score, wpX / 100, wpY / 100, wpZ / 100]);
-}

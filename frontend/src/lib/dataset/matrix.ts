@@ -153,6 +153,8 @@ export interface AlignedProfiles {
   droppedOutOfGamut: number;
   /** Interpolation noise floor (LOO RMS reflectance over B); null when interpCount === 0 or when B has fewer than 2 points. */
   looRms: number | null;
+  /** Wavelength axis (nm) from the aligned profiles. */
+  wavelengths?: number[];
 }
 
 /** Quantized device key for exact matching: RGB → integer, CMYK → 2-decimal. */

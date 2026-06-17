@@ -6,7 +6,6 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import type { GenerateDatasetInput, GenerateDatasetResult } from './generateDataset'
 import { generateDataset } from './generateDataset'
 import type { ProfileData } from '../../types'
 
@@ -32,7 +31,8 @@ function makePatch(paperSpec: number[], r: number, g: number, b: number): number
 
 function makeProfile(name: string, paperScale: number): ProfileData {
   const paperSpec = makePaper(paperScale)
-  const measurements: ProfileData['measurements'] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const measurements: any[] = []
 
   // Put paper white first
   measurements.push({

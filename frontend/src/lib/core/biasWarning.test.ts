@@ -11,7 +11,6 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import type { BiasWarning, BiasWarningInput } from './biasWarning'
 import { computeBiasWarning } from './biasWarning'
 import type { ProfileData } from '../../types'
 import type { AnchorMeasurement } from './generateDataset'

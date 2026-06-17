@@ -189,7 +189,7 @@ function evenlySpacedRampLevels(count: number): number[] {
  */
 function pickLabDirectionAnchorIdx(
   X: Float64Array,
-  D: Float64Array,
+  _D: Float64Array,
   N: number,
   L: number,
   startWL: number,

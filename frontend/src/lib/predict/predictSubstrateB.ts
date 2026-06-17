@@ -61,12 +61,6 @@ const RATIO_CLAMP_HI = 5.0; // max paper ratio
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
-/**
- * Extract a single row from a Float64Array matrix (row-major, stride = L).
- */
-function getRow(M: Float64Array, i: number): Float64Array {
-  return M.subarray(i * L, i * L + L);
-}
 
 /**
  * Euclidean distance in CMY device space.
