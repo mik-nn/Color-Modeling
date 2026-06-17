@@ -6,6 +6,21 @@
 
 ---
 
+## 2026-06-17 — Build step 2: generateDataset.ts (pipeline orchestrator, TDD GREEN)
+
+`src/lib/core/generateDataset.ts` + `.test.ts`, 11 unit tests (all pass, Node 20).
+
+Оркестратор финального генератора. Вход: 1+ референсных профилей + k анкеров
+на новом субстрате (покрытие 6/8/12). Выход: предсказанный N×36 датасет.
+Роутинг: 1 реф → D1 (D7 OBA + paper-ratio + rank-5 PCA residual); N рефов →
+pool-PCA (`fitPoolBasis` + `runPoolPCATransfer`). Валидация входа: не менее 1
+рефа, anchors ≥ chartK, обязателен paper-white (255,255,255). Переиспользует
+`obaSeparator`, `paperRatioResidual`, `poolPCATransfer` без изменений.
+
+**Why:** step 2 из build-sequence (план substrate-dataset-generator.md §6).
+
+---
+
 ## 2026-06-17 — Build step 1: coverage6Chart.ts (anchor mapping 6/8/12, TDD GREEN)
 
 `src/lib/core/coverage6Chart.ts` + `.test.ts`, 8 unit tests (all pass, Node 20).
