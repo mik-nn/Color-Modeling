@@ -6,6 +6,19 @@
 
 ---
 
+## 2026-06-17 — GenerateView: direct ICM/ICC/CxF upload in step 1
+
+`GenerateView.tsx` — добавлена прямая загрузка референсных профилей без сайдбара.
+Кнопка "+ Load reference profiles (ICM · ICC · CxF)" в секции 1.
+`loadMultipleProfiles` из `dataLoader.ts` — тот же путь что и сайдбар (ICM → ZXML CxF3, CxF прямой парсинг).
+Локальные профили хранятся в `localRefs` state, объединяются с sidebar-профилями в `allProfiles`.
+Auto-select загруженных файлов. Profile cards показывают `↑` если загружены локально.
+Профили с нераспознанным именем файла группируются в "(unknown mode)".
+
+**Why:** пользователь может работать с GenerateView полностью standalone — без предварительной загрузки через сайдбар.
+
+---
+
 ## 2026-06-17 — Build step 6: GenerateView.tsx + TS чистка (0 ошибок, 269/269 тестов)
 
 `src/components/GenerateView.tsx` — production UI для генерации датасетов. Workflow:

@@ -20,6 +20,7 @@ import { canonicalPrintMode } from '../utils/printMode'
 import { generateDataset } from '../lib/core/generateDataset'
 import { computeBiasWarning } from '../lib/core/biasWarning'
 import { downloadDatasetCGATS } from '../lib/core/cgatsDataset'
+import { loadMultipleProfiles } from '../lib/dataLoader'
 import type { AnchorMeasurement, GenerateDatasetResult } from '../lib/core/generateDataset'
 import type { BiasWarning } from '../lib/core/biasWarning'
 
@@ -192,25 +193,68 @@ export default function GenerateView({ profiles }: Props) {
   const [result, setResult] = useState<GenerateDatasetResult | null>(null)
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
+  // Profiles loaded directly in this view (ICM/ICC/CxF) — not via sidebar
+  const [localRefs, setLocalRefs] = useState<ProfileData[]>([])
+  const [refLoadError, setRefLoadError] = useState<string | null>(null)
+  const [refLoading, setRefLoading] = useState(false)
 
-  // Group loaded profiles by print mode
+  // Combined pool: sidebar + locally loaded
+  const allProfiles = useMemo(() => {
+    const seen = new Set<string>()
+    const out: ProfileData[] = []
+    for (const p of [...profiles, ...localRefs]) {
+      if (!seen.has(p.metadata.full_name)) {
+        seen.add(p.metadata.full_name)
+        out.push(p)
+      }
+    }
+    return out
+  }, [profiles, localRefs])
+
+  // Group by print mode (accept all profiles, group "unknown" separately)
   const profilesByMode = useMemo(() => {
     const map = new Map<string, ProfileData[]>()
-    for (const p of profiles) {
-      try {
-        const mode = canonicalPrintMode(p.metadata)
-        const arr = map.get(mode) ?? []
-        arr.push(p)
-        map.set(mode, arr)
-      } catch { /* skip unrecognised */ }
+    for (const p of allProfiles) {
+      let mode: string
+      try { mode = canonicalPrintMode(p.metadata) } catch { mode = '(unknown mode)' }
+      const arr = map.get(mode) ?? []
+      arr.push(p)
+      map.set(mode, arr)
     }
     return map
-  }, [profiles])
+  }, [allProfiles])
 
   const refProfiles = useMemo(
-    () => selectedRefs.map((n) => profiles.find((p) => p.metadata.full_name === n)!).filter(Boolean),
-    [selectedRefs, profiles],
+    () => selectedRefs.map((n) => allProfiles.find((p) => p.metadata.full_name === n)!).filter(Boolean),
+    [selectedRefs, allProfiles],
   )
+
+  // Handle direct ICM/ICC/CxF upload in ref section
+  async function handleRefFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    setRefLoadError(null)
+    setRefLoading(true)
+    e.target.value = ''
+    try {
+      const loaded = await loadMultipleProfiles(files)
+      if (!loaded.length) throw new Error('No profiles loaded — check file format (ICM/ICC/CxF)')
+      setLocalRefs((prev) => {
+        const seen = new Set(prev.map((p) => p.metadata.full_name))
+        return [...prev, ...loaded.filter((p) => !seen.has(p.metadata.full_name))]
+      })
+      // Auto-select newly loaded profiles
+      setSelectedRefs((prev) => {
+        const cur = new Set(prev)
+        for (const p of loaded) cur.add(p.metadata.full_name)
+        return Array.from(cur)
+      })
+    } catch (err) {
+      setRefLoadError(err instanceof Error ? err.message : 'Load error')
+    } finally {
+      setRefLoading(false)
+    }
+  }
 
   // Check anchor coverage
   const targets = COVERAGE_TARGETS[chartK]
@@ -305,8 +349,34 @@ export default function GenerateView({ profiles }: Props) {
         <h3 className="text-sm font-semibold uppercase tracking-widest text-gray-400">
           1 · Reference profiles (same print mode)
         </h3>
-        {profiles.length === 0 ? (
-          <p className="text-sm text-gray-500">Load profiles using the sidebar uploader.</p>
+
+        {/* Direct upload — works alongside or instead of sidebar */}
+        <label className="flex items-center gap-3 cursor-pointer">
+          <span className={`px-4 py-2 rounded border text-sm transition-colors ${
+            refLoading
+              ? 'border-gray-700 text-gray-500 bg-gray-800 cursor-wait'
+              : 'border-gray-600 text-gray-300 bg-gray-800 hover:border-gray-400'
+          }`}>
+            {refLoading ? 'Loading…' : '+ Load reference profiles'}
+          </span>
+          <input
+            type="file"
+            accept=".icm,.icc,.cxf,.cxfz"
+            multiple
+            className="hidden"
+            onChange={handleRefFiles}
+            disabled={refLoading}
+          />
+          <span className="text-xs text-gray-500">ICM · ICC · CxF</span>
+        </label>
+        {refLoadError && (
+          <p className="text-sm text-red-400 bg-red-950/40 border border-red-800 rounded px-3 py-2">
+            {refLoadError}
+          </p>
+        )}
+
+        {allProfiles.length === 0 ? (
+          <p className="text-sm text-gray-600 italic">No profiles loaded yet.</p>
         ) : (
           <div className="space-y-4">
             {Array.from(profilesByMode.entries()).map(([mode, modeProfiles]) => (
@@ -316,7 +386,11 @@ export default function GenerateView({ profiles }: Props) {
                   {modeProfiles.map((p) => {
                     const name = p.metadata.full_name
                     const sel = selectedRefs.includes(name)
-                    const substrate = name.replace(/^BC_/, '').replace(/_P9000.*/i, '')
+                    const isLocal = localRefs.some((r) => r.metadata.full_name === name)
+                    const label = name
+                      .replace(/^BC_/, '')
+                      .replace(/_P9000.*/i, '')
+                      .replace(/^@/, '')
                     return (
                       <button
                         key={name}
@@ -326,8 +400,10 @@ export default function GenerateView({ profiles }: Props) {
                             ? 'bg-blue-600/20 border-blue-500 text-blue-200'
                             : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'
                         }`}
+                        title={name}
                       >
-                        {substrate}
+                        {label}
+                        {isLocal && !sel && <span className="ml-1 text-gray-500 text-[10px]">↑</span>}
                         {sel && <span className="ml-1.5 text-blue-400">✓</span>}
                       </button>
                     )
