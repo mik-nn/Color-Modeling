@@ -6,6 +6,26 @@
 
 ---
 
+## 2026-06-17 — Build step 5: cgatsDataset.ts (CGATS.17 export for predicted datasets, TDD GREEN)
+
+`src/lib/core/cgatsDataset.ts` + `.test.ts`, 11 unit tests (11/11 GREEN, Node 20).
+
+`exportDatasetAsCGATS(result, options)` — конвертирует `GenerateDatasetResult`
+(N×36 predicted spectra + RGB device values) в CGATS.17 строку. Поля:
+SAMPLE_ID, RGB_R/G/B, LAB_L/A/B, SPECTRAL_NM_380…730. Рефлектанс хранится в %
+(0–100, CGATS convention). Lab вычисляется через `spectraToLab` (D50/2°).
+
+`downloadDatasetCGATS` — browser download helper (не вызывается из Node).
+`markAnchors` опция — якорные патчи получают trailing `*` в SAMPLE_ID для
+удобства инспекции в профиле.
+
+Round-trip тест: парсит SAMPLE_ID и RGB из DATA rows обратно, проверяет столбцы.
+
+**Why:** step 5 из build-sequence (план §6). Закрывает требование "только CGATS.17"
+из tech-spec. После step 6 (UI) pipeline полностью готов к продакшену.
+
+---
+
 ## 2026-06-17 — H43: generateDataset integration validation on 104 real pairs
 
 `scripts/experiments/h43_generateDataset_validation.ts`. Результаты:
