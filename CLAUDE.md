@@ -70,6 +70,9 @@ removal) — and then *still* add a one-liner to `progress-log.md` in the next c
 
 ## 3. Hard rules
 
+0. **Reply in the language of the question.** If the user writes in Russian — respond in Russian.
+   If in English — respond in English. Never switch languages without an explicit request.
+
 1. **No code without docs.** Adding/changing an analyzer, parser, or model = update
    `docs/IMPLEMENTATION.md` and append `docs/progress-log.md`. Adding a new measurable claim =
    update `docs/RESEARCH_HYPOTHESIS.md`. Producing a new metric on real data = append
