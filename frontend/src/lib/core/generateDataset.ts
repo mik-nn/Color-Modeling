@@ -154,13 +154,26 @@ function runD1(
   // Build sparse target matrix (only anchor rows populated)
   const X_B_sparse = buildSparseTarget(anchorIdx, anchors, N)
 
-  // OBA on target paper (from anchor[0], which is paper 255,255,255)
+  // OBA on target paper (from paper anchor 255,255,255)
   const paperAnchorIdx = anchorIdx.find((idx) =>
     D[idx * 3] === 255 && D[idx * 3 + 1] === 255 && D[idx * 3 + 2] === 255,
   ) ?? anchorIdx[0]
   const paperSpecB = Array.from(X_B_sparse.subarray(paperAnchorIdx * L, paperAnchorIdx * L + L))
   const emB = extractOBAEmission(paperSpecB)
-  const fB = computeOBAFactorPerPatch(X_B_sparse, L, paperAnchorIdx)
+
+  // OBA factor: X_B_sparse has zeros for non-anchor patches →
+  // computeOBAFactorPerPatch gives 0 → addOBA adds nothing for those rows.
+  // Fix: scale reference OBA factors by (target_paper / ref_paper) ratio.
+  // OBA factor is device-driven; per-patch ratio preserved across substrates.
+  const fB_anchors = computeOBAFactorPerPatch(X_B_sparse, L, paperAnchorIdx)
+  const fA_paperVal = Math.max(1e-5, fA[paperRowIdx])
+  const fB_paperVal = fB_anchors[paperAnchorIdx]
+  const obaScale = fB_paperVal / fA_paperVal
+  const fB = new Float64Array(N)
+  for (let i = 0; i < N; i++) fB[i] = fA[i] * obaScale
+  // Override anchor rows with directly measured factors (more accurate than scaled)
+  for (const idx of anchorIdx) fB[idx] = fB_anchors[idx]
+
   const X_B_clean = subtractOBA(X_B_sparse, L, fB, emB.emission)
 
   // Paper white point (from target paper spectrum)
@@ -185,6 +198,19 @@ function runD1(
     knnK: D1_KNN,
     uvBandCount: D1_UV,
   })
+
+  // Refine OBA factors using predicted R(380) values (self-consistent).
+  // D1 output gives estimated R_B(380,i) for all patches; use these to
+  // compute fB_final[i] = R_B_pred(380,i) / R_B_pred(380,paper), which is
+  // more accurate than ref-scaled estimate for non-anchor patches.
+  const predPaper380 = d1.X_pred[paperAnchorIdx * L]
+  if (predPaper380 > 1e-5) {
+    for (let i = 0; i < N; i++) {
+      fB[i] = d1.X_pred[i * L] / predPaper380
+    }
+    // Keep directly measured anchor factors (override self-consistent estimate)
+    for (const idx of anchorIdx) fB[idx] = fB_anchors[idx]
+  }
 
   // Add target OBA back
   const predicted = addOBA(d1.X_pred, L, fB, emB.emission)

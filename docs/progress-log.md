@@ -6,6 +6,24 @@
 
 ---
 
+## 2026-06-17 — H43: generateDataset integration validation on 104 real pairs
+
+`scripts/experiments/h43_generateDataset_validation.ts`. Результаты:
+cov6 (k=6) = **75.0%** (H31 baseline 76.9%, дельта −1.9pp); cov8n (k=8) = **82.7%** (точное совпадение H42).
+biasWarning: 30/104 ok, 74/104 hue-sat-bias, 0 ошибок.
+
+Ключевой вывод: производственный сценарий (только 6 якорей) vs лабораторный (905
+измеренных спектров) даёт −1.9pp из-за OBA estimation. Итерация 1 (fB=fA·scale)
+давала 70.2%, итерация 2 (self-consistent: fB[i] = X_pred[380,i] / X_pred[380,paper])
+подняла до 75.0%. Оставшийся gap структурный — не баг, а ограничение sparse-anchor OBA.
+cov8n точно воспроизводит H42 — метод валиден.
+
+H43 → EXPERIMENTS.md, шаги 1-3 build-sequence подтверждены на реальных данных.
+
+**Why:** step 4 из build-sequence (план §6). Закрывает валидацию core/ модулей.
+
+---
+
 ## 2026-06-17 — Build step 3: biasWarning.ts (spreadCurv bias detector, TDD GREEN)
 
 `src/lib/core/biasWarning.ts` + `.test.ts`, 10 unit tests (all pass, Node 20).
