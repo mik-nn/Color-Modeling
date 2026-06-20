@@ -94,6 +94,26 @@ Empirical spectral predictors + Conditional Autoencoder. Best results: CAE_D7 me
 - [x] D7 OBA-separation default ON in TransferView. Combined effect on DecorMatte ↔ {Lyve,
       BelgianLinen, ChromataWhite}: P95 −14 to −20 %, zero clamped bands.
 
+## Phase 2⁴ — H44: patch strategy vs ink complexity — **DONE (2026-06-20)**
+
+Tested whether colorant-derived anchor charts (0 profiles) enable cross-substrate
+D1 prediction across 7 printers spanning 4–12 physical inks.
+
+- [x] Parser extensions: nm/R_ CGATS dialects (`cgatsParser.ts`); CIED+DevD join
+      (`mergeCiedDevDToCgats`); CIED branch in `icmParser.ts`. All 7 printers parse.
+- [x] `h44_manifest_builder.ts` → `data/h44_manifest.json` (240 entries).
+- [x] `colorantChart(k)` pure function — CMY-geometry RGB targets, k=5/6/8/12/16.
+      Tests: 13/13 green.
+- [x] **H44-A (NEGATIVE):** colorant chart gives 0–20% H4 pass at k ≤ 16 on all
+      7 printers. No trend with ink complexity. Colorant geometry alone insufficient.
+- [x] **H44-B (WEAK):** GA k=8 in-sample gives 7–58% across printers on cross-mode
+      pairs. Pigment slightly more interior points (5.2 vs 4.5 dye). Critical finding:
+      cross-mode pairs are 4–10× harder than same-mode (prior 90.4% → 7–22%).
+- [x] Docs: `EXPERIMENTS.md` rows, `RESEARCH_HYPOTHESIS.md` H44 section, progress-log.
+
+**Practical answer:** minimum 1 same-mode measured profile + COV5 anchors. Colorant
+geometry or GA chart without profile data cannot clear H4 in the cross-mode regime.
+
 ## Phase 4 — Generative & ML
 
 - [ ] Conditional β-VAE prototype for ink-vs-substrate factor disentanglement.

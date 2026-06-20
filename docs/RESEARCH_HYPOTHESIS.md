@@ -2054,9 +2054,31 @@ The "strategy under profile scarcity" is: measure 1 sheet of the new substrate w
 coverage-spanning chart (COV5 at minimum), then use those measured spectra as D1 anchors.
 Colorant geometry alone (0 measured profiles) is insufficient.
 
-**Status (B): pending** — `h44_placement_per_printer.ts` script written; GA results to be
-appended once the run completes.
+**Status (B): WEAK CONFIRMATION — inconclusive**
 
-**Data:** `data/h44_manifest.json` (240 entries, 7 printers), `data/h44_experiment_a.json`.
+GA k=8 in-sample pass rates: G2470 22%, G1430 58%, P9000 20%, P9900 7%, iPF4100 10%,
+iPF8100-BC 10%, iPF8100-MOAB 12%. Interior-point count: dye 4.5 vs pigment 5.2 —
+directionally consistent with H-B but high variance. All evolved charts are interior-heavy
+(no cube corners) — consistent with H31/GA prior findings.
+
+**Critical confound discovered:** H44 uses ALL cross-substrate cross-mode pairs. Prior P9000
+experiments used same-print-mode pairs only (90.4% at k=5 GA). The dramatic gap (90% → 7–22%)
+confirms **cross-mode transfer is the hard problem**, not a chart-placement problem.
+
+**Revised practical conclusion (H44 final):**
+
+The answer to "how many profiles needed" splits on mode-availability:
+
+- **Same-mode reference (≥1 profile):** COV5 (80%) or COV8 (83%) is sufficient. k=5 with
+  coverage placement. Colorant geometry not needed — just measure 5 coverage patches.
+- **Zero same-mode profiles, new printer:** Neither colorant chart (H44-A) nor GA chart
+  (H44-B) clears H4 at k ≤ 16. Minimum requirement: 1 measured profile + COV5 anchors.
+- **Ink complexity axis (H-A):** not a useful predictor in the cross-mode regime (all
+  printers fail similarly). Within same-mode regime, dataset insufficient to test the
+  4-ink → 10-ink → 12-ink gradient.
+
+**Data:** `data/h44_manifest.json` (240 entries, 7 printers), `data/h44_experiment_a.json`,
+`data/h44_experiment_b.json`.
 **Scripts:** `frontend/scripts/experiments/h44_ink_complexity_patches.ts`,
-`frontend/scripts/experiments/h44_placement_per_printer.ts`.
+`frontend/scripts/experiments/h44_placement_per_printer.ts`,
+`frontend/scripts/experiments/h44_manifest_builder.ts`.

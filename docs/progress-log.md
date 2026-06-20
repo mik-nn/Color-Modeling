@@ -1,5 +1,20 @@
 у# progress-log.md
 
+## 2026-06-20 — H44 complete: experiments A+B, docs close-out
+
+**Experiment B (GA placement per printer):** GA k=8 in-sample on 60 cross-mode pairs per
+printer: G2470 22%, G1430 58%, P9000 20%, P9900 7%, iPF4100/iPF8100 10–12%. All charts
+interior-heavy (no cube corners). Pigment printers marginally more interior points (5.2 vs 4.5
+dye) — weak Hypothesis B signal.
+
+**Key discovery:** H44 used ALL cross-mode pairs; prior P9000 experiments used same-mode only
+(90% at k=5). Cross-mode transfer is 4–10× harder. This reframes the whole experiment:
+- Same-mode ≥1 profile → COV5/COV8 sufficient
+- 0 profiles → H4 not clearable with k≤16, no matter how anchor placement is optimized
+
+**Docs updated:** RESEARCH_HYPOTHESIS.md H44 (B results + revised conclusion),
+ROADMAP.md Phase 2⁴ (H44 checked off), EXPERIMENTS.md (B row appended).
+
 ## 2026-06-20 — H44 experiment: parser extensions + colorant chart + experiment A
 
 Completed Tasks 1–6 of H44 (patch-strategy vs ink-complexity):
