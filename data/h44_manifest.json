@@ -1,0 +1,1922 @@
+[
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Magnetic Glossy 660.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Magnetic Matt 620.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 130.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 140 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 150 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 150.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 170.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 180 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 200.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 210 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 220 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 230.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 260 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 280.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Glossy 85.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 100 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 105.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 120.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 130 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 140.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 160.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 170 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 170.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 180.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 190 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 200 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 205.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 210 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 220 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 230.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 240 Warm.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 250 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 250.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 280.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 90.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Photo Matt 95.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Luster Bright 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Satin Bright 250.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Satin Bright 290.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Semi Glossy Bright 170.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Semi Glossy Bright 200.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Semi Glossy Bright 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Semi Glossy Bright 265 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Semi Glossy Warm 195.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Semi Glossy Warm 250.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Silky Bright 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Super Glossy Bright 170.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Super Glossy Bright 200.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Super Glossy Bright 220.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Super Glossy Bright 240.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Super Glossy Bright 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Super Glossy Bright 290.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Super Glossy Warm 195.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Super Glossy Warm 270.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Premium Super Glossy Warm 340.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Simply Photo Glossy 180.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Simply Photo Glossy 200.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Simply Photo Glossy 230.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g2470",
+    "file": "@Canon G2470 Lmnd Simply Photo Glossy 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Magnetic Glossy 660.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Magnetic Matt 620.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 130.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 140 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 150 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 150.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 170.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 180 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 200.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 210 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 220 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 230.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 260 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 280.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Glossy 85.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 100 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 105.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 120.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 130 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 140.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 160.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 170 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 170.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 180.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 190 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 200 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 205.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 210 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 220 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 230.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 240 Warm.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 250 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 250.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 280.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 90.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Photo Matt 95.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Luster Bright 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Satin Bright 250.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Satin Bright 290.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Satin Warm 270.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Semi Glossy Bright 170.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Semi Glossy Bright 200.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Semi Glossy Bright 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Semi Glossy Bright 265 DS.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Semi Glossy Warm 195.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Semi Glossy Warm 250.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Silky Bright 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Super Glossy Bright 170.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Super Glossy Bright 200.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Super Glossy Bright 220.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Super Glossy Bright 240.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Super Glossy Bright 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Super Glossy Bright 290.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Super Glossy Warm 195.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Super Glossy Warm 270.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Premium Super Glossy Warm 340.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Simply Photo Glossy 180.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Simply Photo Glossy 200.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Simply Photo Glossy 230.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_g1430",
+    "file": "@Canon G1430 Lmnd Simply Photo Glossy 260.icm",
+    "substrate": "Canon",
+    "patchCount": 294,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_17MGloss_P9000_pk_CanvasSatin.icm",
+    "substrate": "17MGloss_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_17MSatin_P9000_pk_CanvasSatin.icm",
+    "substrate": "17MSatin_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_1930_P9000_pk_EMP.icm",
+    "substrate": "1930_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_600MT_P9000_mk_WCRW.icm",
+    "substrate": "600MT_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_800M_P9000_mk_CanvasMatte.icm",
+    "substrate": "800M_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_AllureAq_P9000_MK_EMP.icm",
+    "substrate": "AllureAq_P",
+    "patchCount": 1550,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_ArtPeelBlckt_P9000_mk_EMP.icm",
+    "substrate": "ArtPeelBlckt_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_BagasseSmooth_P9000_mk_WCRW.icm",
+    "substrate": "BagasseSmooth_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_BagasseText_P9000_mk_WCRW.icm",
+    "substrate": "BagasseText_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_BelgianLinen_P9000_mk_CanvasMatte.icm",
+    "substrate": "BelgianLinen_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_ChromataWhite_P9000_mk_CanvasMatte.icm",
+    "substrate": "ChromataWhite_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_Crystalline_P9000_pk_CanvasSatin.icm",
+    "substrate": "Crystalline_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_DecorMatte_P9000_mk_CanvasMatte.icm",
+    "substrate": "DecorMatte_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_EleganceVelvet_P9000_mk_WCRW.icm",
+    "substrate": "EleganceVelvet_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_Lyve_P9000_mk_CanvasMatte.icm",
+    "substrate": "Lyve_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_OpticaOne_P9000_mk_WCRW.icm",
+    "substrate": "OpticaOne_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_PhotoPeelGloss_P9000_pk_PGPP.icm",
+    "substrate": "PhotoPeelGloss_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_PhotoPeelMatte_P9000_mk_SWM.icm",
+    "substrate": "PhotoPeelMatte_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_PuraSmooth_P9000_mk_WCRW.icm",
+    "substrate": "PuraSmooth_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_PuraVelvet_P9000_mk_WCRW.icm",
+    "substrate": "PuraVelvet_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_RiverStoneSatinRag_P9000_pk_PLPP260_-15.icm",
+    "substrate": "RiverStoneSatinRag_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_Signa270_P9000_MK_WCRW.icc",
+    "substrate": "Signa270_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_Silverada_P9000_pk_CanvasSatin.icm",
+    "substrate": "Silverada_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_VibranceGloss_P9000_pk_PGPP.icm",
+    "substrate": "VibranceGloss_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_VibranceLuster_P9000_PLPP260.icm",
+    "substrate": "VibranceLuster_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_VibranceMetallic_P9000_PGPP260.icm",
+    "substrate": "VibranceMetallic_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9000",
+    "file": "BC_VibrancePhotoMatte_mk_P9000_WCRW.icm",
+    "substrate": "VibrancePhotoMatte_mk_P",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_1428_9900_MK_CANVAS.icm",
+    "substrate": "1428",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_17MGloss_9900_PK_Canvas_-15.icm",
+    "substrate": "17MGloss",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_260MT_9900_mk_WCRW.icm",
+    "substrate": "260MT",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_28MT_9900_MK_WCRW.icc",
+    "substrate": "28MT",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_600MT_9900_MK_WCRW.icc",
+    "substrate": "600MT",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_800M_9900_mk_wcrw.icc",
+    "substrate": "800M",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_AllureAq_9900_MK_DWM.icm",
+    "substrate": "AllureAq",
+    "patchCount": 774,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_ArtPeel_9900_mk_ppm.icm",
+    "substrate": "ArtPeel",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_BagasseSmooth_x900_mk_WCRW.icc",
+    "substrate": "BagasseSmooth",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_BagasseText_x900_mk_WCRW.icm",
+    "substrate": "BagasseText",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_BelgianLinen_9900_mk_Canvas.icm",
+    "substrate": "BelgianLinen",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_ChromataWhite_9900_MK_WCRW.icc",
+    "substrate": "ChromataWhite",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_Crystalline_9900_pk_canvas.icc",
+    "substrate": "Crystalline",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_DecorMatte_9900_MK_CANVAS.icm",
+    "substrate": "DecorMatte",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_EleganceVelvet_9900_mk_wcrw.icc",
+    "substrate": "EleganceVelvet",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_EmblemCP_9900_mk_WCRW.icm",
+    "substrate": "EmblemCP",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_Emblem_9900_mk_WCRW.icm",
+    "substrate": "Emblem",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_Insignia_9900_mk_EMP_-10.icm",
+    "substrate": "Insignia",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_Lyve_x900_MK_Canvas.icc",
+    "substrate": "Lyve",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_Meridian_9900_mk_PPM.icm",
+    "substrate": "Meridian",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_OpticaOne_9900_mk_wcrw.icc",
+    "substrate": "OpticaOne",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_PBLinen_9900_mk_DWM_(-20).icm",
+    "substrate": "PBLinen",
+    "patchCount": 400,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_PBLuster_9900_PK_PLPP.icm",
+    "substrate": "PBLuster",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_PBSmooth_9900_mk_DWM.icm",
+    "substrate": "PBSmooth",
+    "patchCount": 674,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_PhotoPeelGloss_9900_pk_PGPP250.icm",
+    "substrate": "PhotoPeelGloss",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_PhotoPeelMatte_9900_mk_EMP.icm",
+    "substrate": "PhotoPeelMatte",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_PuraSmooth_9900_mk_wcrw.icc",
+    "substrate": "PuraSmooth",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_PuraVelvet_9900_mk_wcrw.icc",
+    "substrate": "PuraVelvet",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_Renaissance_9900_mk_WCRW.icm",
+    "substrate": "Renaissance",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_RiverStoneRag_9900_pk_PLPP260_-10.icm",
+    "substrate": "RiverStoneRag",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_Signa270_9900_mk_WCRW.icm",
+    "substrate": "Signa270",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_Silverada_x900_PK_Canvas_(-15).icm",
+    "substrate": "Silverada",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_Solstice_9900_mk_SWM.icm",
+    "substrate": "Solstice",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_VibranceBaryta_x900_PK_PSMPP.icm.icc",
+    "substrate": "VibranceBaryta",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_VibranceGloss_9900_PK_PGPP250.icc",
+    "substrate": "VibranceGloss",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_VibranceLuster_9900_pk_plp260.icc",
+    "substrate": "VibranceLuster",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_VibranceMetallic_9900_pk_pgpp250.icc",
+    "substrate": "VibranceMetallic",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "epson_p9900",
+    "file": "BC_VibrancePhotoMatte_9900_MK_EMP.icc",
+    "substrate": "VibrancePhotoMatte",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_17M_Pro2100_4100_6100_pk_SP1.icm",
+    "substrate": "17M",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_28MT_Pro2100_4100_6100_mk_AM1.icm",
+    "substrate": "28MT",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_800M_Pro2100_4100_6100_mk_AM1.icm",
+    "substrate": "800M",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_ArtPeel_Pro2100_4100_6100_AM1.icm",
+    "substrate": "ArtPeel",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_ChromataWhite_Pro2100_4100_6100_mk_AM1.icm",
+    "substrate": "ChromataWhite",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_Crystalline_Pro4000_pk_AM1.icm",
+    "substrate": "Crystalline",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_EleganceVelvet_Pro2100_4100_6100_mk_AM1.icm",
+    "substrate": "EleganceVelvet",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_Emblem_Pro4100_mk_FAT.icm",
+    "substrate": "Emblem",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_Lyve_Pro2100_4100_6100_mk_AM1.icm",
+    "substrate": "Lyve",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_OpticaOne_Pro2100_4100_6100_AM1.icm",
+    "substrate": "OpticaOne",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_PhotoPeelGloss_Pro2100_4100_6100_pk_AM1.icm",
+    "substrate": "PhotoPeelGloss",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_PuraSmooth_Pro2100_4100_6100_mk_AM1.icm",
+    "substrate": "PuraSmooth",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_PuraVelvet_Pro2100_4100_6100_AM1.icm",
+    "substrate": "PuraVelvet",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_Renaissance_Pro2100_4100_6100_FAT.icm",
+    "substrate": "Renaissance",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_RiverStoneRag_Pro2100_4100_6100_SP1.icm",
+    "substrate": "RiverStoneRag",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_Signa270_Pro2100_4100_6100_mk_AM1.icm",
+    "substrate": "Signa270",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_Silhouette_Pro200_4000_6000_SP6.icm",
+    "substrate": "Silhouette",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_Silverada_Pro2100_4100_6100_pk_AM1.icm",
+    "substrate": "Silverada",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_VibranceBarytaMatte_Pro4100_MK_HWFAP.icm",
+    "substrate": "VibranceBarytaMatte",
+    "patchCount": 500,
+    "hasSpectral": false,
+    "wavelengthCount": 0
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_VibranceGloss_Pro2100_4100_6100_pk_AM1.icm",
+    "substrate": "VibranceGloss",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_VibranceLuster_Pro2100_4100_6100_pk_AM1.icm",
+    "substrate": "VibranceLuster",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_VibranceMatte_Pro2100_4100_6100_mk_FAT.icm",
+    "substrate": "VibranceMatte",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf4100",
+    "file": "BC_VibranceMetallic_Pro2100_4100_6100_AM1.icm",
+    "substrate": "VibranceMetallic",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_28MT_iPF8100_fawc.icc",
+    "substrate": "28MT",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_600MT_iPF8100_fawc.icc",
+    "substrate": "600MT",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_800M_iPF8100_faw.icc",
+    "substrate": "800M",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_ChromataWhite_iPF8100_mk_faw.icc",
+    "substrate": "ChromataWhite",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_Crystalline_8100_pk_hwspp.icc",
+    "substrate": "Crystalline",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_EleganceVelvet_iPF8100_mk_fawc.icc",
+    "substrate": "EleganceVelvet",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_Lyve_8100_MK_FAW.icc",
+    "substrate": "Lyve",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_OpticaOne_iPF8100_mk_fawc.icc",
+    "substrate": "OpticaOne",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_PuraSmooth_iPF8100_faw.icc",
+    "substrate": "PuraSmooth",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_PuraVelvet_iPF8100_faw.icc",
+    "substrate": "PuraVelvet",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_Silverada_x100_PK_Sp1_(-20).icm",
+    "substrate": "Silverada_x100_PK_Sp1_(-20)",
+    "patchCount": 905,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_VibranceBaryta_IPFx100_PK_RCPLP.icc",
+    "substrate": "VibranceBaryta_IPFx100_PK_RCPLP",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_VibranceGloss_8100_pgl280.icc",
+    "substrate": "VibranceGloss",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_VibranceLuster_8100_rcplp.icc",
+    "substrate": "VibranceLuster",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_VibranceMatte_IPFx100_MK_FineArtWatercolor.icc",
+    "substrate": "VibranceMatte_IPFx100_MK_FineArtWatercolor",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_bc",
+    "file": "BC_VibranceMetallic_x100_pgpp280.icc",
+    "substrate": "VibranceMetallic_x100_pgpp280",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Anasazi Canvas iPF8100 CM.icc",
+    "substrate": "MOAB Anasazi Canvas",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Colorado Fiber Gloss iPF8100 HWSGPPII.icc",
+    "substrate": "MOAB Colorado Fiber Gloss",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Colorado Fiber Satine iPF8100 HWSGPPII.icc",
+    "substrate": "MOAB Colorado Fiber Satine",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Entrada Rag Bright iPF8100 PMP.icc",
+    "substrate": "MOAB Entrada Rag Bright",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Entrada Rag Natural iPF8100 PMP.icc",
+    "substrate": "MOAB Entrada Rag Natural",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Entrada Rag Textured iPF8100 PMP.icc",
+    "substrate": "MOAB Entrada Rag Textured",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Juniper Baryta Rag iPF8100 HWSGPP2.icc",
+    "substrate": "MOAB Juniper Baryta Rag",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Lasal Exhibition Luster Canon iPF8100 HWSGP2.icc",
+    "substrate": "MOAB Lasal Exhibition Luster Canon",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Lasal Photo Gloss iPF8100 HWSGPPII.icc",
+    "substrate": "MOAB Lasal Photo Gloss",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Lasal Photo Matte iPF8100 PMP.icc",
+    "substrate": "MOAB Lasal Photo Matte",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Moenkopi Kozo iPF8100 JPW.icc",
+    "substrate": "MOAB Moenkopi Kozo",
+    "patchCount": 500,
+    "hasSpectral": false,
+    "wavelengthCount": 0
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Moenkopi Unryu iPF8100 JPW.icc",
+    "substrate": "MOAB Moenkopi Unryu",
+    "patchCount": 500,
+    "hasSpectral": false,
+    "wavelengthCount": 0
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Slickrock Metallic Pearl iPF8100 HWSGP2.icc",
+    "substrate": "MOAB Slickrock Metallic Pearl",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Somerset Enhanced Velvet iPF8100 PMP.icc",
+    "substrate": "MOAB Somerset Enhanced Velvet",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  },
+  {
+    "printer": "canon_ipf8100_moab",
+    "file": "MOAB Somerset Museum Rag iPF8100.icc",
+    "substrate": "MOAB Somerset Museum Rag",
+    "patchCount": 1728,
+    "hasSpectral": true,
+    "wavelengthCount": 36
+  }
+]
