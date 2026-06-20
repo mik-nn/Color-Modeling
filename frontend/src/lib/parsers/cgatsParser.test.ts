@@ -73,4 +73,33 @@ END_DATA`)
     expect(result.patchCount).toBe(0)
     expect(result.measurements).toEqual([])
   })
+
+  it('parses R_380-style spectral columns (Canon MOAB targ dialect)', () => {
+    const cgats = `CGATS.17
+BEGIN_DATA_FORMAT
+RGB_R RGB_G RGB_B R_380 R_390 R_400
+END_DATA_FORMAT
+NUMBER_OF_SETS 1
+BEGIN_DATA
+255 255 255 0.9 0.9 0.9
+END_DATA`
+    const r = parseCgats17Text(cgats)
+    expect(r.patchCount).toBe(1)
+    expect(r.wavelengths).toEqual([380, 390, 400])
+    expect(r.measurements[0].spectra).toEqual([0.9, 0.9, 0.9])
+  })
+
+  it('parses nm380-style spectral columns (i1Profiler CIED dialect)', () => {
+    const cgats = `CGATS.17
+BEGIN_DATA_FORMAT
+RGB_R RGB_G RGB_B nm380 nm390 nm400
+END_DATA_FORMAT
+NUMBER_OF_SETS 1
+BEGIN_DATA
+255 255 255 0.9 0.9 0.9
+END_DATA`
+    const r = parseCgats17Text(cgats)
+    expect(r.patchCount).toBe(1)
+    expect(r.wavelengths).toEqual([380, 390, 400])
+  })
 })

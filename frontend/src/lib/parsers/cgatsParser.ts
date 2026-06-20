@@ -33,7 +33,10 @@ function findBlock(lines: string[], begin: string, end: string): string[] {
 }
 
 function spectralWavelength(field: string): number | null {
-  const m = field.match(/^SPECTRAL_NM_(\d+)$/i)
+  // Accept i1Profiler/X-Rite (`nm380`), Canon MOAB targ (`R_380`), and
+  // CGATS.17 (`SPECTRAL_NM_380`) column dialects. 3-digit wavelengths only
+  // (380–730), so `RGB_R` etc. never match.
+  const m = field.match(/^(?:SPECTRAL_NM_|nm|R_)(\d{3})$/i)
   return m ? Number(m[1]) : null
 }
 
