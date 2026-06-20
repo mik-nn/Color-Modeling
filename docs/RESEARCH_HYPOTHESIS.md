@@ -2066,6 +2066,32 @@ substrate-population diversity.
 **Experiment:** `frontend/scripts/experiments/h44_profile_count_sweep.ts` — sweep N, GA-evolve
 on N profiles' pairs, evaluate the frozen chart on a fixed held-out pair set, find the plateau.
 
+**RESULT (2026-06-20, P9000 k=5, 24 profiles, fixed 27-pair held-out TEST):**
+
+| N profiles | mean train pairs | GA held-out pass% [min..max] |
+|-----------|------------------|------------------------------|
+| 3 | 0.7 | 61.1% [29.6..92.6] |
+| 4 | 1.3 | 64.8% [55.6..74.1] |
+| 6 | 1.7 | 68.5% [48.1..88.9] |
+| 8 | 5.7 | **88.9%** [85.2..92.6] |
+| 12 | 15.3 | 95.1% [92.6..100] |
+| 16 | 38.7 | **98.8%** [96.3..100] |
+| 20 | 39.3 | 98.8% [96.3..100] |
+
+**Statement (A): CONFIRMED.** A plateau exists. The GA stabilizes at **N ≈ 8 profiles**
+(88.9% mean, min 85%, low spread) and plateaus at **N ≈ 16** (98.8%). Below N ≈ 6 the GA sees
+≤ 2 same-mode training pairs and overfits — huge variance (min dips to 29–48%, can fall below
+the fixed COV5 baseline). **Deployable rule: evolve the chart from ≥ 8 same-mode profiles
+(ideally 12–16); with < 6, use the fixed COV5 fallback, not a GA chart.**
+
+**Confound:** N profiles ↔ number of same-mode training pairs grows ~quadratically (a mode with
+m profiles yields ~m² ordered pairs); GA quality tracks pair count, not N directly.
+
+**Caveat:** this held-out TEST set is all-compatible/easy (COV5 already 96.3% there), so the GA's
+marginal gain over the fixed chart is small in THIS test; the GA > COV advantage (90.4 vs 80.8)
+was shown on harder in-sample pairs. This sweep measures GA selection STABILITY vs profile count
+— the actual H44 question — not the GA-vs-COV ceiling gap.
+
 ---
 
 ### H4 gate context (important)

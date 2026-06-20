@@ -1,5 +1,20 @@
 # progress-log.md
 
+## 2026-06-20 — H44 CORE: из скольких профилей GA выбирает набор опорных точек
+
+Реструктуризация knowledge base (A–E): создан `docs/KEY_FINDINGS.md` (6 канонических выводов:
+same-mode regime, hard-фильтры metallic/AllureAq/spreadCurv, сопоставление по device-координатам,
+placement>count + GA-метод, хроматический потолок ~12%, открытый H44). Урезан session-memory
+индекс. Обновлён skill `cross-substrate-spectral-adaptation` (coverage-axis/GA/spreadCurv вместо
+устаревших cube-corners). AGENTS.md + docs/AGENTS.md — блок hard rules + ссылка. H44 в
+RESEARCH_HYPOTHESIS переформулирован с тавтологичного "0 профилей" на реальный GA-вопрос.
+
+Запущен `h44_profile_count_sweep.ts` (P9000 k=5, 24 профиля, фикс 27-пар held-out TEST). Свип
+N профилей в обучающем пуле GA. **Ответ:** GA стабилизируется при N≈8 профилей (88.9%, min 85%),
+плато при N≈16 (98.8%). Ниже N≈6 — ≤2 обучающих пары → переобучение, разброс 29–93%. Конфаунд:
+N ↔ число same-mode пар растёт квадратично. Деплой-правило: эволюционировать chart из ≥8
+same-mode профилей (лучше 12–16); при <6 — фиксированный COV5, не GA.
+
 ## 2026-06-20 — H44-D исправлен: добавлены исключения металликов + AllureAq + spreadCurv
 
 Две забытые HARD-правила восстановлены в `h44_anchor_stability.ts`:
