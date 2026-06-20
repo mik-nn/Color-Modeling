@@ -2021,3 +2021,42 @@ Exposed as an opt-in in TransferView once H14 work has shipped — OBA is the ch
   2. `∀ p ∈ S: (X_p, D_p) ← WLS_interp(p, onto=D_target)` — shapes become `(N_target, L)` and `(N_target, 3)`.
   3. `θ_substrate = argmin_θ Σ_{p∈S} MSE(S_pred(θ, p), S_true_p)` via Nelder-Mead
   4. `S_target = runCAETransfer(Target, θ_substrate, anchorResiduals)`
+
+
+---
+
+## H44: Patch count & placement vs printer ink complexity (2026-06-20)
+
+**Statement (A):** The minimum k anchors required to clear H4 gate (median ΔE00 ≤ 1.5,
+P95 ≤ 3.0) increases with physical ink complexity (4-ink dye < 10-ink pigment < 12-ink pigment),
+for colorant-chart-derived anchor placement (0 profiles to construct the chart).
+
+**Statement (B):** The optimal RGB anchor placement (GA-evolved chart at k=5/8) differs
+systematically by printer gamut / ink set.
+
+**Falsification criterion (A):** min-k does NOT increase monotonically with ink count across
+the pigment tier (Epson P9000 10-ink → Canon iPF4100 12-ink → iPF8100 12-ink).
+
+**Falsification criterion (B):** GA-evolved charts at k=8 show no systematic difference in
+interior-point density across the printer ladder.
+
+**Status (A): NEGATIVE — H44-A FALSIFIED / UNDERPOWERED**
+
+Colorant-derived chart anchors give 0–20% H4 pass rate across ALL 7 printers at k=5 to k=16.
+No printer clears 50% H4 at any tested k. No monotone trend with ink complexity observed.
+
+Root cause: CMY-geometry primaries/secondaries are gamut-boundary anchors; D1 residual
+extrapolates from the boundary into the interior with large error. Coverage-spanning interior
+anchors (the COV5/COV8 strategy from H31) are required.
+
+**Key finding:** Patch selection requires at least 1 measured profile of the target substrate.
+The "strategy under profile scarcity" is: measure 1 sheet of the new substrate with a
+coverage-spanning chart (COV5 at minimum), then use those measured spectra as D1 anchors.
+Colorant geometry alone (0 measured profiles) is insufficient.
+
+**Status (B): pending** — `h44_placement_per_printer.ts` script written; GA results to be
+appended once the run completes.
+
+**Data:** `data/h44_manifest.json` (240 entries, 7 printers), `data/h44_experiment_a.json`.
+**Scripts:** `frontend/scripts/experiments/h44_ink_complexity_patches.ts`,
+`frontend/scripts/experiments/h44_placement_per_printer.ts`.

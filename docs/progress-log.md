@@ -1,5 +1,27 @@
 у# progress-log.md
 
+## 2026-06-20 — H44 experiment: parser extensions + colorant chart + experiment A
+
+Completed Tasks 1–6 of H44 (patch-strategy vs ink-complexity):
+
+**Parser extensions:** Extended `spectralWavelength` regex in `cgatsParser.ts` to
+recognize `nm380` (i1Profiler CIED) and `R_380` (Canon MOAB targ) column dialects.
+Added `mergeCiedDevDToCgats` to join CIED spectral + DevD RGB tags on SampleID
+(enables BC iPF8100 / P9900 `.icc` files). Wired into `icmParser.ts` as a third
+branch (ZXML→targ→CIED+DevD→A2B). Manifest probe (`h44_manifest_builder.ts`)
+confirmed 7 printers × 240 entries all parse correctly with spectral data.
+
+**colorantChart(k):** Pure function in `frontend/src/lib/sampling/colorantChart.ts`
+generating CMY-geometry-derived RGB patch targets for k ∈ {5,6,8,12,16}.
+
+**Experiment A (NEGATIVE):** Colorant-chart anchors give 0–20% H4 pass rate across
+all 7 printers (vs greedy k=8 baseline ~78%). No increase with ink complexity.
+Conclusion: profile data is required for D1 anchor selection — colorant geometry
+alone is insufficient. Minimum 1 measured profile needed; use COV5/COV8 on that
+profile for anchor placement.
+
+See `EXPERIMENTS.md` 2026-06-20 row and `data/h44_experiment_a.json`.
+
 ## 2026-06-20 — Task 3: Wire CIED/DevD branch into icmParser
 
 Relaxed the `targ` guard (removed `includes('CGATS')` string check that could

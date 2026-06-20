@@ -1,0 +1,268 @@
+{
+  "date": "2026-06-20",
+  "results": [
+    {
+      "printerId": "canon_g1430",
+      "label": "Canon G1430",
+      "inkCount": 4,
+      "inkType": "dye",
+      "nFiles": 61,
+      "nPairs": 100,
+      "kResults": [
+        {
+          "k": 5,
+          "passRate": 0.06,
+          "medMed": 4.414582133489471,
+          "medP95": 12.949104066776243
+        },
+        {
+          "k": 6,
+          "passRate": 0.12,
+          "medMed": 3.9318780304524568,
+          "medP95": 9.269162445221593
+        },
+        {
+          "k": 8,
+          "passRate": 0.11,
+          "medMed": 3.924999158071338,
+          "medP95": 10.034606948953833
+        },
+        {
+          "k": 12,
+          "passRate": 0.13,
+          "medMed": 3.5189504058233125,
+          "medP95": 8.542806557202729
+        }
+      ],
+      "minK": null
+    },
+    {
+      "printerId": "canon_g2470",
+      "label": "Canon G2470",
+      "inkCount": 4,
+      "inkType": "dye",
+      "nFiles": 60,
+      "nPairs": 100,
+      "kResults": [
+        {
+          "k": 5,
+          "passRate": 0.06,
+          "medMed": 4.111044009130126,
+          "medP95": 13.319916855718839
+        },
+        {
+          "k": 6,
+          "passRate": 0.15,
+          "medMed": 3.579750756310058,
+          "medP95": 9.594317105240387
+        },
+        {
+          "k": 8,
+          "passRate": 0.16,
+          "medMed": 3.772263593874814,
+          "medP95": 9.978776456806807
+        },
+        {
+          "k": 12,
+          "passRate": 0.2,
+          "medMed": 3.397161293270706,
+          "medP95": 9.070119626907086
+        }
+      ],
+      "minK": null
+    },
+    {
+      "printerId": "epson_p9000",
+      "label": "Epson P9000",
+      "inkCount": 10,
+      "inkType": "pigment",
+      "nFiles": 27,
+      "nPairs": 100,
+      "kResults": [
+        {
+          "k": 5,
+          "passRate": 0.07,
+          "medMed": 2.90456869271995,
+          "medP95": 9.086034666750356
+        },
+        {
+          "k": 6,
+          "passRate": 0.12,
+          "medMed": 2.861794851909848,
+          "medP95": 7.576872967113588
+        },
+        {
+          "k": 8,
+          "passRate": 0.14,
+          "medMed": 3.2180519998518484,
+          "medP95": 8.973714209753322
+        },
+        {
+          "k": 12,
+          "passRate": 0.14,
+          "medMed": 2.722442446935612,
+          "medP95": 7.508633258634719
+        }
+      ],
+      "minK": null
+    },
+    {
+      "printerId": "epson_p9900",
+      "label": "Epson P9900",
+      "inkCount": 11,
+      "inkType": "pigment",
+      "nFiles": 38,
+      "nPairs": 100,
+      "kResults": [
+        {
+          "k": 5,
+          "passRate": 0,
+          "medMed": 3.235376378954193,
+          "medP95": 10.432616757615072
+        },
+        {
+          "k": 6,
+          "passRate": 0.01,
+          "medMed": 3.2501376896548324,
+          "medP95": 8.596944132923024
+        },
+        {
+          "k": 8,
+          "passRate": 0,
+          "medMed": 3.406765469586965,
+          "medP95": 9.344255421238035
+        },
+        {
+          "k": 12,
+          "passRate": 0.02,
+          "medMed": 3.1092138956770423,
+          "medP95": 9.18502925329752
+        }
+      ],
+      "minK": null
+    },
+    {
+      "printerId": "canon_ipf4100",
+      "label": "Canon iPF4100",
+      "inkCount": 12,
+      "inkType": "pigment",
+      "nFiles": 22,
+      "nPairs": 100,
+      "kResults": [
+        {
+          "k": 5,
+          "passRate": 0.03,
+          "medMed": 2.9436118395093436,
+          "medP95": 8.007176876192698
+        },
+        {
+          "k": 6,
+          "passRate": 0.07,
+          "medMed": 2.7811242532533704,
+          "medP95": 5.841669378443726
+        },
+        {
+          "k": 8,
+          "passRate": 0.08,
+          "medMed": 3.2177154469367757,
+          "medP95": 6.477206000344616
+        },
+        {
+          "k": 12,
+          "passRate": 0.09,
+          "medMed": 2.338447069101898,
+          "medP95": 5.686069311668138
+        },
+        {
+          "k": 16,
+          "passRate": 0.12,
+          "medMed": 2.1353103091862433,
+          "medP95": 5.052517829690764
+        }
+      ],
+      "minK": null
+    },
+    {
+      "printerId": "canon_ipf8100_bc",
+      "label": "Canon iPF8100 (BC)",
+      "inkCount": 12,
+      "inkType": "pigment",
+      "nFiles": 16,
+      "nPairs": 100,
+      "kResults": [
+        {
+          "k": 5,
+          "passRate": 0.09,
+          "medMed": 6.15923140892228,
+          "medP95": 15.222561538189403
+        },
+        {
+          "k": 6,
+          "passRate": 0.09,
+          "medMed": 5.71616461946321,
+          "medP95": 11.427630328668865
+        },
+        {
+          "k": 8,
+          "passRate": 0.09,
+          "medMed": 5.321613746322243,
+          "medP95": 11.618918942326546
+        },
+        {
+          "k": 12,
+          "passRate": 0.09,
+          "medMed": 4.87077350355081,
+          "medP95": 10.458684118504978
+        },
+        {
+          "k": 16,
+          "passRate": 0.09,
+          "medMed": 4.364795238242054,
+          "medP95": 9.315748567616282
+        }
+      ],
+      "minK": null
+    },
+    {
+      "printerId": "canon_ipf8100_moab",
+      "label": "Canon iPF8100 (MOAB)",
+      "inkCount": 12,
+      "inkType": "pigment",
+      "nFiles": 13,
+      "nPairs": 100,
+      "kResults": [
+        {
+          "k": 5,
+          "passRate": 0.04,
+          "medMed": 3.383724808314219,
+          "medP95": 8.606613388987299
+        },
+        {
+          "k": 6,
+          "passRate": 0.08,
+          "medMed": 3.2936990102367947,
+          "medP95": 7.4778635609545585
+        },
+        {
+          "k": 8,
+          "passRate": 0.07,
+          "medMed": 3.2370863134134265,
+          "medP95": 8.212295629670884
+        },
+        {
+          "k": 12,
+          "passRate": 0.1,
+          "medMed": 3.0505062190681658,
+          "medP95": 7.674892357968744
+        },
+        {
+          "k": 16,
+          "passRate": 0.08,
+          "medMed": 2.935577487124368,
+          "medP95": 6.51244013861958
+        }
+      ],
+      "minK": null
+    }
+  ]
+}
