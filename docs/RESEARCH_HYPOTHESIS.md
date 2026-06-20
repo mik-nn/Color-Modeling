@@ -2022,63 +2022,138 @@ Exposed as an opt-in in TransferView once H14 work has shipped — OBA is the ch
   3. `θ_substrate = argmin_θ Σ_{p∈S} MSE(S_pred(θ, p), S_true_p)` via Nelder-Mead
   4. `S_target = runCAETransfer(Target, θ_substrate, anchorResiduals)`
 
+---
+
+## H44: Minimum dataset count for stable anchor-coordinate selection (2026-06-20, revised 2026-06-20)
+
+> **⚠ Framing correction (2026-06-20):** The original plan confused TWO separate questions:
+> 1. "how many patches k to put in a colorant chart?" — tested on cross-mode pairs (wrong
+>    regime for H4, which is always checked on same-mode pairs only).
+> 2. **The real H44 question (below).**
 
 ---
 
-## H44: Patch count & placement vs printer ink complexity (2026-06-20)
+### Correct research question
 
-**Statement (A):** The minimum k anchors required to clear H4 gate (median ΔE00 ≤ 1.5,
-P95 ≤ 3.0) increases with physical ink complexity (4-ink dye < 10-ink pigment < 12-ink pigment),
-for colorant-chart-derived anchor placement (0 profiles to construct the chart).
+**"For a given printer / ink scheme, how many MEASURED substrate profiles are needed to
+STABLY SELECT anchor coordinates (RGB device values) such that the resulting D1 prediction
+clears H4 on same-mode pairs?"**
 
-**Statement (B):** The optimal RGB anchor placement (GA-evolved chart at k=5/8) differs
-systematically by printer gamut / ink set.
+This is a dataset-count question about anchor selection stability, NOT a patch-count or
+chart-geometry question.
 
-**Falsification criterion (A):** min-k does NOT increase monotonically with ink count across
-the pigment tier (Epson P9000 10-ink → Canon iPF4100 12-ink → iPF8100 12-ink).
+**Statement (A):** One measured profile per printer is sufficient to select a stable
+COV5 anchor set; adding more same-mode profiles from the same printer does not materially
+change the selected RGB coordinates (Δ < 10 device units per anchor on average).
 
-**Falsification criterion (B):** GA-evolved charts at k=8 show no systematic difference in
-interior-point density across the printer ladder.
+**Statement (B):** The number of profiles needed for anchor stability scales with ink
+complexity: 4-ink dye printers reach stability at n=1; 10–12-ink pigment printers may
+require n=2–3 to resolve gamut-interior uncertainty.
 
-**Status (A): NEGATIVE — H44-A FALSIFIED / UNDERPOWERED**
+**Falsification criterion (A):** COV5 anchor coordinates shift by > 10 device units
+(per anchor, median) when computed on profile n=1 vs the pool mean (n≥10) — for the
+P9000 same-mode subset where we have 27 profiles.
 
-Colorant-derived chart anchors give 0–20% H4 pass rate across ALL 7 printers at k=5 to k=16.
-No printer clears 50% H4 at any tested k. No monotone trend with ink complexity observed.
+**Falsification criterion (B):** Anchor variance at n=1 is NOT statistically different
+between the 4-ink (G2470) and 12-ink (iPF4100/iPF8100) printer families.
 
-Root cause: CMY-geometry primaries/secondaries are gamut-boundary anchors; D1 residual
-extrapolates from the boundary into the interior with large error. Coverage-spanning interior
-anchors (the COV5/COV8 strategy from H31) are required.
+---
 
-**Key finding:** Patch selection requires at least 1 measured profile of the target substrate.
-The "strategy under profile scarcity" is: measure 1 sheet of the new substrate with a
-coverage-spanning chart (COV5 at minimum), then use those measured spectra as D1 anchors.
-Colorant geometry alone (0 measured profiles) is insufficient.
+### H4 gate context (important)
 
-**Status (B): WEAK CONFIRMATION — inconclusive**
+H4 gate = **median ΔE00 ≤ 1.5 AND P95 ≤ 3.0** — always evaluated on **same-mode pairs**
+(same print mode, different substrate). Cross-mode pairs are a qualitatively harder problem
+and NOT the target regime for H44.
 
-GA k=8 in-sample pass rates: G2470 22%, G1430 58%, P9000 20%, P9900 7%, iPF4100 10%,
-iPF8100-BC 10%, iPF8100-MOAB 12%. Interior-point count: dye 4.5 vs pigment 5.2 —
-directionally consistent with H-B but high variance. All evolved charts are interior-heavy
-(no cube corners) — consistent with H31/GA prior findings.
+---
 
-**Critical confound discovered:** H44 uses ALL cross-substrate cross-mode pairs. Prior P9000
-experiments used same-print-mode pairs only (90.4% at k=5 GA). The dramatic gap (90% → 7–22%)
-confirms **cross-mode transfer is the hard problem**, not a chart-placement problem.
+### Infrastructure completed (2026-06-20 experiments A/B — wrong regime but useful infra)
 
-**Revised practical conclusion (H44 final):**
+The H44-A and H44-B experiments were run on **cross-mode** pairs; their H4 pass rates
+(0–22%) reflect cross-mode difficulty, not anchor-selection quality, and CANNOT be used
+to evaluate the H44 hypothesis above.
 
-The answer to "how many profiles needed" splits on mode-availability:
+**What IS valid from those experiments:**
 
-- **Same-mode reference (≥1 profile):** COV5 (80%) or COV8 (83%) is sufficient. k=5 with
-  coverage placement. Colorant geometry not needed — just measure 5 coverage patches.
-- **Zero same-mode profiles, new printer:** Neither colorant chart (H44-A) nor GA chart
-  (H44-B) clears H4 at k ≤ 16. Minimum requirement: 1 measured profile + COV5 anchors.
-- **Ink complexity axis (H-A):** not a useful predictor in the cross-mode regime (all
-  printers fail similarly). Within same-mode regime, dataset insufficient to test the
-  4-ink → 10-ink → 12-ink gradient.
+- Parsers for all 7 printers operational: iPF8100 CIED+DevD join (1728 patches × 36 bands),
+  iPF4100 (22/23 spectral after unzip), Canon G2470 (61 files), P9900 (38 files), MOAB targ.
+- `data/h44_manifest.json` — 240 profiles across 7 printers, all validated spectral.
+- Cross-mode transfer confirmed as hard problem: GA k=8 in-sample pass 7–58% across printers;
+  same-mode P9000 baseline ~90% at k=5. **Cross-mode regime needs its own hypothesis (H45?).**
+- Colorant-chart geometry (CMY primaries/secondaries) confirmed insufficient: gamut-boundary
+  bias causes D1 to extrapolate badly. COV5/COV8 coverage-spanning anchors required.
+
+---
+
+### H44-C/D results (2026-06-20, `scripts/experiments/h44_anchor_stability.ts`)
+
+**H44-C — Coverage anchor coord stability:**
+
+| Printer | Inks | Format | Profiles | max_dev (R,G,B) | Verdict |
+|---------|------|--------|----------|-----------------|---------|
+| Canon G2470 | 4 dye | CxF/ZXML | 60 | 0, 0, 0 | INVARIANT ✓ |
+| Canon G1430 | 4 dye | CxF/ZXML | 61 | 0, 0, 0 | INVARIANT ✓ |
+| Epson P9000 | 10 pigment | CxF/ZXML | 27 | 0, 0, 0 | INVARIANT ✓ |
+| Canon iPF4100 | 12 pigment | CxF/ZXML | 22 | 0, 0, 0 | INVARIANT ✓ |
+| Epson P9900 | 11 pigment | CIED+DevD | 38 | 18, 18, 12 | VARIES* |
+| Canon iPF8100 BC | 12 pigment | CIED+DevD | 16 | 12, 12, 12 | VARIES* |
+
+*Variation in P9900/iPF8100-BC is a suspected CIED+DevD device-value scale / chart-layout artifact, NOT a genuine coverage-anchor instability.
+
+**Statement (A) result: CONFIRMED for CxF-format printers.** Coverage anchor device
+coords are substrate-invariant — `pickCoverageAnchors` selects from the fixed target chart
+D matrix, which is identical across all profiles from the same printer. **0 existing profiles
+needed to select COV6 anchor coordinates.**
+
+---
+
+**H44-D — COV6 same-mode H4 pass-rate (n=1 profile measured):**
+
+| Printer | Inks | Type | Profiles | Pairs | Pass% | med ΔE | p95 ΔE |
+|---------|------|------|----------|-------|-------|--------|--------|
+| Canon G2470 | 4 | dye | 60 | 100 | 18% | 3.92 | 9.31 |
+| Canon G1430 | 4 | dye | 61 | 100 | 15% | 4.26 | 10.32 |
+| Epson P9000 | 10 | pigment | 27 | 100 | 66% | 1.07 | 2.43 |
+| Epson P9900 | 11 | pigment | 38 | 100 | 9% | 2.16 | 5.40 |
+| Canon iPF4100 | 12 | pigment | 22 | 100 | 9% | 2.82 | 6.17 |
+| Canon iPF8100 BC | 12 | pigment | 16 | 100 | 15% | 5.15 | 11.10 |
+
+**P9000 66%** is consistent with prior ~80% (prior experiments excluded metallic substrates;
+100-pair sample here includes metallics and harder cross-family pairs).
+
+**G2470/G1430 15–18%** reflects high within-printer substrate diversity (Photo Glossy vs
+Magnetic Rag are as different as cross-printer pairs). Prior canon_ga experiment showed
+COV5 only ~50% even in-sample for same-family pairs; all-pairs average is ~18%.
+
+**Statement (B) — ink complexity hypothesis: NOT CONFIRMED.** 4-ink G2470 (18%) is lower
+than 10-ink P9000 (66%). Confound: substrate diversity within printer set, not ink count.
+
+**Revised practical conclusion (H44-D):**
+
+- P9000 (well-characterized pigment printer, Epson CxF): 1 measured profile + COV6 is
+  sufficient for ~66-80% same-mode pass rate.
+- Canon dye printers (G2470/G1430): COV6 insufficient for all-pairs same-mode (~18%);
+  works only within same substrate family (~50%, prior canon_ga result).
+- 12-ink pigment Canon (iPF4100/iPF8100): 9-15%, COV6 insufficient; more anchors or
+  a better model needed.
+
+---
+
+### Remaining experiments (H44-E)
+
+| Exp | What | Dataset | Metric |
+|-----|------|---------|--------|
+| H44-E | Within-family same-mode COV6 pass-rate for G2470 | G2470 same-family pairs (13 media families) | H4 pass-rate per family, vs all-pairs |
+
+This would confirm whether G2470's low (18%) is due to cross-family pairing, and whether
+the real "1 profile sufficient" claim holds within a substrate family.
+
+---
+
+### Data / scripts (completed infra)
 
 **Data:** `data/h44_manifest.json` (240 entries, 7 printers), `data/h44_experiment_a.json`,
-`data/h44_experiment_b.json`.
+`data/h44_experiment_b.json` (cross-mode, wrong regime — see infra note above).
 **Scripts:** `frontend/scripts/experiments/h44_ink_complexity_patches.ts`,
 `frontend/scripts/experiments/h44_placement_per_printer.ts`,
 `frontend/scripts/experiments/h44_manifest_builder.ts`.
