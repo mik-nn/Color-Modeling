@@ -1,7 +1,7 @@
 // src/lib/parsers/icmParser.ts
 import { Measurement } from '../../types'
 import { extractIccTextTag, extractZxmlCxfXml } from '../iccTagScanner'
-import { parseCgats17Text } from './cgatsParser'
+import { mergeCiedDevDToCgats, parseCgats17Text } from './cgatsParser'
 import { parseCxf3Xml } from './cxfParser'
 
 /**
@@ -56,7 +56,7 @@ export async function parseIcmFile(file: File): Promise<IcmParseResult> {
   }
 
   const cgatsText = extractIccTextTag(arrayBuffer, 'targ')
-  if (cgatsText?.includes('CGATS')) {
+  if (cgatsText) {
     const cgatsData = parseCgats17Text(cgatsText)
     if (cgatsData.patchCount > 0) {
       return {
@@ -64,6 +64,26 @@ export async function parseIcmFile(file: File): Promise<IcmParseResult> {
         hasSpectral: cgatsData.hasSpectral,
         wavelengths: cgatsData.wavelengths,
         patchCount: cgatsData.patchCount,
+      }
+    }
+  }
+
+  // i1Profiler stores spectral in 'CIED' tag and device RGB in 'DevD' tag
+  // (e.g. BC iPF8100 / Epson P9900 .icc). Join on SampleID, then re-use
+  // the standard CGATS path.
+  const ciedText = extractIccTextTag(arrayBuffer, 'CIED')
+  const devdText = extractIccTextTag(arrayBuffer, 'DevD')
+  if (ciedText && devdText) {
+    const merged = mergeCiedDevDToCgats(ciedText, devdText)
+    if (merged) {
+      const cgatsData = parseCgats17Text(merged)
+      if (cgatsData.patchCount > 0) {
+        return {
+          measurements: cgatsData.measurements,
+          hasSpectral: cgatsData.hasSpectral,
+          wavelengths: cgatsData.wavelengths,
+          patchCount: cgatsData.patchCount,
+        }
       }
     }
   }

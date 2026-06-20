@@ -32,7 +32,7 @@ picker.
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `lib/dataLoader.ts`          | File-type dispatch (`.icm` / `.icc` → `icmParser`, `.cxf` → `cxfParser`). Wraps the result in `ProfileData` with a placeholder cleaning pipeline.                                                                                                  |
 | `lib/iccTagScanner.ts`       | `extractZxmlCxfXml(buffer)`: locates the ZXML tag in an ICC profile, skips 12 bytes (4 data-type + 4 reserved + 4 unknown), `pako.inflate`s the rest, returns CxF XML. `extractIccTextTag(buffer, sig)` reads ICC `text` tags such as MOAB `targ`. |
-| `lib/parsers/icmParser.ts`   | Parses ICC header (validates magic, reads tag count at byte 128), tries ZXML CxF first, then falls back to CGATS.17 text in the `targ` ICC tag. Legacy synthetic-fallback path remains; do not extend it.                                          |
+| `lib/parsers/icmParser.ts`   | Parses ICC header (validates magic, reads tag count at byte 128), tries ZXML CxF first, then `targ` CGATS, then CIED+DevD joined on SampleID, then A2B fallback. Legacy synthetic-fallback path remains; do not extend it.                         |
 | `lib/parsers/cxfParser.ts`   | `parseCxf3Xml(xml)`: walks `cc:CxF` namespace, extracts `cc:Object/cc:ColorValues` per patch. Handles both M0 (`SpectralData`) and Lab-only objects. Multiple attribute naming conventions tolerated.                                              |
 | `lib/parsers/cgatsParser.ts` | Reads CGATS.17 tables, normalises reflectance, derives D50 Lab. **SAMPLE_ID:** if absent, use `RGB_{R}_{G}_{B}` for cross-grid alignment (device value, not row index).                                                                              |
 | `lib/cgatsExport.ts`         | CGATS.17 ASCII export. Fields: `SAMPLE_ID RGB_R RGB_G RGB_B LAB_L LAB_A LAB_B`.                                                                                                                                                                    |
@@ -45,6 +45,14 @@ picker.
 | `lib/dataset/matrix.ts`      | `loadProfileMatrix` (ProfileData → dense X/D matrices), `alignProfiles` (device-coordinate alignment: exact match + k-NN IDW interp fallback, drops out-of-gamut points). Matching is by device coordinate, never by position/ID.                |
 | `scripts/reorgByMode.ts`     | Reorganises `data/profiles/` into per-Epson-preset subfolders via `canonicalPrintMode` (`git mv` tracked, `mv` untracked). Dry-run by default; `--apply` executes.                                                                                 |
 | `scripts/experiments/modeCompare.ts` | H11 print-mode comparison. Per-preset profile tables (paper Lab, OBA) + within-mode and cross-set BC↔MOAB ΔE00 on the common grid. Writes `docs/mode-comparison.md` + a JSON dump.                                                          |
+
+### icmParser.ts — parse path priority
+
+1. ZXML → CxF3 (X-Rite embedded, all Epson P9000/P9900 .icm)
+2. `targ` text tag → `parseCgats17Text` (basICColor / MOAB Canon iPF8100)
+3. `CIED` + `DevD` tags → `mergeCiedDevDToCgats` → `parseCgats17Text`
+   (i1Profiler, BC Canon iPF8100 / Epson P9900 .icc)
+4. A2B table fallback (no spectral data)
 
 **Duplicate to remove (TODO):** `lib/cxFParser.ts` (137 lines) and
 `utils/cxfParser.test.ts` are leftovers from the old layout. The canonical paths are

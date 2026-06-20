@@ -1,10 +1,79 @@
 у# progress-log.md
 
+## 2026-06-20 — Task 3: Wire CIED/DevD branch into icmParser
+
+Relaxed the `targ` guard (removed `includes('CGATS')` string check that could
+miss profiles with leading whitespace/BOM). Added a CIED+DevD branch after the
+targ path: `extractIccTextTag(buffer, 'CIED')` + `extractIccTextTag(buffer, 'DevD')`
+→ `mergeCiedDevDToCgats` → `parseCgats17Text`. Enables parsing BC iPF8100 and
+Epson P9900 `.icc` files that store spectral in the CIED tag and device RGB in
+DevD, joined on SampleID.
+
+## 2026-06-19 — Substack export of `article_en.md` with generated figures
+
+Added `docs/substack/`: `make_figures.py` (matplotlib → 3 clean PNG charts:
+pass-rate by target, ink-coverage-axis schematic, summary stats — all from
+numbers already in `article_en.md`, no invented data), `build_html.py`
+(markdown → self-contained `article_substack.html` with figures inlined as
+base64 data-URIs and LaTeX→Unicode for ΔE₀₀). Open the HTML, select-all,
+paste into Substack — images travel with the paste. PNGs in
+`docs/substack/images/` for manual drag-drop fallback.
+
+Also added `docs/substack/carousel/`: 7-slide LinkedIn carousel
+(`carousel.html`, dark-navy/orange deck matching prior carousel style,
+portrait 1080×1350) rendered to `slide_01..07.png` via playwright (Node 20)
+and assembled into `LinkedIn_FivePatches_carousel.pdf` (PIL). Reuses fig1/fig2;
+last slide links to the Substack post.
+
 > Append-only per-session changelog. Newest entries at the top. Bilingual EN/RU acceptable.
 > Each entry: date, one-line summary, body explaining **why**, links to relevant
 > `EXPERIMENTS.md` rows and commits.
 
 ---
+
+## 2026-06-18 — Article-evidence experiments: ramp axes, k=5 placement, GA patch selection, NN-attn COV retrain
+
+Подготовка к полной переработке `docs/article-draft-ru.md` вскрыла три недоработки в
+нарративе — закрываю экспериментами (DDD: код вместе с доками).
+
+**1. Полная таблица осей рампа** (`scripts/experiments/s3_axis_ramps.ts`, EXPERIMENTS 2026-06-18).
+Раньше были только neutral+cyan. Добавлены magenta/yellow на DecorMatte→Lyve. Вывод
+**переворачивает** прежнюю «UV-blocker» интуицию: одноканальный провал — это **покрытие
+гаммы**, не UV. Для C7 cyan(8.69) лучше magenta(22.17)/yellow(16.88) — против UV-логики.
+Только нейтраль трогает все направления → единственная живая для C7. D1 устойчив (1.9–2.4)
+на всех осях. Следствие: C7 **хрупок** (не герой, как в старом драфте) → проект ушёл к
+D1 + покрывающие мишени.
+
+**2. Placement>count на головном k=5** (`scripts/experiments/d1_placement_k5.ts`, EXPERIMENTS
+2026-06-18). H31 изолировал placement только на k=6. Теперь на k=5: S1-5=45.2% vs
+COV5{white,C,M,Y,black}=80.8% — **+35.6pp от размещения, 0 лишних патчей**. Сюрприз:
+COV5(80.8%) > COV6(76.9%) — gray128 подобран не оптимально (~4 пары через P95-гейт).
+Это мотивировало (3).
+
+**3. GA выбор патчей** (`scripts/experiments/ga_patch_selection.ts`, в работе фоном).
+COV5>COV6 доказывает: ручные cov-наборы не оптимальны. Ставлю выбор чарта как
+оптимизацию — эволюционный алгоритм над фиксированными device-RGB наборами, fitness =
+D1 pass-rate на 104 парах с gate-slack тай-брейком, пары кешируются один раз. Запущен
+K=5 и K=8. Открытый вопрос для статьи: оптимальный k зависит от размерности красочной
+модели (cov5 хватит для CMYK, мало для CMYKOG).
+
+**4. NN-attn placement** (`scripts/h29cov_train.ts`, ретрейн фоном). Пробел: placement>count
+доказан для D1, не для трансформера. H26 показал, что S1-обученная сеть рушится (0%) на
+другой композиции якорей на инференсе → честный тест требует **переобучения** на COV.
+Запущен ретрейн H29-архитектуры на COV-размещённых якорях; сравним с S1-обученной h29.
+
+Статья (`article-draft-ru.md`) переписывается заново: сокращения вместо H-номеров,
+C7-демонтаж, мини-раздел «почему 10 чернил не мешают» (общий LUT сокращается, не Грассман),
+spread-curv, честный раздел про провалы (H40), лестница мишеней, MOAB как открытый вопрос.
+
+**Вторая волна (вечер 2026-06-18), все в EXPERIMENTS:**
+
+- **GA обобщается** (pair-level CV, `ga_patch_cv.ts`): held-out k=5 ≈88%, k=8 ≈90%, +6.5pp над ручным COV5, gap ~3pp по 5 сидам → deployable, headline-worthy. (substrate-disjoint CV неинформативен — мало подложек.)
+- **Canon cross-device** (`ga_canon.ts`): GA-размещение реплицируется на втором принтере. k=5 test ~69-71% vs ручной 40-52% (+17-31pp). На Canon COV5<COV3 — углы куба ещё хуже якоря, чем на Epson. Оба принтера RGB-адресные.
+- **Epson per-mode** (`epson_ga_permode.ts`): GA5 (5 патчей) ≥ S1-13 на каждом режиме; на проблемном CanvasMatte 70%>60%. GA вытаскивает 2/8 DecorMatte-пар, что S1-13 не может.
+- **Hard-attack + WHY** (`hard_ga_attack.ts`): best-case GA на 12 структурных провальщиках — k=8→5/12, k=12→6/12, плато. Оставшиеся ВСЕ хроматически-доминантны (chroma/light 2-10×) → per-ink хроматический remap, D1 структурно не выразит. **Таксономия ~12%: половина placement-ограничены (GA чинит), половина хроматически-структурны (нужна новая модель / CMYK-датасет).**
+
+Итог для статьи: добавлены сильные разделы — оптимизация мишени (GA, cross-device), и провал = «плохой чарт ИЛИ хроматический remap». Весь экспериментальный массив готов.
 
 ## 2026-06-17 — GenerateView: direct ICM/ICC/CxF upload in step 1
 
