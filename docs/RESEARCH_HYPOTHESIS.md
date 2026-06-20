@@ -2107,35 +2107,50 @@ needed to select COV6 anchor coordinates.**
 
 ---
 
-**H44-D — COV6 same-mode H4 pass-rate (n=1 profile measured):**
+**H44-D — COV6 same-mode H4 pass-rate (n=1 profile measured).**
 
-| Printer | Inks | Type | Profiles | Pairs | Pass% | med ΔE | p95 ΔE |
-|---------|------|------|----------|-------|-------|--------|--------|
-| Canon G2470 | 4 | dye | 60 | 100 | 18% | 3.92 | 9.31 |
-| Canon G1430 | 4 | dye | 61 | 100 | 15% | 4.26 | 10.32 |
-| Epson P9000 | 10 | pigment | 27 | 100 | 66% | 1.07 | 2.43 |
-| Epson P9900 | 11 | pigment | 38 | 100 | 9% | 2.16 | 5.40 |
-| Canon iPF4100 | 12 | pigment | 22 | 100 | 9% | 2.82 | 6.17 |
-| Canon iPF8100 BC | 12 | pigment | 16 | 100 | 15% | 5.15 | 11.10 |
+Exclusions applied (HARD rules): metallic substrates (Silverada/VibranceMetallic),
+AllureAq (different grid), AND spreadCurv-incompatible pairs (`classifyPairCompatibility`
+risk='warn', dCurv ≥ 0.137 — the H36 structural-failure flag). Pairs where the two
+substrates' ink-spreading optics differ structurally are NOT in the adaptable population.
 
-**P9000 66%** is consistent with prior ~80% (prior experiments excluded metallic substrates;
-100-pair sample here includes metallics and harder cross-family pairs).
+| Printer | Inks | Type | Pairs | scWarn dropped | Pass% | med ΔE | p95 ΔE |
+|---------|------|------|-------|----------------|-------|--------|--------|
+| Canon G2470 | 4 | dye | 100 | 2608 | 56.0% | 0.96 | 2.67 |
+| Canon G1430 | 4 | dye | 100 | 2724 | 56.0% | 1.12 | 2.85 |
+| Epson P9000 | 10 | pigment | 90 | 14 | 82.2% | 0.99 | 2.18 |
+| Epson P9900 | 11 | pigment | 100 | 114 | 11.0% | 1.75 | 3.80 |
+| Canon iPF4100 | 12 | pigment | 100 | 208 | 16.0% | 2.40 | 4.94 |
+| Canon iPF8100 BC | 12 | pigment | 42 | 140 | 47.6% | 1.93 | 5.27 |
 
-**G2470/G1430 15–18%** reflects high within-printer substrate diversity (Photo Glossy vs
-Magnetic Rag are as different as cross-printer pairs). Prior canon_ga experiment showed
-COV5 only ~50% even in-sample for same-family pairs; all-pairs average is ~18%.
+**P9000 82.2%** matches the prior ~80% same-mode baseline — confirms the pipeline is correct
+once metallics + AllureAq + spreadCurv-warn pairs are excluded.
 
-**Statement (B) — ink complexity hypothesis: NOT CONFIRMED.** 4-ink G2470 (18%) is lower
-than 10-ink P9000 (66%). Confound: substrate diversity within printer set, not ink count.
+**Canon dye 56%** (G2470/G1430): the spreadCurv flag drops a HUGE share of pairs (2600+) —
+most Canon substrate pairs are structurally incompatible (Photo Glossy vs Magnetic Rag have
+very different ink-spreading optics). On the genuinely-adaptable remainder, 1 profile + COV6
+reaches 56%.
+
+**P9900 / iPF4100 still low (11–16%):** even on spreadCurv-compatible pairs, COV6 alone is
+insufficient for these printers. P9900 also shows the CIED+DevD anchor-coord variation
+(Part A) — a parser/format issue worth resolving before drawing firm conclusions.
+
+**Statement (B) — ink complexity hypothesis: NOT CONFIRMED.** 4-ink Canon (56%) sits between
+10-ink P9000 (82%) and 11–12-ink (11–48%). Pass-rate is dominated by substrate-population
+compatibility and parser quality, not ink count.
 
 **Revised practical conclusion (H44-D):**
 
-- P9000 (well-characterized pigment printer, Epson CxF): 1 measured profile + COV6 is
-  sufficient for ~66-80% same-mode pass rate.
-- Canon dye printers (G2470/G1430): COV6 insufficient for all-pairs same-mode (~18%);
-  works only within same substrate family (~50%, prior canon_ga result).
-- 12-ink pigment Canon (iPF4100/iPF8100): 9-15%, COV6 insufficient; more anchors or
-  a better model needed.
+- P9000 (Epson CxF, clean): 1 measured profile + COV6 → ~82% same-mode pass rate on
+  spreadCurv-compatible pairs. **1 profile is sufficient.**
+- Canon dye (G2470/G1430): 1 profile + COV6 → 56% on compatible pairs; the spreadCurv flag
+  is ESSENTIAL (without it the all-pairs number collapses to ~18% due to incompatible pairs).
+- P9900 / iPF: COV6 insufficient (11–48%); needs parser fix (CIED+DevD) and/or more anchors.
+
+**The dataset-count answer (H44 core question):**
+- **0 profiles** to SELECT anchor coordinates (Part A: coverage chart is substrate-invariant).
+- **1 profile** to MEASURE those anchors → sufficient for clean printers (P9000 82%).
+- Mandatory pre-filter: drop metallic/AllureAq + spreadCurv-incompatible pairs.
 
 ---
 

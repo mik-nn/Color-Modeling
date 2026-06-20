@@ -1,5 +1,23 @@
 # progress-log.md
 
+## 2026-06-20 — H44-D исправлен: добавлены исключения металликов + AllureAq + spreadCurv
+
+Две забытые HARD-правила восстановлены в `h44_anchor_stability.ts`:
+
+1. **Металлики + AllureAq** (`/Silverada|VibranceMetallic|Metallic|AllureAq/i`) — металлики
+   имеют принципиально иные базовые спектры (structural ceiling, не адаптируются affine);
+   AllureAq имеет другой grid (1550 vs 905), ломает сопоставление по device-координатам.
+2. **spreadCurv-несовместимые пары** — `classifyPairCompatibility` flag 'warn' при
+   dCurv ≥ 0.137 (H36). Пары где ink-spreading оптика субстратов структурно различается
+   не входят в адаптируемую популяцию.
+
+Результат после всех исключений: P9000 82.2% (было 66% с металликами) — теперь СХОДИТСЯ
+с прежним ~80% same-mode baseline. Canon dye G2470/G1430 18% → 56% (spreadCurv выкинул
+2600+ несовместимых пар). P9900/iPF4100 остались низкими (11–16%) — COV6 недостаточен +
+у P9900/iPF8100 формат CIED+DevD даёт вариацию device-координат (Part A).
+
+Записано правило в память: `feedback_exclude_metallic_substrates.md` + MEMORY.md.
+
 ## 2026-06-20 — H44-C/D: эксперимент по стабильности якорей и COV6 на правильных парах
 
 Реализован `scripts/experiments/h44_anchor_stability.ts`. Part A (H44-C): для каждого

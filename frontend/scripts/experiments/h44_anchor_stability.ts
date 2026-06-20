@@ -30,6 +30,7 @@ import { canonicalPrintMode } from '../../src/utils/printMode'
 import { runPaperRatioResidualTransfer } from '../../src/lib/predict/paperRatioResidual'
 import { paperWPFromBrightestPatch } from '../../src/lib/predict/perLambdaAffine'
 import { extractOBAEmission, computeOBAFactorPerPatch, subtractOBA, addOBA } from '../../src/lib/predict/obaSeparator'
+import { computeSpreadCurv, classifyPairCompatibility, type SpreadCurv } from '../../src/lib/predict/spreadCurv'
 import { spectraToLab, deltaE00 } from '../../src/lib/colormath'
 import type { ProfileData } from '../../src/types'
 
@@ -37,6 +38,13 @@ const REPO     = path.resolve(process.cwd(), '..')
 const P9000_DIR = '/mnt/e/PET/LinkedInPosts/surecolor-p9000'
 const L = 36, D1_RANK = 5, D1_UV = 4
 const MAX_PAIRS = 100   // pairs sampled per printer for Part B
+
+// HARD RULE: metallic + AllureAq substrates are excluded from ALL pairing.
+// Metallics (Silverada, VibranceMetallic) have fundamentally different base
+// spectra → structural ceiling, cannot be affine-adapted. AllureAq uses a
+// different patch grid (1550 vs 905) that corrupts device-coordinate pairing.
+const EXCLUDE_RE = /Silverada|VibranceMetallic|Metallic|AllureAq/i
+const isExcluded = (name: string) => EXCLUDE_RE.test(name)
 
 const median = (xs: number[]) => { const s = [...xs].sort((a,b)=>a-b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m-1]+s[m])/2 }
 const p95    = (xs: number[]) => { const s = [...xs].sort((a,b)=>a-b); return s[Math.min(s.length-1, Math.round(0.95*(s.length-1)))] }
@@ -145,7 +153,7 @@ async function partA(printerDefs: PrinterDef[]) {
   console.log('printer'.padEnd(24), 'profiles  anchors_selected  max_dev_R  max_dev_G  max_dev_B  verdict')
 
   for (const pd of printerDefs) {
-    const files = (await walkIcm(pd.dir)).sort()
+    const files = (await walkIcm(pd.dir)).sort().filter(f => !isExcluded(path.basename(f)))
     const profiles = (await Promise.all(files.map(f => loadProfile(f, pd.id)))).filter(Boolean) as LP[]
     if (profiles.length === 0) { console.log(pd.label.padEnd(24), 'NO PROFILES'); continue }
 
@@ -199,34 +207,53 @@ function buildDeviceMatrix(prof: LP): Float64Array {
 
 // ─── Part B: same-mode COV6 pass-rate per printer ───────────────────────────
 
-// Sample same-mode ordered pairs (pA.printMode === pB.printMode)
-function sampleSameModePairs(arr: LP[], maxN: number, seed = 42): [LP,LP][] {
+// Sample same-mode ordered pairs (pA.printMode === pB.printMode).
+// HARD RULE: skip pairs whose spreadCurv s560 differs by ≥ SPREADCURV_FAIL_THRESHOLD
+// (H36 'warn' flag) — those are structural-failure pairs (different ink-substrate
+// optics) that no affine transform can adapt. Returns {pairs, dropped}.
+function sampleSameModePairs(
+  arr: LP[],
+  sc: Map<LP, SpreadCurv | null>,
+  maxN: number,
+  seed = 42,
+): { pairs: [LP,LP][]; dropped: number } {
   const pairs: [LP,LP][] = []
+  let dropped = 0
   for (let i = 0; i < arr.length; i++)
-    for (let j = 0; j < arr.length; j++)
-      if (i !== j && arr[i].metadata.printMode === arr[j].metadata.printMode)
-        pairs.push([arr[i], arr[j]])
-  if (pairs.length <= maxN) return pairs
+    for (let j = 0; j < arr.length; j++) {
+      if (i === j || arr[i].metadata.printMode !== arr[j].metadata.printMode) continue
+      const scA = sc.get(arr[i]), scB = sc.get(arr[j])
+      if (scA && scB && classifyPairCompatibility(scA, scB).risk === 'warn') { dropped++; continue }
+      pairs.push([arr[i], arr[j]])
+    }
+  if (pairs.length <= maxN) return { pairs, dropped }
   // deterministic shuffle via LCG
   let rng = seed
   const rand = () => { rng = (1664525*rng + 1013904223) >>> 0; return rng / 0xffffffff }
-  return pairs.sort(() => rand() - 0.5).slice(0, maxN)
+  return { pairs: pairs.sort(() => rand() - 0.5).slice(0, maxN), dropped }
 }
 
 async function partB(printerDefs: PrinterDef[]) {
   console.log('\n═══ Part B: Same-mode COV6 D1 pass-rate per printer ═══')
   console.log('(H4 gate: median ΔE00 ≤ 1.5 AND P95 ≤ 3.0, same-mode pairs)')
   console.log()
-  console.log('printer'.padEnd(24), 'inks  type     profiles  pairs  pass%  med_ΔE  p95_ΔE')
+  console.log('printer'.padEnd(24), 'inks  type     profiles  pairs  scWarn  pass%  med_ΔE  p95_ΔE')
 
   const results: Array<{label:string; inkCount:number; inkType:string; passRate:number; medDE:number; p95DE:number}> = []
 
   for (const pd of printerDefs) {
-    const files = (await walkIcm(pd.dir)).sort()
+    const files = (await walkIcm(pd.dir)).sort().filter(f => !isExcluded(path.basename(f)))
     const profiles = (await Promise.all(files.map(f => loadProfile(f, pd.id)))).filter(Boolean) as LP[]
     if (profiles.length < 2) { console.log(pd.label.padEnd(24), 'SKIP (<2 profiles)'); continue }
 
-    const pairs = sampleSameModePairs(profiles, MAX_PAIRS)
+    // Compute spreadCurv per profile once (H36 structural-failure flag).
+    const scMap = new Map<LP, SpreadCurv | null>()
+    for (const prof of profiles) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      try { scMap.set(prof, computeSpreadCurv(loadProfileMatrix(prof as any))) } catch { scMap.set(prof, null) }
+    }
+
+    const { pairs, dropped } = sampleSameModePairs(profiles, scMap, MAX_PAIRS)
     let pass = 0; const meds: number[] = [], pps: number[] = []
     let built = 0
     for (const [pA, pB] of pairs) {
@@ -247,6 +274,7 @@ async function partB(printerDefs: PrinterDef[]) {
       pd.inkType.padEnd(8),
       String(profiles.length).padStart(9),
       String(built).padStart(6),
+      String(dropped).padStart(7),
       `${(100*passRate).toFixed(1)}%`.padStart(6),
       medDE.toFixed(2).padStart(8),
       p95DE.toFixed(2).padStart(7)
