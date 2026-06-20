@@ -40,6 +40,49 @@ function spectralWavelength(field: string): number | null {
   return m ? Number(m[1]) : null
 }
 
+const SAMPLE_ID_RE = /^SAMPLE_?ID$/i
+
+function parseTagRows(text: string): { fields: string[]; rows: string[][] } {
+  const lines = cleanCgatsText(text).split('\n')
+  const fmt = findBlock(lines, 'BEGIN_DATA_FORMAT', 'END_DATA_FORMAT')
+  const data = findBlock(lines, 'BEGIN_DATA', 'END_DATA')
+  if (fmt.length === 0 || data.length === 0) return { fields: [], rows: [] }
+  return { fields: splitFields(fmt[0]), rows: data.map(splitFields) }
+}
+
+/**
+ * Join an i1Profiler `CIED` spectral tag (SampleID + nm380…) to its `DevD`
+ * device tag (SampleID + RGB_R/G/B) on the shared SampleID, emitting one
+ * combined CGATS.17 text. Returns '' if either tag lacks its required columns.
+ */
+export function mergeCiedDevDToCgats(ciedText: string, devdText: string): string {
+  const dev = parseTagRows(devdText)
+  const dSid = dev.fields.findIndex((f) => SAMPLE_ID_RE.test(f))
+  const dR = dev.fields.findIndex((f) => /^RGB_R$/i.test(f))
+  const dG = dev.fields.findIndex((f) => /^RGB_G$/i.test(f))
+  const dB = dev.fields.findIndex((f) => /^RGB_B$/i.test(f))
+  if (dSid < 0 || dR < 0 || dG < 0 || dB < 0) return ''
+  const rgb = new Map<string, [string, string, string]>()
+  for (const row of dev.rows) rgb.set(row[dSid], [row[dR], row[dG], row[dB]])
+
+  const cie = parseTagRows(ciedText)
+  const cSid = cie.fields.findIndex((f) => SAMPLE_ID_RE.test(f))
+  const spec = cie.fields
+    .map((f, i) => ({ i, wl: spectralWavelength(f) }))
+    .filter((x): x is { i: number; wl: number } => x.wl !== null)
+  if (cSid < 0 || spec.length === 0) return ''
+
+  const header = ['RGB_R', 'RGB_G', 'RGB_B', ...spec.map((x) => `SPECTRAL_NM_${x.wl}`)].join('\t')
+  const out: string[] = []
+  for (const row of cie.rows) {
+    const dv = rgb.get(row[cSid])
+    if (!dv) continue
+    out.push([dv[0], dv[1], dv[2], ...spec.map((x) => row[x.i])].join('\t'))
+  }
+  if (out.length === 0) return ''
+  return `CGATS.17\nBEGIN_DATA_FORMAT\n${header}\nEND_DATA_FORMAT\nNUMBER_OF_SETS ${out.length}\nBEGIN_DATA\n${out.join('\n')}\nEND_DATA\n`
+}
+
 function normalizeReflectance(values: number[]): number[] {
   const max = Math.max(...values)
   return max > 1.5 ? values.map((v) => v / 100) : values

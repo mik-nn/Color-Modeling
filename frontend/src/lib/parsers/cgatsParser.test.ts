@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCgats17Text } from './cgatsParser'
+import { parseCgats17Text, mergeCiedDevDToCgats } from './cgatsParser'
 
 const CGATS = `text\0\0\0\0CGATS.17
 NUMBER_OF_FIELDS 6
@@ -101,5 +101,55 @@ END_DATA`
     const r = parseCgats17Text(cgats)
     expect(r.patchCount).toBe(1)
     expect(r.wavelengths).toEqual([380, 390, 400])
+  })
+})
+
+describe('mergeCiedDevDToCgats', () => {
+  it('merges CIED spectral + DevD RGB tags on SampleID', () => {
+    const cied = `CGATS.17
+BEGIN_DATA_FORMAT
+SampleID SAMPLE_NAME nm380 nm390 nm400
+END_DATA_FORMAT
+NUMBER_OF_SETS 2
+BEGIN_DATA
+1 A1 0.9 0.9 0.9
+2 A2 0.1 0.1 0.1
+END_DATA`
+    const devd = `CGATS.17
+BEGIN_DATA_FORMAT
+SampleID SAMPLE_NAME RGB_R RGB_G RGB_B
+END_DATA_FORMAT
+NUMBER_OF_SETS 2
+BEGIN_DATA
+1 A1 255 255 255
+2 A2 0 0 0
+END_DATA`
+    const merged = mergeCiedDevDToCgats(cied, devd)
+    const r = parseCgats17Text(merged)
+    expect(r.patchCount).toBe(2)
+    expect(r.wavelengths).toEqual([380, 390, 400])
+    expect(r.measurements[0].device).toEqual({ space: 'rgb', values: [255, 255, 255] })
+    expect(r.measurements[0].spectra).toEqual([0.9, 0.9, 0.9])
+    expect(r.measurements[0].SAMPLE_ID).toBe('RGB_255_255_255')
+  })
+
+  it('returns empty string when CIED has no spectral columns', () => {
+    const cied = `CGATS.17
+BEGIN_DATA_FORMAT
+SampleID SAMPLE_NAME
+END_DATA_FORMAT
+NUMBER_OF_SETS 1
+BEGIN_DATA
+1 A1
+END_DATA`
+    const devd = `CGATS.17
+BEGIN_DATA_FORMAT
+SampleID RGB_R RGB_G RGB_B
+END_DATA_FORMAT
+NUMBER_OF_SETS 1
+BEGIN_DATA
+1 255 255 255
+END_DATA`
+    expect(mergeCiedDevDToCgats(cied, devd)).toBe('')
   })
 })
