@@ -1,7 +1,9 @@
 # docs/AGENTS.md — Claude Code Subagents & Skills Map
 
 > This file maps each phase of work in this repo to the Claude Code subagent or skill that
-> handles it. Read [`/CLAUDE.md`](../CLAUDE.md) for the operating rules these agents follow.
+> handles it. Read [`/CLAUDE.md`](../CLAUDE.md) for the operating rules these agents follow,
+> and **[`docs/KEY_FINDINGS.md`](KEY_FINDINGS.md)** for the durable research conclusions
+> (same-mode regime, mandatory pre-filters, placement-beats-count) before any experiment.
 
 The legacy abstract-roles version (Research Scientist Agent / Data Engineer Agent / …) was
 removed in May 2026 — see `docs/progress-log.md`. The concrete agents below replace them.

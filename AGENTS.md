@@ -7,6 +7,22 @@ This is a **Document-Driven Development** research repository. Every non-trivial
 be reflected in `docs/progress-log.md` (and, when an experiment produced the result,
 `docs/EXPERIMENTS.md`) as part of the same commit. The pre-commit hook enforces this.
 
+## Hard experiment rules (read before any adaptation experiment)
+
+Canonical durable conclusions are in **[`docs/KEY_FINDINGS.md`](docs/KEY_FINDINGS.md)** — read it
+first; deep methodology is the `cross-substrate-spectral-adaptation` skill. Non-negotiable rules:
+
+1. **Same-mode regime.** The H4 gate (median ΔE₀₀ ≤ 1.5 AND P95 ≤ 3.0) is evaluated on
+   **same-print-mode pairs only**. Cross-mode (matte ↔ glossy) is a separate, harder problem —
+   never report cross-mode numbers as a verdict on the few-patch method.
+2. **Pre-filter pairs**, every time, before pairing: drop metallic substrates
+   (`Silverada|VibranceMetallic|Metallic`), AllureAq (1550-patch grid ≠ 905), and
+   spreadCurv-incompatible pairs (`classifyPairCompatibility` risk `'warn'`, dCurv ≥ 0.137).
+3. **Match patches by device coordinate** (RGB/CMYK value), never by index/SAMPLE_ID.
+4. **Anchor placement is the lever** — coverage-axis (white+CMY+K) or GA-evolved interior points,
+   NOT cube corners. GA placement is the deployable method and **requires measured profiles**;
+   "0 profiles" only buys the inferior fixed COV chart.
+
 ## Project structure
 
 - `frontend/src/lib/parsers/` — `.icm` (ICC profile + embedded ZXML CxF3) and `.cxf` parsers.

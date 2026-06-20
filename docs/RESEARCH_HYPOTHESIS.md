@@ -2035,27 +2035,36 @@ Exposed as an opt-in in TransferView once H14 work has shipped — OBA is the ch
 
 ### Correct research question
 
-**"For a given printer / ink scheme, how many MEASURED substrate profiles are needed to
-STABLY SELECT anchor coordinates (RGB device values) such that the resulting D1 prediction
-clears H4 on same-mode pairs?"**
+**"For a given printer / ink scheme, from how many MEASURED profiles must the GENETIC
+ALGORITHM evolve the anchor-point chart so that the selected chart still generalizes
+(clears H4 on held-out same-mode pairs)?"**
 
-This is a dataset-count question about anchor selection stability, NOT a patch-count or
-chart-geometry question.
+The deployable method is **GA-evolved anchor placement** (KEY_FINDINGS §4: evolved 5 beats
+manual 12; 90.4% vs 88.5%). The GA needs a training pool of same-mode pairs to optimize over;
+those pairs come from N measured profiles. The question is the **minimum N (training-pool size)**
+at which the held-out pass rate plateaus near the GA ceiling.
 
-**Statement (A):** One measured profile per printer is sufficient to select a stable
-COV5 anchor set; adding more same-mode profiles from the same printer does not materially
-change the selected RGB coordinates (Δ < 10 device units per anchor on average).
+This is a **GA training-set-size** question, NOT a fixed-chart-stability question.
 
-**Statement (B):** The number of profiles needed for anchor stability scales with ink
-complexity: 4-ink dye printers reach stability at n=1; 10–12-ink pigment printers may
-require n=2–3 to resolve gamut-interior uncertainty.
+> **⚠ Do NOT answer this with "0 profiles."** "0 profiles" only buys the *fixed* COV chart
+> (the inferior 80.8% fallback). A fixed chart's coordinates being identical across a printer's
+> profiles is a **tautology** (all profiles share the same RGB target grid), not a discovery and
+> not an answer. The GA — the actual method — needs N ≥ 2 profiles to form pairs.
 
-**Falsification criterion (A):** COV5 anchor coordinates shift by > 10 device units
-(per anchor, median) when computed on profile n=1 vs the pool mean (n≥10) — for the
-P9000 same-mode subset where we have 27 profiles.
+**Statement (A):** There exists a small plateau N* (hypothesized ≈ 6–10 same-mode profiles)
+beyond which the GA-evolved chart's held-out pass rate stops improving.
 
-**Falsification criterion (B):** Anchor variance at n=1 is NOT statistically different
-between the 4-ink (G2470) and 12-ink (iPF4100/iPF8100) printer families.
+**Statement (B):** N* scales with the substrate-population diversity of the printer (how many
+spreadCurv-compatible same-mode pairs exist), not directly with ink count.
+
+**Falsification criterion (A):** held-out GA pass rate keeps rising monotonically with N up to
+the full profile count (no plateau) — i.e. you always benefit from one more profile.
+
+**Falsification criterion (B):** N* is the same across printers regardless of their
+substrate-population diversity.
+
+**Experiment:** `frontend/scripts/experiments/h44_profile_count_sweep.ts` — sweep N, GA-evolve
+on N profiles' pairs, evaluate the frozen chart on a fixed held-out pair set, find the plateau.
 
 ---
 
@@ -2087,7 +2096,13 @@ to evaluate the H44 hypothesis above.
 
 ### H44-C/D results (2026-06-20, `scripts/experiments/h44_anchor_stability.ts`)
 
-**H44-C — Coverage anchor coord stability:**
+> **⚠ These answer the FIXED-chart sub-question, not the GA question above.** H44-C below is
+> **tautological** (a fixed COV6 chart picks from the shared RGB grid → identical coords); it
+> is NOT evidence that "0 profiles" answers the real H44. H44-D is a useful fixed-chart baseline
+> (the 80.8%-class fallback), but the deployable GA number requires the profile-count sweep
+> (`h44_profile_count_sweep.ts`).
+
+**H44-C — Coverage anchor coord stability (tautological, fixed chart):**
 
 | Printer | Inks | Format | Profiles | max_dev (R,G,B) | Verdict |
 |---------|------|--------|----------|-----------------|---------|
@@ -2147,10 +2162,14 @@ compatibility and parser quality, not ink count.
   is ESSENTIAL (without it the all-pairs number collapses to ~18% due to incompatible pairs).
 - P9900 / iPF: COV6 insufficient (11–48%); needs parser fix (CIED+DevD) and/or more anchors.
 
-**The dataset-count answer (H44 core question):**
-- **0 profiles** to SELECT anchor coordinates (Part A: coverage chart is substrate-invariant).
-- **1 profile** to MEASURE those anchors → sufficient for clean printers (P9000 82%).
-- Mandatory pre-filter: drop metallic/AllureAq + spreadCurv-incompatible pairs.
+**What H44-D establishes (fixed-chart baseline only):**
+
+- The **fixed COV6 chart** (0 profiles to design — but it's the inferior ~80% fallback, NOT the
+  GA method) reaches 82% on P9000 with 1 measured profile, on spreadCurv-compatible pairs.
+- This is the floor the GA-evolved chart must beat. The **real H44 answer** — from how many
+  profiles the GA must evolve to clear/beat this — comes from `h44_profile_count_sweep.ts`
+  (the GA profile-count sweep), NOT from the COV6 invariance above.
+- Mandatory pre-filter throughout: drop metallic/AllureAq + spreadCurv-incompatible pairs.
 
 ---
 
