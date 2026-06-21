@@ -182,6 +182,10 @@ async function buildPrinterPairs(pd: PrinterDef): Promise<Built[]> {
   for (let a = 0; a < profiles.length; a++)
     for (let b = 0; b < profiles.length; b++) {
       if (a === b || profiles[a].metadata.printMode !== profiles[b].metadata.printMode) continue
+      // HARD: pair only within the SAME device grid (patch count). Mixing chart
+      // grids (e.g. P9900 905-patch M0 ZXML vs 1728-patch M2 CIED+DevD) yields
+      // ~99% interpolated alignment (exact matches only at 0/255) → garbage truth.
+      if (profiles[a].patch_count !== profiles[b].patch_count) continue
       const scA = sc.get(a), scB = sc.get(b)
       if (scA && scB && classifyPairCompatibility(scA, scB).risk === 'warn') continue
       const built = build(profiles[a], profiles[b])

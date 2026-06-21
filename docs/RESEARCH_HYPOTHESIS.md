@@ -2095,27 +2095,31 @@ was shown on harder in-sample pairs. This sweep measures GA selection STABILITY 
 **RESULT (transfer): anchor sets are per-INK-SYSTEM, not per-printer**
 (`h44_cross_printer_transfer.ts`, 2026-06-20).
 
-Transfer matrix, GA k=5 chart evolved per printer, applied to each recipient's pairs (pass%):
+Transfer matrix (GA k=5 chart per printer → recipient's pairs, pass%), with **same-grid +
+same-mode + spreadCurv** pairing (the earlier version mixed P9900's 905/1728 grids — corrected):
 
 | donor \ recip | P9000 | P9900 | G2470 | G1430 |
 |---------------|-------|-------|-------|-------|
-| P9000 | **95** | 21 | 45 | 38 |
-| P9900 | 94 | **41** | 46 | 41 |
-| G2470 | 91 | 19 | **75** | 64 |
-| G1430 | 95 | 20 | 73 | **61** |
-| COV5 (fixed) | 86 | 4 | 48 | 34 |
+| P9000 | **95** | 39 | 45 | 38 |
+| P9900 | 95 | **57** | 41 | 33 |
+| G2470 | 91 | 44 | **75** | 64 |
+| G1430 | 95 | 44 | 73 | **61** |
+| COV5 (fixed) | 86 | 21 | 48 | 34 |
 
-- **Canon dye (G2470 ↔ G1430), same ink system:** sibling chart ≈ native (73 vs 75; 64 vs 61);
-  cross-system Epson chart ~25–30 pp lower (38–46); sibling charts RGB-close (dist 52). The GA
-  sibling chart also beats the generic fixed COV5 (73 vs 48). → **transfer within ink system.**
-- **Epson HDX (P9000/P9900):** inconclusive as a recipient test — P9900's CIED+DevD parse is
-  degraded (native only 41%, COV5 4% there: a data/format defect, not ink mismatch). The portable
-  direction P9900-chart → P9000 = 94% ≈ native 95% is consistent with transfer.
+- **Canon dye (G2470 ↔ G1430), same ink system, both M0:** sibling chart ≈ native (73 vs 75;
+  64 vs 61); cross-ink-system Epson chart ~25–30 pp lower (35–44); sibling charts RGB-close
+  (dist 52); GA sibling beats fixed COV5 (73 vs 48). → **transfer within ink system (clean).**
+- **Epson HDX (P9000/P9900): asymmetric / confounded.** P9900-chart → P9000 = 95% but
+  P9000-chart → P9900 = 39% < native 57%; same-system (39%) ≈ cross-system (44%). Cause: P9000 is
+  905-patch **M0**, P9900 is mostly 1728-patch **M2/UVcut** — different chart grid AND measurement
+  condition, not just the same ink set. (The P9900 CIED+DevD parse is correct; the earlier
+  "P9900 = 11/41%" was a grid-mixing bug, now fixed: native 57%.)
 - P9000 is too easy to discriminate (every chart ~90%+ on its clean compatible pairs).
 
-**Practical rule:** evolve ONE GA anchor chart per **ink system** (Epson UltraChrome HDX, Canon
-dye, Canon Lucia) from ≥ 8 of that family's same-mode profiles, and reuse it across all printers
-sharing that ink set. Do not re-derive per printer.
+**Practical rule:** evolve ONE GA anchor chart per **ink system** from ≥ 8 of that family's
+profiles **measured the same way (same chart grid + same M-condition)**, and reuse it across the
+printers sharing that ink set. A clean Epson-HDX confirmation needs P9000 + P9900 on a common
+grid/condition.
 
 ---
 

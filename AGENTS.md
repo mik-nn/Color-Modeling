@@ -18,7 +18,10 @@ first; deep methodology is the `cross-substrate-spectral-adaptation` skill. Non-
 2. **Pre-filter pairs**, every time, before pairing: drop metallic substrates
    (`Silverada|VibranceMetallic|Metallic`), AllureAq (1550-patch grid ≠ 905), and
    spreadCurv-incompatible pairs (`classifyPairCompatibility` risk `'warn'`, dCurv ≥ 0.137).
-3. **Match patches by device coordinate** (RGB/CMYK value), never by index/SAMPLE_ID.
+3. **Match patches by device coordinate** (RGB/CMYK value), never by index/SAMPLE_ID. **Pair only
+   profiles sharing the SAME device grid (`patch_count`) AND measurement condition (M0 vs M2).**
+   Mixing grids (e.g. P9900 905-patch M0 vs 1728-patch M2 CIED+DevD) gives ~99% interpolated
+   alignment → fabricated ground truth. The CIED+DevD parser itself is correct.
 4. **Anchor placement is the lever** — coverage-axis (white+CMY+K) or GA-evolved interior points,
    NOT cube corners. GA placement is the deployable method and **requires measured profiles**;
    "0 profiles" only buys the inferior fixed COV chart.

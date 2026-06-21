@@ -222,6 +222,8 @@ function sampleSameModePairs(
   for (let i = 0; i < arr.length; i++)
     for (let j = 0; j < arr.length; j++) {
       if (i === j || arr[i].metadata.printMode !== arr[j].metadata.printMode) continue
+      // HARD: same device grid only — mixing 905/1728 chart grids gives ~99% interpolated alignment.
+      if (arr[i].patch_count !== arr[j].patch_count) continue
       const scA = sc.get(arr[i]), scB = sc.get(arr[j])
       if (scA && scB && classifyPairCompatibility(scA, scB).risk === 'warn') { dropped++; continue }
       pairs.push([arr[i], arr[j]])

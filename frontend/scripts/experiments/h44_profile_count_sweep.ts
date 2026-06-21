@@ -211,6 +211,8 @@ async function main() {
   for (let a = 0; a < profiles.length; a++)
     for (let b = 0; b < profiles.length; b++) {
       if (a === b || profiles[a].metadata.printMode !== profiles[b].metadata.printMode) continue
+      // HARD: same device grid only — mixing 905/1728 chart grids gives ~99% interpolated alignment.
+      if (profiles[a].patch_count !== profiles[b].patch_count) continue
       const scA = sc.get(a), scB = sc.get(b)
       if (scA && scB && classifyPairCompatibility(scA, scB).risk === 'warn') { scWarn++; continue }
       const built = build(profiles[a], profiles[b], a, b)
