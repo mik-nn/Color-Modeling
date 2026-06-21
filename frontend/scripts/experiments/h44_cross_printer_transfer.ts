@@ -45,10 +45,15 @@ const EXCLUDE_RE = /Silverada|VibranceMetallic|Metallic|AllureAq/i
 
 interface PrinterDef { id: string; label: string; inkSystem: string; dir: string }
 const PRINTERS: PrinterDef[] = [
-  { id: 'p9000',  label: 'Epson P9000',  inkSystem: 'epson_hdx',  dir: P9000_DIR },
-  { id: 'p9900',  label: 'Epson P9900',  inkSystem: 'epson_hdx',  dir: path.join(REPO, 'data/profiles/stylus-pro-9900') },
+  // Epson UltraChrome HDR (Stylus Pro x900) — MOAB sets, SAME chart grid + condition.
+  // The clean same-ink-system cross-printer pair (only print width differs).
+  { id: 'sp7900', label: 'Epson SP7900', inkSystem: 'epson_hdr', dir: path.join(REPO, 'data/profiles/Epson Stylus Pro 7900 MOAB ICC Profiles') },
+  { id: 'sp9900', label: 'Epson SP9900', inkSystem: 'epson_hdr', dir: path.join(REPO, 'data/profiles/Epson Stylus Pro 9900 MOAB ICC Profiles') },
+  // Canon dye (prior clean confirmation).
   { id: 'g2470',  label: 'Canon G2470',  inkSystem: 'canon_dye',  dir: path.join(REPO, 'data/profiles/Canon G2470') },
   { id: 'g1430',  label: 'Canon G1430',  inkSystem: 'canon_dye',  dir: path.join(REPO, 'data/profiles/G1430') },
+  // Reference (different ink gen / chart — negative-control rows).
+  { id: 'p9000',  label: 'Epson P9000',  inkSystem: 'epson_hdx',  dir: P9000_DIR },
 ]
 
 const median = (xs: number[]) => { const s = [...xs].sort((a,b)=>a-b), m = s.length>>1; return s.length%2 ? s[m] : (s[m-1]+s[m])/2 }

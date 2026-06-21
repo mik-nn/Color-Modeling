@@ -2106,20 +2106,20 @@ same-mode + spreadCurv** pairing (the earlier version mixed P9900's 905/1728 gri
 | G1430 | 95 | 44 | 73 | **61** |
 | COV5 (fixed) | 86 | 21 | 48 | 34 |
 
-- **Canon dye (G2470 ↔ G1430), same ink system, both M0:** sibling chart ≈ native (73 vs 75;
-  64 vs 61); cross-ink-system Epson chart ~25–30 pp lower (35–44); sibling charts RGB-close
-  (dist 52); GA sibling beats fixed COV5 (73 vs 48). → **transfer within ink system (clean).**
-- **Epson HDX (P9000/P9900): asymmetric / confounded.** P9900-chart → P9000 = 95% but
-  P9000-chart → P9900 = 39% < native 57%; same-system (39%) ≈ cross-system (44%). Cause: P9000 is
-  905-patch **M0**, P9900 is mostly 1728-patch **M2/UVcut** — different chart grid AND measurement
-  condition, not just the same ink set. (The P9900 CIED+DevD parse is correct; the earlier
-  "P9900 = 11/41%" was a grid-mixing bug, now fixed: native 57%.)
-- P9000 is too easy to discriminate (every chart ~90%+ on its clean compatible pairs).
+- **Epson HDR (SP7900 ↔ SP9900), matched MOAB sets — DECISIVE clean test:** both printers evolve
+  the **IDENTICAL** GA chart (RGB dist = 0) and it transfers at native (44% = 44%); cross-ink-system
+  (Canon→SP) ~28%. Same ink system, same MOAB chart + condition, only print width differs → optimal
+  anchors are literally the same. → **transfer within ink system (clean, pigment family).**
+- **Canon dye (G2470 ↔ G1430), both M0 — clean (dye family):** sibling chart ≈ native (73 vs 75;
+  64 vs 61); cross-ink-system ~25–30 pp lower (35–48); sibling charts RGB-close (dist 52).
+- **Epson HDX (P9000/P9900): NOT clean — setup mismatch.** P9000 905-patch **M0** vs P9900
+  1728-patch **M2/UVcut** → asymmetric (P9900-chart→P9000 = 95%, P9000-chart→P9900 = 39% < native
+  57%). A measurement-setup difference, not an ink difference. (P9900 CIED+DevD parse is correct;
+  old "11%" was the grid-mixing bug.)
 
-**Practical rule:** evolve ONE GA anchor chart per **ink system** from ≥ 8 of that family's
-profiles **measured the same way (same chart grid + same M-condition)**, and reuse it across the
-printers sharing that ink set. A clean Epson-HDX confirmation needs P9000 + P9900 on a common
-grid/condition.
+**Practical rule:** evolve ONE GA anchor chart per **ink system** from that family's profiles
+**measured the same way (same chart grid + same M-condition)**, and reuse it across the printers
+sharing that ink set. Confirmed on both a dye (Canon) and a pigment (Epson HDR) family.
 
 ---
 

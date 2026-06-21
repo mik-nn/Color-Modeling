@@ -1,5 +1,18 @@
 # progress-log.md
 
+## 2026-06-20 — Чистое Epson-подтверждение: SP7900 ↔ SP9900 через MOAB
+
+Пользователь добавил MOAB-наборы Stylus Pro 7900/9900 + SureColor P7000. 7900 и 9900 MOAB
+идентичны по структуре (1728→10, 1877→6, те же субстраты, UltraChrome HDR, один MOAB-чарт +
+условие) — это закрывает конфаунд предыдущего Epson HDX теста (там P9000 905/M0 vs P9900 1728/M2).
+
+Transfer (h44_cross_printer_transfer.ts, добавлены sp7900/sp9900): **SP7900 и SP9900 вырастили
+ИДЕНТИЧНЫЙ GA-chart (RGB dist=0)**, перенос = native (44%=44%), cross-ink-system (Canon→SP) 28%.
+44% абсолют низкий только из-за разнообразия MOAB субстратов (32 single-mode пары); важен перенос
+same=native≫cross. Теперь per-ink-system подтверждён на ДВУХ семействах: Canon dye (73/64≈native)
+и Epson HDR (идентичный chart). P7000 = 2033-сетка HDX, нет P9000-MOAB двойника для HDX cross-теста.
+Чистил AppleDouble (._*) мусор из zip; MOAB данные не коммитятся (sample data).
+
 ## 2026-06-20 — Root-cause: P9900 11% был mixing сеток, НЕ дефект парса CIED+DevD
 
 Пользователь прав: дефекта формата нет. Парс CIED+DevD корректен (1728 уникальных RGB,

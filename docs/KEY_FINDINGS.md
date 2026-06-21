@@ -86,10 +86,14 @@ Canon) drops ~25–30 pp (35–44%), and a GA sibling chart beats the fixed COV5
 **Practice: evolve ONE chart per ink system (Epson HDX, Canon dye, Canon Lucia) from same-grid +
 same-M-condition profiles, reuse across that family's printers.**
 
-Epson HDX (P9000/P9900) is NOT a clean test: P9000 is 905-patch **M0**, P9900 is mostly
-1728-patch **M2/UVcut** — different chart grid AND measurement condition, so the transfer is
-asymmetric (P9900-chart→P9000 = 95%, but P9000-chart→P9900 = 39% < native 57%). This is a
-measurement-setup mismatch, NOT an ink-system difference. (Note: the P9900 CIED+DevD parse is
-correct; the earlier "P9900 = 11%" was a grid-mixing bug — see finding §2.) A clean Epson-HDX
-test needs P9000 and P9900 measured the same way (same grid + same M-condition).
+Epson HDR (SP7900 ↔ SP9900) = the **decisive clean confirmation**: two printers of the same ink
+system measured with the SAME MOAB chart + condition (only print width differs) evolve the
+**EXACT SAME** GA chart (RGB dist = 0) and it transfers at native quality (44% = 44%);
+cross-ink-system charts score ~16 pp lower (28%). The low 44% absolute is just MOAB substrate
+diversity (32 single-mode pairs) — the transfer (same = native ≫ cross) is the point.
+
+So the per-ink-system verdict holds on BOTH a dye (Canon) and a pigment (Epson HDR) family when
+measurement setups match. NOT a clean test: Epson HDX P9000(905/M0) ↔ P9900(1728/M2-UVcut) — they
+differ in grid AND measurement condition, so transfer is asymmetric (a setup mismatch, not an ink
+difference; the P9900 CIED+DevD parse itself is correct — the old "11%" was the §2 grid-mixing bug).
 (`h44_cross_printer_transfer.ts`)
