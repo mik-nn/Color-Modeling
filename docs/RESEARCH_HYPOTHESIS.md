@@ -2092,6 +2092,31 @@ marginal gain over the fixed chart is small in THIS test; the GA > COV advantage
 was shown on harder in-sample pairs. This sweep measures GA selection STABILITY vs profile count
 — the actual H44 question — not the GA-vs-COV ceiling gap.
 
+**RESULT (transfer): anchor sets are per-INK-SYSTEM, not per-printer**
+(`h44_cross_printer_transfer.ts`, 2026-06-20).
+
+Transfer matrix, GA k=5 chart evolved per printer, applied to each recipient's pairs (pass%):
+
+| donor \ recip | P9000 | P9900 | G2470 | G1430 |
+|---------------|-------|-------|-------|-------|
+| P9000 | **95** | 21 | 45 | 38 |
+| P9900 | 94 | **41** | 46 | 41 |
+| G2470 | 91 | 19 | **75** | 64 |
+| G1430 | 95 | 20 | 73 | **61** |
+| COV5 (fixed) | 86 | 4 | 48 | 34 |
+
+- **Canon dye (G2470 ↔ G1430), same ink system:** sibling chart ≈ native (73 vs 75; 64 vs 61);
+  cross-system Epson chart ~25–30 pp lower (38–46); sibling charts RGB-close (dist 52). The GA
+  sibling chart also beats the generic fixed COV5 (73 vs 48). → **transfer within ink system.**
+- **Epson HDX (P9000/P9900):** inconclusive as a recipient test — P9900's CIED+DevD parse is
+  degraded (native only 41%, COV5 4% there: a data/format defect, not ink mismatch). The portable
+  direction P9900-chart → P9000 = 94% ≈ native 95% is consistent with transfer.
+- P9000 is too easy to discriminate (every chart ~90%+ on its clean compatible pairs).
+
+**Practical rule:** evolve ONE GA anchor chart per **ink system** (Epson UltraChrome HDX, Canon
+dye, Canon Lucia) from ≥ 8 of that family's same-mode profiles, and reuse it across all printers
+sharing that ink set. Do not re-derive per printer.
+
 ---
 
 ### H4 gate context (important)

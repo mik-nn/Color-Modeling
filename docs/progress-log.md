@@ -1,5 +1,17 @@
 # progress-log.md
 
+## 2026-06-20 — H44 transfer: опорные точки переносятся в пределах системы чернил
+
+`h44_cross_printer_transfer.ts` — GA k=5 chart выращен на каждом принтере, применён к парам
+остальных (матрица переноса). **Ответ: наборы опорных точек per-INK-SYSTEM, не per-printer.**
+Чистое доказательство — Canon dye: G1430-chart на G2470 = 73% ≈ native 75%; G2470-chart на
+G1430 = 64% ≈ native 61%; sibling-charts RGB-близки (dist 52). Cross-system (Epson-chart на
+Canon) = 38–46%, на ~25-30pp ниже. GA sibling-chart бьёт фиксированный COV5 (73 vs 48). Epson
+HDX (P9000/P9900) как recipient неинформативен — у P9900 деградировавший CIED+DevD парс
+(native 41%, COV5 4%); но обратное P9900-chart→P9000=94%≈native95% согласуется с переносом.
+Деплой: эволюционировать ОДИН chart на систему чернил (Epson HDX, Canon dye, Canon Lucia) из ≥8
+профилей семейства, переиспользовать на всех принтерах системы.
+
 ## 2026-06-20 — H44 CORE: из скольких профилей GA выбирает набор опорных точек
 
 Реструктуризация knowledge base (A–E): создан `docs/KEY_FINDINGS.md` (6 канонических выводов:

@@ -63,16 +63,24 @@ placement recovers part of it). The residual error concentrates in a ~20% tail a
 multiplicative paper-ratio model structurally cannot express. More anchors don't fix these
 pairs; only a per-ink chromatic model or a CMYK-addressable dataset would.
 
-## 6. OPEN — H44: from how many profiles must the GA select the anchor set?
+## 6. H44 — anchor-set selection: how many profiles, and shared across which printers?
 
 The deployable method (finding 4) is GA-evolved placement, which needs measured profiles to
-optimize over. **Open question: the minimum number N of a printer's profiles the GA must train
-on so the selected chart still generalizes to held-out pairs.**
+optimize over. Two answered sub-questions:
 
-- This is NOT "0 profiles." 0 profiles only buys the inferior *fixed* COV chart. The GA needs
-  a training pool of pairs, i.e. N ≥ 2 profiles, and the question is how N trades off against
-  held-out pass rate (plateau N).
-- A fixed coverage chart's device coordinates being substrate-invariant within a printer is a
-  **tautology** (all profiles share the same RGB target grid), not an answer to this question.
-- Experiment: `frontend/scripts/experiments/h44_profile_count_sweep.ts` — sweep N, GA-evolve on
-  N profiles' pairs, evaluate on a fixed held-out pair set, find the plateau.
+**(a) How many profiles must the GA train on?** ~8 same-mode profiles to STABILIZE (P9000 k=5:
+N=8 → 88.9% held-out, min 85%), plateau at N≈16 (98.8%). Below N≈6 the GA sees ≤2 same-mode
+pairs and overfits (variance 29–93%) → use the fixed COV5 fallback instead. NOT "0 profiles":
+0 only buys the inferior fixed chart; a fixed chart's coords being identical across a printer's
+profiles is a **tautology** (shared RGB target grid), not an answer.
+(`h44_profile_count_sweep.ts`)
+
+**(b) Per-printer or per-ink-system?** Anchor sets are **per-INK-SYSTEM, not per-printer.**
+Clean evidence — Canon dye: the GA chart from G1430 scores 73% on G2470 (≈ its native 75%) and
+the G2470 chart scores 64% on G1430 (≈ native 61%); the sibling charts are RGB-close (dist 52).
+A cross-ink-system chart (Epson on Canon) drops ~25–30 pp (38–46%), and a GA sibling chart beats
+the generic fixed COV5 on Canon (73% vs 48%). Negative control holds. **Practice: evolve ONE
+chart per ink system (Epson UltraChrome HDX, Canon dye, Canon Lucia) and reuse it across that
+family's printers.** Epson-HDX confirmation (P9000/P9900) is blocked only by P9900's degraded
+CIED+DevD parse (P9900 as recipient native just 41%); the portable direction P9900-chart→P9000
+= 94% ≈ native 95% is consistent. (`h44_cross_printer_transfer.ts`)
