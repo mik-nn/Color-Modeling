@@ -126,3 +126,41 @@ fold** on at least one ramp.
 chroma boundary, sheds only dark-corner volume) and a useful failure-region *flag*, but it is
 **not** the remedy for the ~12 % chromatic structural ceiling — that still needs the per-ink
 chromatic model (Finding 5). (`h45_inklimit_gamut.ts`)
+
+**Two ways to "apply" the limit — H45 is the masked one.** There is a real semantic fork that
+must be stated explicitly:
+
+| Regime | What it does | Print mode | Our prediction | Stats population |
+|--------|--------------|------------|----------------|------------------|
+| **(1) Absolute / rescale** | t\* becomes the new 100 %; device [0,255] re-maps to ink [0,t\*] | **NEW mode** (different linearization) | **invalid** — model was trained on the original mode; would need re-anchoring on re-printed limited data | n/a here |
+| **(2) Masked / subset** | keep the mode; refuse / don't evaluate device values past t\* | **unchanged** | **valid** | **in-limit subset only** |
+
+H45 implements **(2)** — `isOverLimit` excludes over-limit patches from evaluation; spectra and
+print mode are untouched. So every H45 statistic (pass-rate, recall, forward residual) is on the
+**in-limit subset of the original mode**. The achievable-gamut ΔV (~5 %, 100 % chroma) is
+**interpretation-robust** (both regimes deposit ≤ t\* ink → same physical gamut ceiling); only
+prediction validity differs.
+
+**Reframe — the +8 pp is a DIAGNOSTIC, not a gamut concession.** The right reading of "excluding
+the over-limit region recovers +8 pp (real, over a random control)" is **not** "declare a smaller
+gamut." It is: **the over-limit region is unpredictable because the medium is being printed in an
+unsuitable (over-inked) mode**, and that same over-inking degrades profile quality generally
+(wasted ink, unstable color, the chroma fold / ink holdout). The cross-substrate prediction error
+therefore acts as a **sensor for "this profile was built in a suboptimal print mode for this
+medium."** Two flavors of the same problem:
+
+- **Over-inking (the chroma fold, 23/24 papers):** past the chroma knee t\* extra ink subtracts
+  chroma + rotates hue — the textbook signature of exceeding the useful ink limit. So our spectral
+  chroma-max detector is effectively an **automatic perceptual ink-limit (CIL) finder**, and the
+  remedy is the established practice of **ink limiting** (TIL/CIL) — see the prior article
+  [Pre-calibration of RGB Printers](https://mikchael.substack.com/p/pre-calibration-of-rgb-printers-moving).
+  Regime (1) is then not a scary uncharacterized mode; it is the **correct** mode that should have
+  been used.
+- **Media holdout (DecorMatte):** no chroma fold, yet worst pair — the paper can't absorb the ink
+  at high coverage (H35). A different "unsuitable mode" (wrong media setting), fixed by media/mode
+  selection, not by an ink cap.
+
+Net: few-patch prediction failure is a **detector of an unsuitable print mode**; the cures
+(ink limiting, correct media preset) are known print-prep steps with prior art to cite, not
+open research. Characterizing the ink-limited mode on this dataset still needs new prints (future
+work), but the *remedy* is not novel — the contribution is the spectral, perceptual detector.
