@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-06-26T15:00:57.729Z",
+  "pairs": 230,
+  "meanOverFrac": 0.24107539451069884,
+  "passFull": 0.7130434782608696,
+  "passRandom": 0.7157971014492753,
+  "passLimitRef": 0.7956521739130434,
+  "passLimitTgt": 0.7869565217391304,
+  "deltaTotal": 0.08260869565217388,
+  "deltaMechanical": 0.002753623188405774,
+  "deltaReal": 0.0798550724637681,
+  "verdict": "REAL (≥+5pp over random)"
+}

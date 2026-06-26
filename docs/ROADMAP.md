@@ -114,6 +114,18 @@ D1 prediction across 7 printers spanning 4–12 physical inks.
 **Practical answer:** minimum 1 same-mode measured profile + COV5 anchors. Colorant
 geometry or GA chart without profile data cannot clear H4 in the cross-mode regime.
 
+## Phase 2⁵ — H45: ink-limit gamut-volume tradeoff — **IN PROGRESS (2026-06-26)**
+
+Tests whether an **intrinsic ink limit** (chroma-maximum $t^\*$ per ramp) removes the
+unpredictable gamut-edge overflow/holdout patches while barely shrinking gamut volume —
+unifying H18 (error ∝ coverage), H35 (ink holdout) and H40 (gamut-edge hue rotation).
+
+- [ ] `lib/analyzers/gamutVolume.ts` — pure-TS 3D convex hull + Lab volume + max-chroma-per-hue-bin. Tests vs cube/tetra/octahedron.
+- [ ] `lib/analyzers/inkLimitChroma.ts` — ramp extraction by device coords, chroma-max $t^\*$ + hue-shift + signFlipScore.
+- [ ] `lib/analyzers/forwardRampModel.ts` — within-profile YN n=2 forward model, LOO ΔE00.
+- [ ] `scripts/experiments/h45_inklimit_gamut.ts` — broad sweep all ink systems; auto-select problematic cohort; both predictors before/after limit. → `data/h45_inklimit_gamut.json`.
+- [ ] Verdict on H45a (ΔV ≤ 5 %), H45b (forward LOO −0.5), H45c (D1 +10 pp), H45d (worst-5 % recall ≥ 60 %) → `EXPERIMENTS.md` + `KEY_FINDINGS.md`.
+
 ## Phase 4 — Generative & ML
 
 - [ ] Conditional β-VAE prototype for ink-vs-substrate factor disentanglement.

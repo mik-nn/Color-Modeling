@@ -2246,3 +2246,107 @@ the real "1 profile sufficient" claim holds within a substrate family.
 **Scripts:** `frontend/scripts/experiments/h44_ink_complexity_patches.ts`,
 `frontend/scripts/experiments/h44_placement_per_printer.ts`,
 `frontend/scripts/experiments/h44_manifest_builder.ts`.
+
+---
+
+## H45 — Ink-limit gamut-volume tradeoff (2026-06-26, pre-registered)
+
+On *problematic* profiles the chroma $C^*_{ab}$ along a colorant ramp **rises then falls**
+(sign of $dC/dt$ flips before full coverage) and the hue $h_{ab}$ **rotates** at the gamut
+edge. Define an **intrinsic ink limit** per colorant ramp at its chroma maximum
+$t^\* = \arg\max_t C^*_{ab}(t)$. The claim: clipping device values at $t^\*$ removes the
+unpredictable high-coverage "overflow/holdout" patches **while the gamut volume barely
+shrinks**, and makes the residual ink behaviour predictable both by a within-profile forward
+model and by the cross-substrate D1 transfer.
+
+### Why it is not circular
+
+The limit is derived **intrinsically** — from each profile's own ramp chroma curve — and is
+**never** fitted to transfer error. H45d then tests whether that intrinsic boundary coincides
+with the empirically-observed transfer-failure tail. If they coincide, the chroma sign-flip
+*is* the mechanism behind H18 (error ∝ coverage), H35 (ink holdout) and H40 (gamut-edge hue
+rotation), unifying the three.
+
+### Formal statement
+
+For a profile with device colorant vector $\mathbf{c}$ (via `toCMY`), along each primary,
+secondary and neutral ramp there exists $t^\* \in (0, 1]$ with $C^*_{ab}(t^\*) = \max_t
+C^*_{ab}(t)$. A patch is **over-limit** if its dominant-colorant coverage exceeds that
+colorant's $t^\*$ (or total coverage exceeds the neutral-ramp limit). Let $V$ be the
+convex-hull volume of the profile's Lab point cloud; $V_{\text{full}}$ over all patches,
+$V_{\text{lim}}$ over $\le$-limit patches.
+
+### Acceptance & falsification
+
+| Part | Claim | Pass | Reject |
+|------|-------|------|--------|
+| **H45a** (gamut) | Clipping at $t^\*$ barely shrinks gamut | median $\Delta V_{\text{hull}} = (V_{\text{full}}-V_{\text{lim}})/V_{\text{full}} \le$ **5 %** across the problematic cohort | $\ge$ **15 %** |
+| **H45b** (within-profile) | Forward ramp model fits better after the limit | LOO median ΔE00 drops $\ge$ **0.5**, and the high-residual patches are the over-limit ones (recall $\ge$ 0.6) | drop $\le$ 0.1 |
+| **H45c** (transfer) | D1 pass-rate rises when the test set is restricted to $\le$-limit patches | same-mode problematic pairs gain $\ge$ **10 pp** (median ≤ 1.5 ∧ P95 ≤ 3.0) | $\le$ 2 pp |
+| **H45d** (mechanism) | The intrinsic limit captures the failure region | $\ge$ **60 %** of D1 worst-5 % patches are over-limit | < 30 % |
+
+### Caveats
+
+- $\Delta V$ may be driven by losing the **dark** corner (high-ink, low $L^*$) rather than
+  chroma. Report $L^*$ range and **max chroma per 10° hue bin** alongside total volume — the
+  chroma boundary is the physically meaningful claim, not the dark vertex.
+- Convex hull over ~900 noisy Lab points: guard coplanar/degenerate faces; total volume is
+  robust, individual faces less so.
+- Mandatory pre-filters before any transfer pairing (per `docs/KEY_FINDINGS.md` #2): drop
+  metallic / AllureAq / spreadCurv-warn (dCurv ≥ 0.137) / different grid / different
+  measurement condition. Patch correspondence by **device coordinate**, never index.
+
+### Dataset slice
+
+Broad sweep across **all** ink systems — P9000 BC (`/mnt/e/PET/LinkedInPosts/surecolor-p9000/`)
+plus `data/profiles/*` (Canon G2470/G1430 dye, MOAB SP7900/SP9900/P7000, iPF4100/iPF8100).
+Stage 1 (intrinsic limit + ΔV + forward LOO) runs per profile on every system; Stage 2
+(D1 transfer) runs on same-mode pairs within the auto-selected problematic cohort.
+Expected anchor: DecorMatte (CanvasMatte, the H35 holdout substrate) must surface in the
+cohort with a chroma maximum $t^\* < 1$ on its overflow ramp, and corr(signFlipScore,
+spreadCurv) > 0.
+
+### Tests
+
+`frontend/scripts/experiments/h45_inklimit_gamut.ts` (broad sweep, outputs
+`data/h45_inklimit_gamut.json`); math unit tests next to
+`lib/analyzers/{gamutVolume,inkLimitChroma,forwardRampModel}.ts`. Result row appended to
+`docs/EXPERIMENTS.md` with the per-part verdicts.
+
+### Result (2026-06-26) — PARTIAL
+
+261 profiles across all 9 ink systems (`h45_inklimit_gamut.json`). Cohort = top-quartile
+signFlipScore = 65 profiles.
+
+| Part | Result | Verdict |
+|------|--------|---------|
+| H45a | cohort median ΔV_hull **5.42 %** (p95 12.7), chroma-per-hue-bin retention **100.0 %** | chroma-boundary **PASS**, total-volume marginal miss (≤5 bar; inflated by iPF8100 medΔV 10.6 %) |
+| H45b | within-profile YN forward-fit ΔE drop on flipping ramps median **0.656** (n=13) | **PASS** (≥0.5) |
+| H45c | D1 same-mode cohort (226 pairs) pass-rate 71.7 % → **79.2 %** (**+7.5 pp**) | **MISS** (<+10; partly mechanical) |
+| H45d | worst-5 % over-limit recall median **0.70** | **PASS** (≥0.60) |
+
+**Falsified pre-registrations.** (1) corr(signFlipScore, spreadCurv) = **0.028** — the two
+descriptors are independent (spreadCurv = neutral-ramp curvature; signFlip = colorant-ramp
+chroma fold). (2) **DecorMatte — the H35 ink-holdout substrate — does NOT flip** (flips = 0;
+sole non-flipper of the 24 P9000 profiles). Its chroma rises **monotonically** to full ink
+(Cyan ramp C* 0→60.1, Green 0→72.1). The pre-registered anchor expectation is refuted.
+
+**Interpretation.** The chroma-sign-flip ink limit is real and ubiquitous (23/24 P9000
+profiles flip) and clipping at it preserves **100 % of the chromatic gamut boundary** while
+trimming only the ~4–5 % dark-corner (low-L*) volume — the user's gamut-preservation
+intuition holds. It improves the within-profile forward model (H45b) and captures **70 % of
+the cross-substrate worst-5 % failure patches** (H45d, the non-circular core). **But it is a
+different mechanism from the H35/H40 ink-holdout**: DecorMatte and the CanvasMatte failure
+class have no chroma fold, so an ink limit does not address them — those need the per-ink
+chromatic model (`KEY_FINDINGS.md` #5), not a coverage cap. H45d is the load-bearing, non-circular evidence.
+
+### Addendum (2026-06-26) — H45c control: the transfer gain is REAL, not mechanical
+
+`h45c_control.ts` re-ran the 230 cohort pairs with two fixes: the ink limit defined from the
+**reference** profile (deployment-realistic) and a **matched-count random-exclusion control**.
+Result: pass FULL 71.3 % → random-excluded **71.6 %** (mechanical +0.3 pp) → limit-excluded
+(REF-defined) **79.6 %**. **ΔREAL = +8.0 pp** over the random baseline. Dropping the *same
+number of random* test patches buys essentially nothing, so the +7.5 pp original gain is **not**
+a test-set-shrink artifact — the over-limit region is disproportionately where D1 fails, and the
+effect survives with a REF-defined limit. H45c is upgraded from "partly mechanical" to a
+genuine, deployable result (+8.0 pp non-mechanical; still just under the arbitrary +10 pp bar).

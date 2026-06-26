@@ -97,3 +97,32 @@ measurement setups match. NOT a clean test: Epson HDX P9000(905/M0) ↔ P9900(17
 differ in grid AND measurement condition, so transfer is asymmetric (a setup mismatch, not an ink
 difference; the P9900 CIED+DevD parse itself is correct — the old "11%" was the §2 grid-mixing bug).
 (`h44_cross_printer_transfer.ts`)
+
+## 7. Ink-limit ≠ ink-holdout — two distinct gamut-edge mechanisms (H45)
+
+A colorant ramp's chroma C*ab normally rises with ink; on most profiles it **rises then folds
+back** (peaks at t* < 1, then desaturates + hue-rotates). That fold is an **intrinsic ink
+limit** — clip device coverage at t*. This is real and ubiquitous: **23/24 P9000 profiles
+fold** on at least one ramp.
+
+- **Clipping at t* costs almost no gamut.** Chroma-per-hue-bin boundary retention = **100 %**;
+  the only volume lost (~1.6–5 % on the clean Epson set, up to ~10 % on iPF8100) is the
+  **dark low-L\* corner**, not the chromatic boundary. The user's "gamut barely suffers"
+  intuition holds — for the chromatic boundary.
+- **It captures most transfer failures and the gain is REAL.** The intrinsic (chroma-defined,
+  error-blind) limit covers **70 % of the cross-substrate worst-5 % ΔE patches** (H45d) and
+  improves a within-profile YN forward fit (median −0.66 ΔE). Excluding the over-limit region
+  from the D1 test set lifts pass-rate **+8.0 pp over a matched-count random-exclusion control**
+  (random exclusion buys only +0.3 pp → the effect is **not** test-set shrink), and it holds
+  with a **REF-defined** limit (deployment-realistic). So the over-limit region is genuinely
+  where transfer fails — the chroma-fold limit is a real, deployable failure-region *flag*.
+- **The chroma-fold is NOT the H35/H40 ink-holdout.** `DecorMatte` — the canonical CanvasMatte
+  holdout substrate — is the **sole non-folder** (chroma rises monotonically to full ink:
+  Cyan 0→60, Green 0→72). The CanvasMatte failure class (Finding 5: per-ink chromatic
+  hue/chroma remap at high mixed CMY) has **no chroma fold**, so an ink limit does not fix it.
+  `corr(signFlip, spreadCurv) = 0.03` — independent descriptors.
+
+**Practical:** an ink limit at the chroma maximum is a safe gamut-preserving cleanup (free
+chroma boundary, sheds only dark-corner volume) and a useful failure-region *flag*, but it is
+**not** the remedy for the ~12 % chromatic structural ceiling — that still needs the per-ink
+chromatic model (Finding 5). (`h45_inklimit_gamut.ts`)

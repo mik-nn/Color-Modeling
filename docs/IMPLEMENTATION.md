@@ -72,9 +72,18 @@ Tests in `lib/colormath.test.ts` cover ISO reference pairs.
 
 ### 2.4 Single-profile analysers
 
+> ⚠ **Stale rows.** The `limitsAnalyzer / linearityAnalyzer / groupAnalyzer / inkRatioAnalyzer /
+> spectralPredictor / spreading / cynsn` files below were removed from disk in the 2025–26
+> cleanups (Phase 2 retirement + data-driven migration). They are kept here only as historical
+> reference. The live single-profile analysers on disk are `optimizer.ts`, `dynamicLOO.ts`, and
+> the H45 trio (`gamutVolume.ts`, `inkLimitChroma.ts`, `forwardRampModel.ts`).
+
 | File                                 | Purpose                                                                                                                                                                                                                                                           |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib/analyzers/limitsAnalyzer.ts`    | Per-channel ink-limit detection. `computeRampErrors` walks each primary ramp (C/M/Y) and 2-ink combos (CY/MY/CM), compares measured spectra to Yule-Nielsen (n = 2) interpolation between paper and primary endpoint, returns the first ink level where ΔE76 > 6. |
+| `lib/analyzers/gamutVolume.ts`       | **H45.** Pure-TS 3D convex hull (incremental/quickhull) of a Lab point cloud → `gamutHullVolume` (divergence-theorem volume) + `maxChromaPerHueBin` (chromatic boundary). Tested vs cube / tetra / octahedron analytic volumes. No project deps.                  |
+| `lib/analyzers/inkLimitChroma.ts`    | **H45.** Intrinsic ink limit from chroma. `detectInkLimits` builds C/M/Y/R/G/B/N ramps in CMY space (DeviceSpace-agnostic via `toCMY`), `chromaMaxT` finds t*=argmax C*ab (sign-flip + hue-shift), `isOverLimit` flags patches past t*. Returns `signFlipScore`.   |
+| `lib/analyzers/forwardRampModel.ts`  | **H45.** Within-profile forward predictor. `fitForwardRamp` fits a single Yule-Nielsen exponent on a colorant ramp (paper↔full-ink endpoints) and reports the ΔE00 residual on interior patches — high when ink holdout corrupts the endpoint. Replaces `spectralPredictor.ts`. |
+| `lib/analyzers/limitsAnalyzer.ts`    | **(removed from disk)** Per-channel ink-limit detection. `computeRampErrors` walks each primary ramp (C/M/Y) and 2-ink combos (CY/MY/CM), compares measured spectra to Yule-Nielsen (n = 2) interpolation between paper and primary endpoint, returns the first ink level where ΔE76 > 6. |
 | `lib/analyzers/linearityAnalyzer.ts` | **Legacy.** Cross-profile linearity via Pearson r / R² / slope stability. Originally CMYK-fuzzy-match; current code path uses RGB via `MatchedPatchPair`. Slated for either rewrite under DeviceSpace abstraction or removal — see `TODO.md`.                     |
 | `lib/analyzers/groupAnalyzer.ts`     | Per-patch-group breakdown (primaries / neutrals / mixed). Used by the UI breakdown table.                                                                                                                                                                         |
 | `lib/analyzers/inkRatioAnalyzer.ts`  | `T(λ) = R_ink / R_paper`. Per-channel Pearson r / MAD / scale CV — diagnostic for multiplicative substrate effects.                                                                                                                                               |
