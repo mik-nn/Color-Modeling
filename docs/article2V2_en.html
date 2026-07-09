@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where Five Patches Fail — and Why</title>
+<style>
+ body{max-width:720px;margin:2em auto;padding:0 1em;
+   font-family:Georgia,'Times New Roman',serif;font-size:18px;
+   line-height:1.6;color:#1a1a1a}
+ h1,h2,h3{font-family:-apple-system,Helvetica,Arial,sans-serif;line-height:1.25}
+ h1{font-size:1.9em} h2{font-size:1.4em;margin-top:1.8em} h3{font-size:1.12em;margin-top:1.4em}
+ table{border-collapse:collapse;width:100%;font-size:0.92em;margin:1em 0}
+ th,td{border:1px solid #ddd;padding:6px 10px;text-align:left}
+ th{background:#f4f4f4}
+ blockquote{border-left:4px solid #e8743b;margin:1.2em 0;padding:0.4em 1em;
+   background:#faf6f3;color:#333}
+ code{background:#f2f2f2;padding:1px 4px;border-radius:3px;font-size:0.9em}
+ a{color:#1b5fa8}
+ figure{margin:1.8em 0;text-align:center}
+ figure svg{max-width:100%;height:auto;border:1px solid #eee;border-radius:4px;background:#fff}
+ figcaption{font-size:0.85em;color:#666;margin-top:0.6em;text-align:left}
+ sup{font-size:0.7em}
+ hr{border:none;border-top:1px solid #ddd;margin:2.4em 0}
+</style></head><body>
+
+<h1>Where Five Patches Fail — and Why</h1>
+<p><strong>Michal Erlich</strong><br>
+<em>Color Management Researcher &amp; Profiling Tool Developer</em></p>
+
+<blockquote>This is a direct sequel to <a href="https://mikchael.substack.com/p/predictive-color-adaptation-on-new"><em>Predictive Color Adaptation on New Media</em></a>. That article showed you can adapt a color profile to a new substrate from about five well-chosen patches. This one is about the other ~12&nbsp;% — the substrate pairs where five patches, or fifty, are not enough: what breaks there, and why it is usually the symptom of a fixable print-setup problem, not a limit of the method.</blockquote>
+
+<h2>What the first article showed — and what it left open</h2>
+<p>Few-patch substrate adaptation works well. With a fully characterized reference profile and a handful of measured patches on a new substrate, a Paper-Ratio predictor reconstructs the rest of the target's spectra. The headline results, on 27 art papers across two printers (Epson SureColor SC-P9000 and Canon G2470):</p>
+<ul>
+<li>About <strong>five</strong> strategically placed patches reach a median ΔE₀₀ ≤ 1.5 with the 95th percentile ≤ 3.0 on roughly <strong>88–90&nbsp;%</strong> of substrate pairs within a single print mode.</li>
+<li><em>Which</em> patches you measure matters more than <em>how many</em> — an optimizer-selected 5-patch layout beats a hand-picked 12-patch one.</li>
+</ul>
+<p>But one limitation remained: roughly <strong>12&nbsp;% of pairs fail the quality criterion regardless of patch budget</strong> — more measurements do not rescue them. This article explains why. The failures turn out to be neither random nor mysterious: they have a consistent location, a measurable signature, and two distinct physical causes.</p>
+
+<blockquote><strong>Experimental constraint (unchanged from article 1).</strong> All experiments run on Epson SC-P9000 and Canon G2470/G1430 under standard <strong>RGB drivers</strong>: color separation happens inside the driver's LUTs and is not directly controllable. Optical brightener (OBA) fluorescence is handled as a preprocessing factor. Everything is reproducible from the open tool at <a href="https://github.com/mik-nn/Color-Modeling">github.com/mik-nn/Color-Modeling</a>.</blockquote>
+
+<h2>1. The failure is chromatic: chroma and hue, not lightness</h2>
+<p>The first question about any failed prediction is <em>what kind</em> of error it is. A profile that prints too dark is a very different problem from one that has shifted hue.</p>
+<p>Decompose the largest errors (patches with ΔE₀₀ &gt; 3) into the standard CIELAB components: lightness |ΔL*|, chroma |ΔC*| and hue |ΔH*|. The answer is blunt. On Canon, 148 of 626 same-family pairs fail the criterion — and in <strong>147 of those 148 pairs</strong> (99&nbsp;%) the chromatic error dominates: on the bad patches, mean |ΔC*| ≈ 3.3 and |ΔH*| ≈ 3.1 outweigh |ΔL*| ≈ 1.0 by nearly <strong>5×</strong>. Epson SC-P9000 shows the same pattern. Whatever is going wrong, it is a chroma-and-hue shift at the edge of the gamut, not a tone-reproduction error.</p>
+<p>This already rules out a whole class of fixes. Lightness errors are what more patches and better interpolation repair well: the predictor is smooth, and smooth models are good at lightness. A chromatic shift that the multiplicative model cannot express is structural — and indeed, a best-case attack (a genetic algorithm optimizing the patch set <em>directly</em> on the failing pairs) recovers about half of them and then plateaus, with every remaining failure still chroma-dominated. Patch placement is not the bottleneck here.</p>
+
+<figure>
+<svg viewBox="0 0 680 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Error decomposition into lightness, chroma and hue" font-family="-apple-system,Helvetica,Arial,sans-serif">
+  <g font-size="13" fill="#999">
+    <line x1="90" y1="50" x2="620" y2="50" stroke="#e6e6e6"/>
+    <line x1="90" y1="117.5" x2="620" y2="117.5" stroke="#e6e6e6"/>
+    <line x1="90" y1="185" x2="620" y2="185" stroke="#e6e6e6"/>
+    <line x1="90" y1="252.5" x2="620" y2="252.5" stroke="#e6e6e6"/>
+    <text x="80" y="55" text-anchor="end">4</text>
+    <text x="80" y="122" text-anchor="end">3</text>
+    <text x="80" y="190" text-anchor="end">2</text>
+    <text x="80" y="257" text-anchor="end">1</text>
+    <text x="80" y="325" text-anchor="end">0</text>
+  </g>
+  <line x1="90" y1="320" x2="620" y2="320" stroke="#bbb"/>
+  <text x="34" y="185" transform="rotate(-90 34 185)" text-anchor="middle" font-size="13" fill="#666">mean |Δ|, CIELAB units</text>
+  <rect x="165" y="252.5" width="90" height="67.5" fill="#b9bec4"/>
+  <rect x="305" y="97.25" width="90" height="222.75" fill="#e8743b"/>
+  <rect x="445" y="110.75" width="90" height="209.25" fill="#f0a07a"/>
+  <g font-size="15" fill="#333" text-anchor="middle">
+    <text x="210" y="244">1.0</text>
+    <text x="350" y="89">3.3</text>
+    <text x="490" y="103">3.1</text>
+  </g>
+  <g font-size="15" fill="#222" text-anchor="middle">
+    <text x="210" y="340">|ΔL*|</text>
+    <text x="350" y="340">|ΔC*|</text>
+    <text x="490" y="340">|ΔH*|</text>
+  </g>
+  <g font-size="13" fill="#555" text-anchor="middle">
+    <text x="210" y="357">lightness</text>
+    <text x="350" y="357">chroma</text>
+    <text x="490" y="357">hue</text>
+  </g>
+  <text x="355" y="376" text-anchor="middle" font-size="13" fill="#666">chroma and hue ≈ 5× lightness</text>
+</svg>
+<figcaption><strong>Fig. 1.</strong> Decomposition of the largest errors (ΔE₀₀ &gt; 3) in failing pairs into lightness, chroma and hue, Canon G2470 (626 same-family pairs, 148 of them failing). Chroma and hue outweigh lightness by nearly 5×; Epson SC-P9000 shows the same pattern.</figcaption>
+</figure>
+
+<h2>2. The error concentrates where ink coverage is highest</h2>
+<p>If the error is chromatic and lives at the gamut edge — where exactly is that edge? It is where the most ink goes down.</p>
+<p>A word on where C, M, Y come from in an RGB dataset. The printers in this study are driven through RGB: the file carries R, G, B values, and the separation into actual inks happens inside the driver's closed LUTs, so the true ink laydown is not observable. The direction of the relationship is known, though: the lower a channel value, the more ink the printer deposits. So C&nbsp;=&nbsp;255−R, M&nbsp;=&nbsp;255−G, Y&nbsp;=&nbsp;255−B serve as effective ink-amount coordinates, and their sum C+M+Y is the RGB-driver analogue of the familiar <strong>total ink coverage</strong> (TAC — Total Area Coverage). It is an estimate in driver units, not physical ink consumption — but for our purposes that is enough.</p>
+<p>Rank every test patch by its total ink coverage and correlate with the prediction error. On the canonical hard pair <em>DecorMatte → ChromataWhite</em> (both Canvas Matte substrates), the Spearman rank correlation between coverage and error is <strong>0.71</strong>. Bucketed, the trend is stark:</p>
+
+<table>
+<thead><tr><th>Total ink coverage (C+M+Y)</th><th>Median ΔE₀₀</th><th>P95 ΔE₀₀</th></tr></thead>
+<tbody>
+<tr><td>light (0–255)</td><td>1.20</td><td>2.13</td></tr>
+<tr><td>mid (256–383)</td><td>1.21</td><td>3.45</td></tr>
+<tr><td>high (384–511)</td><td>2.76</td><td>6.13</td></tr>
+<tr><td>maximum (512–765)</td><td>5.23</td><td>7.72</td></tr>
+</tbody>
+</table>
+
+<p>The pattern is not specific to one pair: across the whole dataset the mean error climbs with coverage the same way — from ≈1.1 ΔE₀₀ in the highlights to ≈3.3 on patches with all three inks at full. In the light and mid ranges the method sits comfortably inside spec; the error doubles in the high range and quadruples at maximum ink. The few-patch method is accurate everywhere <strong>except</strong> where ink is laid down most heavily. That is the hint: the problem is not the model's reach, but what the ink physically does when there is too much of it.</p>
+
+<figure>
+<svg viewBox="0 0 680 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Error by total ink coverage range" font-family="-apple-system,Helvetica,Arial,sans-serif">
+  <g font-size="13" fill="#999">
+    <line x1="90" y1="50" x2="620" y2="50" stroke="#e6e6e6"/>
+    <line x1="90" y1="120" x2="620" y2="120" stroke="#e6e6e6"/>
+    <line x1="90" y1="190" x2="620" y2="190" stroke="#e6e6e6"/>
+    <line x1="90" y1="260" x2="620" y2="260" stroke="#e6e6e6"/>
+    <text x="80" y="55" text-anchor="end">8</text>
+    <text x="80" y="125" text-anchor="end">6</text>
+    <text x="80" y="195" text-anchor="end">4</text>
+    <text x="80" y="265" text-anchor="end">2</text>
+    <text x="80" y="335" text-anchor="end">0</text>
+  </g>
+  <line x1="90" y1="330" x2="620" y2="330" stroke="#bbb"/>
+  <text x="34" y="190" transform="rotate(-90 34 190)" text-anchor="middle" font-size="13" fill="#666">ΔE₀₀</text>
+  <line x1="90" y1="225" x2="620" y2="225" stroke="#c0392b" stroke-width="1.3" stroke-dasharray="6 4"/>
+  <text x="126" y="218" text-anchor="start" font-size="12.5" fill="#c0392b">acceptance threshold P95 = 3</text>
+  <rect x="104" y="288" width="34" height="42" fill="#1b5fa8"/>
+  <rect x="142" y="255.45" width="34" height="74.55" fill="#e8743b"/>
+  <rect x="234" y="287.65" width="34" height="42.35" fill="#1b5fa8"/>
+  <rect x="272" y="209.25" width="34" height="120.75" fill="#e8743b"/>
+  <rect x="364" y="233.4" width="34" height="96.6" fill="#1b5fa8"/>
+  <rect x="402" y="115.45" width="34" height="214.55" fill="#e8743b"/>
+  <rect x="494" y="146.95" width="34" height="183.05" fill="#1b5fa8"/>
+  <rect x="532" y="59.8" width="34" height="270.2" fill="#e8743b"/>
+  <g font-size="14" fill="#222" text-anchor="middle">
+    <text x="140" y="350">0–255</text>
+    <text x="270" y="350">256–383</text>
+    <text x="400" y="350">384–511</text>
+    <text x="530" y="350">512–765</text>
+  </g>
+  <text x="355" y="382" text-anchor="middle" font-size="13" fill="#666">total ink coverage C+M+Y (RGB-driver units)</text>
+  <rect x="120" y="42" width="14" height="14" fill="#1b5fa8"/><text x="140" y="54" font-size="13" fill="#333">median</text>
+  <rect x="220" y="42" width="14" height="14" fill="#e8743b"/><text x="240" y="54" font-size="13" fill="#333">P95</text>
+</svg>
+<figcaption><strong>Fig. 2.</strong> Transfer error by total-ink-coverage range (pair DecorMatte → ChromataWhite). Median and P95 climb severalfold toward maximum ink; the red dashed line is the P95 = 3 acceptance threshold.</figcaption>
+</figure>
+
+<h2>3. Mechanism A — over-inking: chroma rolls off past its peak</h2>
+<p>Watch what happens to chroma as you add ink along a single-color gradation ramp. On a properly configured substrate, chroma climbs and then levels off: past some point, additional ink stops adding saturation. On many substrates something worse happens: chroma climbs, peaks, and then <strong>falls</strong>, while the hue drifts. This is the textbook signature of <strong>exceeding the ink limit</strong>: the surplus colorant no longer lays down cleanly — it spreads and overprints unpredictably, muddying the color.</p>
+<p>Concretely — the green ramp (cyan + yellow inks) on <em>Signa 270</em>. Here t is the relative ink amount along the ramp; the levels are the actual chart patches nearest to the nominal 0–1 fractions:</p>
+
+<table>
+<thead><tr><th>Ink amount t</th><th>0.00</th><th>0.18</th><th>0.38</th><th>0.63</th><th>0.75</th><th>1.00</th></tr></thead>
+<tbody><tr><td>Chroma C*ab</td><td>0.0</td><td>17.4</td><td>40.2</td><td>75.7</td><td><strong>82.8</strong></td><td>70.4</td></tr></tbody>
+</table>
+
+<p>Chroma peaks at t* = 0.75 and loses 12.5 units on the way to full ink. The last quarter of the ink does not deepen the color — it desaturates it and drifts the hue. The chroma-peak coverage t* is, in effect, a perceptual <strong>ink limit</strong> for that ink direction. Of the 24 P9000 profiles measured under M0, <strong>23</strong> show this roll-off on at least one ramp.</p>
+<p>The clearest way to see it is to plot chroma against ink amount (Fig. 3). The <em>Signa 270</em> curve tops out at t* = 0.75 and turns back down; the hue drifts too — moderately on this ramp (≈4°), while on the worst patches in the dataset the hue shift reaches 13–18°. On a substrate without over-inking the curve climbs monotonically all the way to full ink.</p>
+
+<figure>
+<svg viewBox="0 0 680 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Chroma along the green ramp: roll-off past the peak on Signa 270 versus monotone rise on DecorMatte" font-family="-apple-system,Helvetica,Arial,sans-serif">
+  <g font-size="13" fill="#999">
+    <line x1="90" y1="81.1" x2="620" y2="81.1" stroke="#e6e6e6"/>
+    <line x1="90" y1="143.3" x2="620" y2="143.3" stroke="#e6e6e6"/>
+    <line x1="90" y1="205.6" x2="620" y2="205.6" stroke="#e6e6e6"/>
+    <line x1="90" y1="267.8" x2="620" y2="267.8" stroke="#e6e6e6"/>
+    <text x="80" y="86" text-anchor="end">80</text>
+    <text x="80" y="148" text-anchor="end">60</text>
+    <text x="80" y="210" text-anchor="end">40</text>
+    <text x="80" y="272" text-anchor="end">20</text>
+    <text x="80" y="335" text-anchor="end">0</text>
+  </g>
+  <line x1="90" y1="330" x2="620" y2="330" stroke="#bbb"/>
+  <text x="30" y="190" transform="rotate(-90 30 190)" text-anchor="middle" font-size="13" fill="#666">chroma C*ab</text>
+  <!-- t* vertical guide -->
+  <line x1="487.5" y1="330" x2="487.5" y2="66" stroke="#b85a28" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <text x="481" y="58" text-anchor="end" font-size="12.5" fill="#b85a28">t* = 0.75 — the ink limit</text>
+  <!-- DecorMatte monotone (blue) -->
+  <polyline fill="none" stroke="#1b5fa8" stroke-width="2.5" points="90,330 185.4,273.7 291.4,218.3 423.9,142.1 487.5,109.4 620,105.7"/>
+  <g fill="#1b5fa8">
+    <circle cx="90" cy="330" r="3.5"/><circle cx="185.4" cy="273.7" r="3.5"/><circle cx="291.4" cy="218.3" r="3.5"/>
+    <circle cx="423.9" cy="142.1" r="3.5"/><circle cx="487.5" cy="109.4" r="3.5"/><circle cx="620" cy="105.7" r="4"/>
+  </g>
+  <text x="600" y="128" text-anchor="end" font-size="12.5" fill="#1b5fa8">72.1 at t = 1</text>
+  <!-- Signa roll-off (orange) -->
+  <polyline fill="none" stroke="#e8743b" stroke-width="2.5" points="90,330 185.4,275.9 291.4,204.9 423.9,94.5 487.5,72.4 620,111.0"/>
+  <g fill="#e8743b">
+    <circle cx="90" cy="330" r="3.5"/><circle cx="185.4" cy="275.9" r="3.5"/><circle cx="291.4" cy="204.9" r="3.5"/>
+    <circle cx="423.9" cy="94.5" r="3.5"/><circle cx="620" cy="111.0" r="4"/>
+  </g>
+  <!-- peak ring -->
+  <circle cx="487.5" cy="72.4" r="7" fill="none" stroke="#e8743b" stroke-width="2"/>
+  <!-- roll-off annotation -->
+  <text x="560" y="86" text-anchor="middle" font-size="12.5" fill="#b85a28">roll-off: −12.5 C*</text>
+  <!-- legend -->
+  <rect x="120" y="88" width="26" height="3" fill="#e8743b"/><text x="152" y="94" font-size="13" fill="#333">Signa 270 — rolls off past the peak</text>
+  <rect x="120" y="110" width="26" height="3" fill="#1b5fa8"/><text x="152" y="116" font-size="13" fill="#333">DecorMatte — monotone rise</text>
+  <g font-size="14" fill="#222" text-anchor="middle">
+    <text x="90" y="350">0</text>
+    <text x="222.5" y="350">0.25</text>
+    <text x="355" y="350">0.5</text>
+    <text x="487.5" y="350">0.75</text>
+    <text x="620" y="350">1.0</text>
+  </g>
+  <text x="355" y="382" text-anchor="middle" font-size="13" fill="#666">ink amount t along the green ramp (cyan + yellow)</text>
+</svg>
+<figcaption><strong>Fig. 3.</strong> Chroma C*ab along the green gradation ramp (cyan + yellow inks) — real measurements from the P9000 profiles (M0). On <em>Signa 270</em> chroma peaks at 82.8 at t* = 0.75 and loses 12.5 units on the way to full ink — over-inking. On <em>DecorMatte</em> chroma rises monotonically all the way to full ink. The dashed line marks the ink limit t* for this direction.</figcaption>
+</figure>
+
+<h3>Every hue has its own chroma maximum</h3>
+<p>Here is a detail that is easy to miss. <strong>Each hue has its own chroma maximum</strong> — and reaches it at its own ink amount. The green ramp (hue ≈ 130°) peaks at one coverage, the red one (≈ 30°) at another, the blue one (≈ 270°) at a third. A single ink limit "for all colors" does not exist.</p>
+<p>So two related but distinct quantities do the work:</p>
+<ul>
+<li><strong>The ink amount at the peak, <em>t</em><sup>*</sup> = arg max<sub>t</sub> C*<sub>ab</sub>(t).</strong> It is specific to each ink direction (the pure C, M, Y ramps, the two-ink overprints R, G, B, and the neutral ramp) and defines the ink limit in that direction. A patch is over the limit if it carries more ink than the chroma maximum of its own direction.</li>
+<li><strong>The maximum chroma C*ab at that point.</strong> It is computed separately for each of <strong>36 hue sectors</strong> (10° steps). Together the 36 values form the gamut boundary in the a*b* plane.</li>
+</ul>
+<p>In other words, both the ink limit and the gamut boundary are hue-resolved: data is not cut at a single global threshold, but at each direction's own chroma maximum.</p>
+
+<h3>What an ink limit costs in gamut</h3>
+<p>If you cap the ink at <em>t</em><sup>*</sup> — keep only the patches at or below each direction's chroma peak — how much gamut do you lose? Compare the gamut volume (the convex hull in Lab) before and after. The median loss is <strong>5.4&nbsp;%</strong> (over the 65 profiles with the most pronounced roll-off, across nine ink systems; on the clean P9000 profiles it is 1.6–4.5&nbsp;%). Meanwhile the gamut boundary — the maximum chroma in each of the 36 hue sectors — is preserved essentially in full (median retention <strong>100.0&nbsp;%</strong>).</p>
+<p>What you lose is shadow volume only — and without distorting the gamut's shape. Patches past the chroma peak do not extend the gamut outward; they densify its dark interior. After the limit, the lower half of the gamut body is, in effect, scaled slightly toward the center: the black point rises by a few L* units, the side walls barely move, and the widest points of the body — the chroma maxima — do not move at all. Giving up the over-limit patches costs not a single unit of chroma; what is sacrificed is a thin layer of the deepest shadow density, which was unstable to begin with.</p>
+
+<figure>
+<svg viewBox="0 0 680 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gamut body before and after ink limiting: top view and side view" font-family="-apple-system,Helvetica,Arial,sans-serif">
+  <text x="180" y="32" text-anchor="middle" font-size="14" fill="#333">a*b* projection (top view)</text>
+  <line x1="50" y1="200" x2="324" y2="200" stroke="#ccc"/>
+  <line x1="187" y1="62" x2="187" y2="338" stroke="#ccc"/>
+  <text x="330" y="204" font-size="12" fill="#999">a*</text>
+  <text x="193" y="72" font-size="12" fill="#999">b*</text>
+  <path d="M187,90 C230,92 266,114 282,148 C296,180 292,222 272,254 C250,288 220,308 186,310 C150,312 116,292 98,258 C82,228 78,186 92,152 C108,114 146,88 187,90 Z"
+        fill="#e8743b" fill-opacity="0.10" stroke="#e8743b" stroke-width="2.2"/>
+  <text x="187" y="194" text-anchor="middle" font-size="13" fill="#b85a28">boundary before and after</text>
+  <text x="187" y="212" text-anchor="middle" font-size="13" fill="#b85a28">the limit coincides</text>
+  <text x="180" y="360" text-anchor="middle" font-size="12.5" fill="#666">one contour — no chroma lost</text>
+
+  <line x1="350" y1="62" x2="350" y2="338" stroke="#eee"/>
+
+  <text x="510" y="32" text-anchor="middle" font-size="14" fill="#333">Vertical slice through the L* axis (side view)</text>
+  <line x1="510" y1="52" x2="510" y2="330" stroke="#ccc" stroke-dasharray="3 3"/>
+  <text x="520" y="60" font-size="12" fill="#999">L*</text>
+  <!-- thin lost layer between original and limited lower halves (dashed orange) -->
+  <path d="M402,185 C414,242 454,284 510,300 C566,284 606,242 618,185 C606,236 566,272 510,287 C454,272 414,236 402,185 Z"
+        fill="#e8743b" fill-opacity="0.30" stroke="#e8743b" stroke-width="1.2" stroke-dasharray="5 3"/>
+  <!-- body after ink limiting (solid blue): same form, lower half slightly scaled -->
+  <path d="M510,66 C558,72 602,118 618,185 C606,236 566,272 510,287 C454,272 414,236 402,185 C418,118 462,72 510,66 Z"
+        fill="#1b5fa8" fill-opacity="0.10" stroke="#1b5fa8" stroke-width="1.8"/>
+  <text x="510" y="106" text-anchor="middle" font-size="12" fill="#1b5fa8">white point — the substrate</text>
+  <line x1="560" y1="284" x2="588" y2="300" stroke="#b85a28" stroke-width="1"/>
+  <text x="672" y="306" text-anchor="end" font-size="12.5" fill="#b85a28">−5.4 % volume —</text>
+  <text x="672" y="322" text-anchor="end" font-size="12.5" fill="#b85a28">a thin shadow layer</text>
+  <text x="510" y="360" text-anchor="middle" font-size="12.5" fill="#666">the lower half scales slightly — the shape is preserved</text>
+</svg>
+<figcaption><strong>Fig. 4.</strong> What an ink limit costs in gamut (schematic). Top view (a*b* projection): the outer boundary before and after the limit coincides — maximum chroma is preserved essentially at 100&nbsp;%. Side view (vertical slice through the neutral axis): the limit slightly scales the lower half of the gamut body — the black point rises, the shape is preserved, and the widest points (the chroma maxima) do not move; the thin dashed layer between the contours is the ~5&nbsp;% of volume.</figcaption>
+</figure>
+
+<blockquote><strong>Sidebar — two meanings of "apply an ink limit."</strong> <em>Rescale</em>: make t* the new 100&nbsp;%, so the driver re-maps the full device range into [0,&nbsp;t*] — this is the corrected, ink-limited print mode. <em>Mask</em>: leave the print mode alone and simply stop trusting (or printing) colors past t*. The numbers in this article are the <strong>masked</strong> regime — every statistic is computed on the in-limit subset of the original prints; nothing was re-printed. The achievable gamut is the same either way (you deposit at most t* ink), so the 5.4&nbsp;% figure holds for both. The distinction matters only for prediction validity: a profile characterized in the original over-inked mode does not automatically describe the rescaled one — characterizing the corrected mode needs new prints. The point is that the rescaled mode is not some exotic unknown; it is the <em>right</em> mode, and the original over-inked mode is the misconfiguration.</blockquote>
+
+<h2>4. Mechanism B — ink holdout: a media-preset mismatch</h2>
+<p>There is one substrate in the set that defeats every model I have built, and it is the most instructive of all: <em>DecorMatte</em>, a matte canvas (Canvas Matte). It is the source of the hardest cases in the first article — and the single one of the 24 profiles with no chroma roll-off. Its green ramp (same actual ink levels as above):</p>
+
+<table>
+<thead><tr><th>Ink amount t</th><th>0.00</th><th>0.18</th><th>0.38</th><th>0.63</th><th>0.75</th><th>1.00</th></tr></thead>
+<tbody><tr><td>Chroma C*ab</td><td>0.0</td><td>18.1</td><td>35.9</td><td>60.4</td><td>70.9</td><td><strong>72.1</strong></td></tr></tbody>
+</table>
+
+<p>Chroma rises <strong>monotonically all the way to full ink</strong> — the maximum sits at maximum coverage. By the chroma-peak criterion, DecorMatte is not over-inked. Yet it is the hardest substrate to predict. So the cause here is different.</p>
+<p>It is <strong>ink holdout</strong>: on this matte canvas, ink at high coverage does not absorb — it sits on the surface. In parts of the spectrum the reflectance rises where, on well-absorbing substrates, it falls. Chroma keeps climbing because the surface ink layer is still chromatic, but the spectral shape of such a patch diverges from its shape on any absorbing substrate — and a transform learned from absorbing substrates predicts it poorly. This is not an ink overload to be cured with an ink limit; it is a mismatch between the medium and the selected mode, cured by choosing the correct <strong>media preset</strong> in the driver.</p>
+<p>Two pieces of evidence that mechanisms A and B are independent. First: DecorMatte's monotone ramp versus the roll-off on everyone else. Second: the descriptor of roll-off magnitude and the neutral-ramp curvature descriptor (the holdout signature) are essentially uncorrelated — <strong>0.03</strong>. They measure different phenomena.</p>
+
+<h2>5. Prediction error as a print-mode quality indicator</h2>
+<p>Now the result that ties everything together — the one I validated most carefully.</p>
+<p>The ink limit was derived blind — from the profile's own chroma curve alone, with no knowledge of the cross-substrate transfer error. So ask: where is that error actually largest? It turns out <strong>70&nbsp;%</strong> of the worst 5&nbsp;% of patches by ΔE₀₀ lie above that limit — where more ink is laid down than at the chroma maximum. A limit computed with no reference to the error lands squarely on the region where the transfer breaks down.</p>
+<p>That suggests an operational move: report the in-limit patches and flag the rest as unreliable. Doing so lifts the pass rate from 71.3&nbsp;% to 79.6&nbsp;%. But that gain needs a control: shrink any test set and its pass rate rises mechanically — fewer patches, fewer chances to fail. So I dropped the same number of <em>random</em> patches instead, averaged over 30 seeds:</p>
+
+<table>
+<thead><tr><th>Test set</th><th>Pass rate</th></tr></thead>
+<tbody>
+<tr><td>Full (no exclusions)</td><td>71.3&nbsp;%</td></tr>
+<tr><td>Random patches dropped (matched count)</td><td>71.6&nbsp;%</td></tr>
+<tr><td>Over-limit patches dropped</td><td><strong>79.6&nbsp;%</strong></td></tr>
+</tbody>
+</table>
+
+<p>Random exclusion buys <strong>+0.3 pp</strong> — essentially nothing. Excluding specifically the over-limit patches buys <strong>+8 pp over the random baseline</strong>. The gain is not test-set shrink: the over-limit region genuinely is where the transfer fails. More important still, the limit is computed on the <strong>reference</strong> profile — the one that is fully characterized at deployment — so the technique applies up front, not in hindsight.</p>
+<p>Read correctly, this is not "the method covers a smaller gamut." It is a per-patch quality indicator: a large prediction error says the profile was built in an over-inked (or otherwise unsuitable) print mode — and roughly shows where.</p>
+
+<figure>
+<svg viewBox="0 0 680 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pass rate: full set, random exclusion, over-limit exclusion" font-family="-apple-system,Helvetica,Arial,sans-serif">
+  <g font-size="13" fill="#999">
+    <line x1="120" y1="97.1" x2="600" y2="97.1" stroke="#e6e6e6"/>
+    <line x1="120" y1="190" x2="600" y2="190" stroke="#e6e6e6"/>
+    <line x1="120" y1="282.9" x2="600" y2="282.9" stroke="#e6e6e6"/>
+    <text x="110" y="102" text-anchor="end">80 %</text>
+    <text x="110" y="195" text-anchor="end">75 %</text>
+    <text x="110" y="288" text-anchor="end">70 %</text>
+  </g>
+  <line x1="120" y1="320" x2="600" y2="320" stroke="#bbb"/>
+  <text x="105" y="324" text-anchor="end" font-size="12" fill="#bbb">⌇</text>
+  <rect x="135" y="258.7" width="110" height="61.3" fill="#b9bec4"/>
+  <rect x="285" y="253.1" width="110" height="66.9" fill="#9aaec7"/>
+  <rect x="435" y="104.6" width="110" height="215.4" fill="#e8743b"/>
+  <g font-size="16" fill="#222" text-anchor="middle" font-weight="bold">
+    <text x="190" y="250">71.3 %</text>
+    <text x="340" y="244">71.6 %</text>
+    <text x="490" y="96">79.6 %</text>
+  </g>
+  <g font-size="13.5" fill="#333" text-anchor="middle">
+    <text x="190" y="340">Full set</text>
+    <text x="340" y="340">Random</text>
+    <text x="340" y="356">dropped</text>
+    <text x="490" y="340">Over-limit</text>
+    <text x="490" y="356">dropped</text>
+  </g>
+  <path d="M245,255 L265,255" stroke="#999" stroke-width="1.2" fill="none"/>
+  <text x="255" y="240" text-anchor="middle" font-size="12.5" fill="#777">+0.3 pp</text>
+  <text x="255" y="226" text-anchor="middle" font-size="11" fill="#aaa">(mechanical)</text>
+  <path d="M400,253.1 L420,253.1 L420,104.6 L428,104.6" stroke="#c0392b" stroke-width="1.4" fill="none"/>
+  <text x="424" y="180" text-anchor="start" font-size="13" fill="#c0392b" font-weight="bold">+8.0 pp</text>
+  <text x="424" y="196" text-anchor="start" font-size="11" fill="#c0392b">over random</text>
+  <text x="360" y="376" text-anchor="middle" font-size="12" fill="#888">axis truncated (starts at 68 %); mean over 230 pairs, 30 random seeds</text>
+</svg>
+<figcaption><strong>Fig. 5.</strong> The real-vs-mechanical control. Dropping the same number of <em>random</em> patches barely moves the pass rate (+0.3 pp), while dropping the patches <em>above the ink limit</em> buys +8 pp — so the over-limit region genuinely coincides with the transfer-failure region.</figcaption>
+</figure>
+
+<h2>6. The fixes are standard print preparation</h2>
+<p>The encouraging part is that both mechanisms are cured by long-established procedures — nothing new needs inventing.</p>
+<p><strong>Over-inking → ink limiting.</strong> The chroma-peak point <em>t</em><sup>*</sup> is a perceptual per-channel ink limit, and setting proper per-channel and total ink limits is a solved, standard step of print-mode setup (see the earlier piece <a href="https://mikchael.substack.com/p/pre-calibration-of-rgb-printers-moving"><em>Pre-calibration of RGB Printers</em></a>). Set the limits, re-linearize — and the problem region simply stops being printed; the profile you then build is cleaner and lives in a predictable regime. One honesty note: all the numbers in this article come from the original prints — over-limit patches were excluded from evaluation, not re-printed with a capped laydown; characterizing a profile rebuilt in the ink-limited mode is separate work requiring new prints. What this article adds is a way to detect that a limit is needed straight from the spectra of an existing profile, and to show that it costs almost nothing in gamut (≈5&nbsp;% of shadow volume, with the chroma boundary essentially intact).</p>
+<p><strong>Ink holdout → the correct media preset.</strong> DecorMatte does not need an ink cap; it needs a mode matched to a non-absorbing matte canvas. The detector flags it just as clearly — as the one substrate with a monotone ramp — so you know at once not to reach for the ink-limit tool.</p>
+<p>What remains genuinely open is the residual chroma-and-hue ceiling that survives <strong>after</strong> the print mode is corrected: a per-ink interaction that the multiplicative paper-ratio model structurally cannot express. That will need either a per-ink chromatic model or a CMYK-addressable dataset, where the separation is visible instead of hidden by the driver. That is the subject of the next article.</p>
+
+<h2>Takeaways</h2>
+<ol>
+<li>When few-patch substrate adaptation fails, the error lies <strong>in chroma and hue, at the gamut edge, at maximum ink coverage</strong> — not in lightness, and not in the patch count.</li>
+<li>That edge hides <strong>two distinct mechanisms</strong>, both symptoms of printing in an unsuitable mode: <strong>exceeding the ink limit</strong> (chroma falls past its peak) and <strong>ink holdout</strong> (ink sits on the surface; DecorMatte — the only substrate with no roll-off).</li>
+<li>The chroma maximum <em>t</em><sup>*</sup> is <strong>hue-specific</strong>; there is no single limit for all colors. The 36 per-hue-sector chroma maxima together form the gamut boundary. Capping ink at <em>t</em><sup>*</sup> costs ~5&nbsp;% of shadow volume while <strong>keeping the chroma boundary essentially intact</strong>.</li>
+<li>Cross-substrate prediction error works as a <strong>print-mode quality indicator</strong>: a limit computed with no knowledge of the error captures 70&nbsp;% of the worst patches, and excluding them is worth <strong>+8 pp over a matched random-exclusion control</strong> — a real, deployable signal, not a gamut concession.</li>
+<li>The remedies — ink limiting and the correct media preset — are <strong>standard prepress practice</strong>, not a new method. The open problem is the chroma-and-hue ceiling that persists even in a correct print mode.</li>
+</ol>
+
+<hr>
+<p><em>All numbers are reproducible from the open tool at <a href="https://github.com/mik-nn/Color-Modeling">github.com/mik-nn/Color-Modeling</a>; the key scripts are <code>h45_inklimit_gamut.ts</code> and <code>h45c_control.ts</code>; the hue-resolved chroma boundary is computed in <code>gamutVolume.ts</code> (<code>maxChromaPerHueBin</code>), the per-direction ink limit in <code>inkLimitChroma.ts</code> (<code>chromaMaxT</code>).</em></p>
+
+</body></html>
